@@ -60,6 +60,12 @@ metrics-util.workspace = true
 wiremock.workspace = true
 anyhow.workspace = true
 url = "2"
+# Migration 029 backfill/audit tests need a dedicated container per case
+# (shared `testing::postgres()` fixture has already applied 029, making
+# a pre-029 seeding path impossible). Kept dev-only — production code
+# never touches testcontainers.
+testcontainers.workspace = true
+testcontainers-modules = { workspace = true, features = ["postgres"] }
 
 [lints]
 workspace = true
