@@ -13,10 +13,10 @@
 
 ## 0. Resolve design conflicts (blocking all other groups)
 
-- [!] 0.1 Decide `SecretResolver` shape: extend existing closure-based alias in `memory/src/provider_registry.rs` **or** introduce a kind-dispatched trait and migrate. Document in `design.md` under a new "Secret resolver model" section. _(blocks 3.*)_
+- [x] 0.1 ~~Decide `SecretResolver` shape~~ **RESOLVED** in `design.md` §D9: **kind-dispatched trait** (`SecretRefResolver` + `SecretResolverRegistry`). Migrated incrementally via a `LegacyClosureAdapter` so 3.1 lands with zero runtime behaviour change; closure typedef deleted in 3.5. _(unblocks 3.*)_
 - [x] 0.2 ~~Decide provider wiring model~~ **RESOLVED** in `design.md` §D5: **Eager** (boot loop + Dragonfly pub/sub `tenant:changed` fan-out + lazy fallback on registry miss). Failure policy per-tenant by default, strict mode opt-in. Acceptance: freshly provisioned tenant is usable cluster-wide with no pod restart; zero user-visible 500s on race windows.
 - [!] 0.3 Define `TenantSecretReference` migration path: introduce `TenantSecretReferenceV2` sum type alongside the existing flat struct, with a deprecation window — or commit to a single breaking bump of `mk_core`. Document in `design.md`. _(blocks 1.2, 3.2-3.4)_
-- [!] 0.4 Decide CLI `validate` placement: top-level `tenant validate` subsumes the existing nested `tenant repo-binding validate` and `tenant config validate`, or coexists. Document in `design.md`. _(blocks 7.4, 7.6)_
+- [x] 0.4 ~~Decide CLI `validate` placement~~ **RESOLVED** in `design.md` §D8: **top-level `tenant validate` subsumes nested** `tenant repo-binding validate` and `tenant config validate`. Nested subcommands kept as deprecated aliases emitting a stderr warning and routing to the top-level code path; removed after two minor versions. _(unblocks 7.4, 7.6)_
 
 ---
 
@@ -70,12 +70,12 @@
 
 ### 3. Secret reference resolution
 
-- [!] 3.1 Define resolver shape per 0.1 (trait or extended alias).
+- [x] 3.1 Define resolver shape per 0.1 (trait or extended alias). _(This PR — `memory/src/secret_resolver.rs`: `SecretRefResolver` async trait + `SecretResolverRegistry` dispatching by `SecretReference::kind()` + `LegacyClosureAdapter` bridging existing closures until 3.5. `ResolveError` covers `NotFound`, `BackendUnavailable`, `PermissionDenied`, `MalformedReference`, `WrongKind`. 15 unit tests — registration/overwrite, kind dispatch, unregistered-kind error surface, debug-stability, adapter kind mismatch, closure None→NotFound, inline refused, K8s/file logical-name round-trip, end-to-end registry with adapters, error-Display shape. No runtime wiring changes; closure typedef in `provider_registry.rs` stays intact until §3.5.)_
 - [ ] 3.2 `K8sSecretRefResolver` using the pod's in-cluster SA credentials.
 - [ ] 3.3 `FileRefResolver` that checks mode `<= 0600`.
 - [ ] 3.4 `EnvRefResolver` and `VaultRefResolver` (Vault feature-gated stub).
-- [!] 3.5 Wire chosen model into the per-request secrets provider. **Note:** the registry already resolves per-request via closures (`provider_registry.rs:92`) — this task is about kind-dispatch, not introducing per-request resolution.
-- [~] 3.6 Add systematic coverage that resolved plaintext is never logged, never serialized into responses, and never cached beyond request scope. Add redaction tests.
+- [x] 3.5 Wire chosen model into the per-request secrets provider. _(Two-phase landing on `feat/b4-secret-resolver-trait-and-cli-validate-decisions`. Phase A (ab6b511e): `set_secret_resolver_registry` added, registry + 6 resolver impls wired in `bootstrap.rs` alongside the legacy closure. Phase B (6c03c71b): `pub type SecretResolver` + `ClosureConfigAdapter` + `TenantProviderRegistry::set_resolvers(c, s)` DELETED; replaced by `RegistryConfigAdapter` which does logical-name → `TenantSecretReference` lookup against the tenant config document and dispatches through the typed registry by `SecretReference::kind()`. New resolvers: `InlineRefResolver` (dev/test), `PostgresRefResolver` (wraps `Arc<dyn SecretBackend>`). Behavioural change: adapter now surfaces non-NotFound resolver errors as `Err` instead of silently coercing to `None` — previously hidden permission/backend failures now propagate to operator logs.)_
+- [x] 3.6 Add systematic coverage that resolved plaintext is never logged, never serialized into responses, and never cached beyond request scope. Add redaction tests. _(New `secret_resolver::redaction_coverage` module with 10 tests: (1–4) each `ResolveError` variant pinned for plaintext-cannot-leak-by-construction (`&'static str`-only fields) vs plaintext-could-leak-via-author-error (`String` reason fields), (5) end-to-end `SecretBytes` redaction through the registry's `Debug`/`Display`/`Serialize` paths — the three channels HTTP response bodies and logs take, (6) `SecretReference::Inline { plaintext }` redacts through JSON serialize + `Debug`, (7) `LeakyResolver` canary documenting the type-system boundary (resolver authors must not embed plaintext in `reason` strings — the types cannot enforce it, only code review can), (8) `EnvRefResolver` missing-var error path leaks nothing, (9) zeroize-on-drop pin (delegated to `mk_core::secret::tests` — re-declaring `zeroize` in `memory/Cargo.toml` would split-version), (10) permission-denied + malformed-reference error rendering. Uses a `SENTINEL_PLAINTEXT = "hunter2-DO-NOT-LEAK-swordfish"` + `assert_no_plaintext` helper that checks both raw and JSON-escaped forms — the two shapes a grepping operator would recognise in a log line.)_
 
 ### 4. Inline-secret gating
 

@@ -200,10 +200,17 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
     let mut registry =
         TenantProviderRegistry::new(platform_llm.clone(), platform_embedding.clone());
 
-    // Wire type-erased config/secret resolvers so the registry can resolve
-    // tenant-specific providers without a generic TenantConfigProvider param.
+    // Wire the type-erased config resolver + typed SecretResolverRegistry
+    // so the registry can resolve tenant-specific providers without a
+    // generic TenantConfigProvider param.
+    //
+    // B4 §3.5 Phase B — the former `SecretResolver` closure has been
+    // replaced end-to-end by the typed registry. Secret lookup now
+    // goes: TenantConfigDocument.secret_references[logical_name]
+    // → SecretReference variant → registry resolver. This removes the
+    // String-through-closure path that allocated plaintext copies.
     {
-        use memory::provider_registry::{ConfigResolver, SecretResolver};
+        use memory::provider_registry::ConfigResolver;
         use mk_core::traits::TenantConfigProvider;
 
         let cp_for_config: Arc<KubernetesTenantConfigProvider> = tenant_config_provider.clone();
@@ -211,27 +218,56 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
             let provider = cp_for_config.clone();
             Box::pin(async move { provider.get_config(&tenant_id).await.ok().flatten() })
         });
+        registry.set_config_resolver(config_resolver);
+    }
 
-        let cp_for_secret: Arc<KubernetesTenantConfigProvider> = tenant_config_provider.clone();
-        let secret_resolver: SecretResolver = Arc::new(move |tenant_id, logical_name| {
-            let provider = cp_for_secret.clone();
-            Box::pin(async move {
-                // `SecretResolver` still yields `Option<String>` to its
-                // downstream consumers (LLM / embedding SDK configs). We
-                // unwrap the SecretBytes, copy to a String, and let the
-                // SecretBytes container drop (zeroizing) at the end of this
-                // closure. The resulting String lives only for the
-                // duration of the caller's request; it is never logged.
-                let bytes = provider
-                    .get_secret_bytes(&tenant_id, &logical_name)
-                    .await
-                    .ok()
-                    .flatten()?;
-                String::from_utf8(bytes.expose().to_vec()).ok()
-            })
-        });
+    // B4 §3.5 — install the typed SecretResolverRegistry.
+    //
+    // Registered resolvers: inline (test / dev-only), postgres
+    // (envelope-encrypted via the shared SecretBackend), env, file,
+    // k8s (pod-downward API), vault (stub unless built with --features
+    // vault). The k8s resolver uses a no-op fetcher when
+    // --features k8s-secrets is not enabled — from_pod_environment()
+    // returns a resolver whose fetch() emits BackendUnavailable with
+    // a clear diagnostic.
+    {
+        use memory::secret_resolver::SecretResolverRegistry;
+        use memory::secret_resolvers::{
+            EnvRefResolver, FileRefResolver, InlineRefResolver, K8sRefResolver,
+            PodDownwardApiFetcher, PostgresRefResolver, VaultRefResolver,
+        };
 
-        registry.set_resolvers(config_resolver, secret_resolver);
+        let mut secret_registry = SecretResolverRegistry::new();
+        secret_registry.register(Arc::new(InlineRefResolver::new()));
+        secret_registry.register(Arc::new(PostgresRefResolver::new(secret_backend.clone())));
+        secret_registry.register(Arc::new(EnvRefResolver::new()));
+        secret_registry.register(Arc::new(FileRefResolver::new()));
+        secret_registry.register(Arc::new(VaultRefResolver::new()));
+
+        // K8s resolver: build the pod-downward-API fetcher + default
+        // namespace. from_pod_environment() only fails on feature-on
+        // builds outside a pod — log and skip registration in that
+        // case so non-pod dev environments still boot.
+        match PodDownwardApiFetcher::from_pod_environment() {
+            Ok(fetcher) => {
+                let default_ns = PodDownwardApiFetcher::read_pod_namespace().await;
+                let mut k8s = K8sRefResolver::new(fetcher);
+                if let Some(ns) = default_ns {
+                    k8s = k8s.with_default_namespace(ns);
+                }
+                secret_registry.register(Arc::new(k8s));
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "K8s secret resolver unavailable — SecretReference::K8s values will fail \
+                     to resolve. This is expected outside Kubernetes; in-cluster deployments \
+                     should investigate.",
+                );
+            }
+        }
+
+        registry.set_secret_resolver_registry(Arc::new(secret_registry));
     }
 
     let provider_registry = Arc::new(registry);

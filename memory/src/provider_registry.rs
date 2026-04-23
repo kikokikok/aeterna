@@ -86,14 +86,15 @@ pub type ConfigResolver = Arc<
         + Sync,
 >;
 
-/// Async closure that resolves a tenant secret value by logical name.
-///
-/// Returns `None` when the secret is not set for the given tenant.
-pub type SecretResolver = Arc<
-    dyn Fn(TenantId, String) -> Pin<Box<dyn Future<Output = Option<String>> + Send + 'static>>
-        + Send
-        + Sync,
->;
+// B4 §3.5 Phase B — the legacy `SecretResolver` closure typedef was
+// deleted here. Secret resolution now goes through the typed
+// [`crate::secret_resolver::SecretResolverRegistry`] installed via
+// [`TenantProviderRegistry::set_secret_resolver_registry`]. The
+// `ClosureConfigAdapter` below performs the logical-name →
+// `TenantSecretReference` lookup against the tenant config document
+// (loaded by `ConfigResolver`) and then dispatches through the
+// registry by variant kind. See `secret_resolvers/` for the per-
+// backend impls (Inline, Postgres, Env, File, K8s, Vault).
 
 /// Default cache TTL: 1 hour.
 const DEFAULT_CACHE_TTL: Duration = Duration::from_secs(3600);
@@ -187,8 +188,13 @@ pub struct TenantProviderRegistry {
     cache_ttl: Duration,
     /// Optional type-erased config resolver for self-contained tenant lookups.
     config_resolver: Option<ConfigResolver>,
-    /// Optional type-erased secret resolver for self-contained tenant lookups.
-    secret_resolver: Option<SecretResolver>,
+    /// B4 §3.5 — typed, variant-dispatched secret resolver registry.
+    ///
+    /// Populated at bootstrap via
+    /// [`Self::set_secret_resolver_registry`]. When absent, the
+    /// registry falls back to platform defaults (no tenant-specific
+    /// LLM / embedding providers available).
+    secret_resolver_registry: Option<Arc<crate::secret_resolver::SecretResolverRegistry>>,
 }
 
 impl TenantProviderRegistry {
@@ -210,7 +216,7 @@ impl TenantProviderRegistry {
             tenant_embedding_cache: DashMap::new(),
             cache_ttl: DEFAULT_CACHE_TTL,
             config_resolver: None,
-            secret_resolver: None,
+            secret_resolver_registry: None,
         }
     }
 
@@ -233,25 +239,81 @@ impl TenantProviderRegistry {
             tenant_embedding_cache: DashMap::new(),
             cache_ttl,
             config_resolver: None,
-            secret_resolver: None,
+            secret_resolver_registry: None,
         }
     }
 
-    /// Attach type-erased config and secret resolvers for self-contained
+    /// Attach a type-erased config resolver for self-contained
     /// tenant resolution (no external `TenantConfigProvider` parameter needed).
+    ///
+    /// Pair with [`Self::set_secret_resolver_registry`] to enable
+    /// tenant-specific LLM / embedding provider resolution. Without
+    /// a config resolver installed, `resolve_llm` / `resolve_embedding`
+    /// fall back to the platform defaults.
+    ///
+    /// B4 §3.5 Phase B: replaces the prior `set_resolvers(config, secret)`
+    /// two-arg API. The secret-side closure has been removed entirely
+    /// in favour of [`crate::secret_resolver::SecretResolverRegistry`].
     ///
     /// # Examples
     ///
     /// ```rust,ignore
-    /// registry.set_resolvers(config_resolver, secret_resolver);
+    /// registry.set_config_resolver(config_resolver);
+    /// registry.set_secret_resolver_registry(Arc::new(secret_registry));
     /// ```
-    pub fn set_resolvers(
-        &mut self,
-        config_resolver: ConfigResolver,
-        secret_resolver: SecretResolver,
-    ) {
+    pub fn set_config_resolver(&mut self, config_resolver: ConfigResolver) {
         self.config_resolver = Some(config_resolver);
-        self.secret_resolver = Some(secret_resolver);
+    }
+
+    /// B4 §3.5 — install a typed
+    /// [`SecretResolverRegistry`](crate::secret_resolver::SecretResolverRegistry).
+    ///
+    /// The registry dispatches by [`mk_core::secret::SecretReference`]
+    /// variant kind (`inline`, `postgres`, `env`, `file`, `k8s`,
+    /// `vault`) and returns zeroized [`mk_core::SecretBytes`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use std::sync::Arc;
+    /// use memory::secret_resolver::SecretResolverRegistry;
+    /// use memory::secret_resolvers::{EnvRefResolver, FileRefResolver};
+    ///
+    /// let mut reg = SecretResolverRegistry::new();
+    /// reg.register(Arc::new(EnvRefResolver::new()));
+    /// reg.register(Arc::new(FileRefResolver::new()));
+    /// registry.set_secret_resolver_registry(Arc::new(reg));
+    /// ```
+    pub fn set_secret_resolver_registry(
+        &mut self,
+        registry: Arc<crate::secret_resolver::SecretResolverRegistry>,
+    ) {
+        self.secret_resolver_registry = Some(registry);
+    }
+
+    /// B4 §3.5 — resolve a [`SecretReference`] through the typed
+    /// registry, if one is installed.
+    ///
+    /// Returns [`ResolveError::BackendUnavailable`] with `kind="none"`
+    /// when no registry has been installed (distinct from the
+    /// per-backend `BackendUnavailable` returned by resolvers when
+    /// their backend is unreachable).
+    ///
+    /// [`SecretReference`]: mk_core::secret::SecretReference
+    /// [`ResolveError::BackendUnavailable`]: crate::secret_resolver::ResolveError::BackendUnavailable
+    pub async fn resolve_secret_ref(
+        &self,
+        tenant: &TenantId,
+        reference: &mk_core::secret::SecretReference,
+    ) -> Result<mk_core::SecretBytes, crate::secret_resolver::ResolveError> {
+        match &self.secret_resolver_registry {
+            Some(reg) => reg.resolve(tenant, reference).await,
+            None => Err(crate::secret_resolver::ResolveError::BackendUnavailable {
+                kind: "none",
+                reason: "no SecretResolverRegistry installed on TenantProviderRegistry"
+                    .to_string(),
+            }),
+        }
     }
 
     /// Get the LLM service for a tenant.
@@ -494,40 +556,44 @@ impl TenantProviderRegistry {
 
     /// Resolve the LLM service for a tenant using the built-in resolvers.
     ///
-    /// Uses config and secret resolvers set via [`set_resolvers`]. Falls back
-    /// to the platform default when resolvers are not set or when the tenant
-    /// has no custom provider configured.
+    /// Uses the config resolver installed via [`Self::set_config_resolver`]
+    /// and the secret resolver registry installed via
+    /// [`Self::set_secret_resolver_registry`]. Falls back to the
+    /// platform default when either is absent or when the tenant has
+    /// no custom provider configured.
     pub async fn resolve_llm(&self, tenant_id: &TenantId) -> Option<BoxedLlmService> {
-        let (config_resolver, secret_resolver) =
-            match (&self.config_resolver, &self.secret_resolver) {
-                (Some(cr), Some(sr)) => (cr.clone(), sr.clone()),
-                _ => return self.platform_llm.clone(),
-            };
-
-        let adapter = ClosureConfigAdapter {
-            config_resolver,
-            secret_resolver,
+        let Some(adapter) = self.build_registry_adapter() else {
+            return self.platform_llm.clone();
         };
         self.get_llm_service(tenant_id, &adapter).await
     }
 
     /// Resolve the embedding service for a tenant using the built-in resolvers.
     ///
-    /// Uses config and secret resolvers set via [`set_resolvers`]. Falls back
-    /// to the platform default when resolvers are not set or when the tenant
-    /// has no custom provider configured.
+    /// Uses the config resolver installed via [`Self::set_config_resolver`]
+    /// and the secret resolver registry installed via
+    /// [`Self::set_secret_resolver_registry`]. Falls back to the
+    /// platform default when either is absent or when the tenant has
+    /// no custom provider configured.
     pub async fn resolve_embedding(&self, tenant_id: &TenantId) -> Option<BoxedEmbeddingService> {
-        let (config_resolver, secret_resolver) =
-            match (&self.config_resolver, &self.secret_resolver) {
-                (Some(cr), Some(sr)) => (cr.clone(), sr.clone()),
-                _ => return self.platform_embedding.clone(),
-            };
-
-        let adapter = ClosureConfigAdapter {
-            config_resolver,
-            secret_resolver,
+        let Some(adapter) = self.build_registry_adapter() else {
+            return self.platform_embedding.clone();
         };
         self.get_embedding_service(tenant_id, &adapter).await
+    }
+
+    /// Internal helper — build a [`RegistryConfigAdapter`] from the
+    /// currently-installed resolvers, or return `None` when either
+    /// the config resolver or the secret resolver registry is
+    /// missing. Callers treat `None` as "fall back to platform
+    /// defaults" — the same semantics as pre-Phase-B.
+    fn build_registry_adapter(&self) -> Option<RegistryConfigAdapter> {
+        let config_resolver = self.config_resolver.clone()?;
+        let secret_registry = self.secret_resolver_registry.clone()?;
+        Some(RegistryConfigAdapter {
+            config_resolver,
+            secret_registry,
+        })
     }
 
     /// Build an LLM service from tenant config fields + secrets.
@@ -703,28 +769,39 @@ impl TenantProviderRegistry {
     }
 }
 
-/// Adapter that wraps closure-based resolvers into a [`TenantConfigProvider`]
-/// implementation so the existing generic `get_llm_service`/`get_embedding_service`
-/// methods can be reused without duplication.
-struct ClosureConfigAdapter {
+/// Adapter that exposes the installed [`ConfigResolver`] closure plus a
+/// [`SecretResolverRegistry`](crate::secret_resolver::SecretResolverRegistry)
+/// as a [`TenantConfigProvider`] so the existing generic
+/// `get_llm_service` / `get_embedding_service` methods can be reused
+/// without duplication.
+///
+/// B4 §3.5 Phase B — this replaces the former `ClosureConfigAdapter`
+/// which held an `(tenant_id, logical_name) -> Option<String>` closure
+/// for secret lookup. Secret resolution now goes through the typed
+/// registry: we load the tenant config document (via `config_resolver`)
+/// to find `secret_references[logical_name] = TenantSecretReference`,
+/// then dispatch by variant kind through the registry.
+struct RegistryConfigAdapter {
     config_resolver: ConfigResolver,
-    secret_resolver: SecretResolver,
+    secret_registry: Arc<crate::secret_resolver::SecretResolverRegistry>,
 }
 
-/// Error type for the closure-based config adapter (infallible at the
-/// resolver level — failures surface as `None`).
+/// Error type for the registry-backed config adapter. Failures from
+/// the underlying [`ConfigResolver`] (missing config) surface as
+/// `Ok(None)`; secret-resolution failures surface as this error so the
+/// caller can log diagnostics.
 #[derive(Debug)]
-struct ClosureAdapterError;
+struct RegistryAdapterError(String);
 
-impl std::fmt::Display for ClosureAdapterError {
+impl std::fmt::Display for RegistryAdapterError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "closure adapter error")
+        write!(f, "tenant config adapter error: {}", self.0)
     }
 }
 
 #[async_trait::async_trait]
-impl mk_core::traits::TenantConfigProvider for ClosureConfigAdapter {
-    type Error = ClosureAdapterError;
+impl mk_core::traits::TenantConfigProvider for RegistryConfigAdapter {
+    type Error = RegistryAdapterError;
 
     async fn get_config(
         &self,
@@ -741,7 +818,9 @@ impl mk_core::traits::TenantConfigProvider for ClosureConfigAdapter {
         &self,
         _config: TenantConfigDocument,
     ) -> Result<TenantConfigDocument, Self::Error> {
-        Err(ClosureAdapterError)
+        Err(RegistryAdapterError(
+            "upsert_config not supported on resolver-backed adapter".to_string(),
+        ))
     }
 
     async fn set_secret_entry(
@@ -749,7 +828,9 @@ impl mk_core::traits::TenantConfigProvider for ClosureConfigAdapter {
         _tenant_id: &TenantId,
         _secret: mk_core::types::TenantSecretEntry,
     ) -> Result<mk_core::types::TenantSecretReference, Self::Error> {
-        Err(ClosureAdapterError)
+        Err(RegistryAdapterError(
+            "set_secret_entry not supported on resolver-backed adapter".to_string(),
+        ))
     }
 
     async fn delete_secret_entry(
@@ -757,7 +838,9 @@ impl mk_core::traits::TenantConfigProvider for ClosureConfigAdapter {
         _tenant_id: &TenantId,
         _logical_name: &str,
     ) -> Result<bool, Self::Error> {
-        Err(ClosureAdapterError)
+        Err(RegistryAdapterError(
+            "delete_secret_entry not supported on resolver-backed adapter".to_string(),
+        ))
     }
 
     async fn get_secret_bytes(
@@ -765,14 +848,30 @@ impl mk_core::traits::TenantConfigProvider for ClosureConfigAdapter {
         tenant_id: &TenantId,
         logical_name: &str,
     ) -> Result<Option<mk_core::SecretBytes>, Self::Error> {
-        // The existing `SecretResolver` closure type still yields an owned
-        // `String` (it's called from construction sites that load values
-        // from env / test fixtures). Wrap the returned string bytes into a
-        // `SecretBytes` so the post-boundary contract matches the new
-        // trait; the closure's original `String` value is dropped at the
-        // end of this function.
-        let raw = (self.secret_resolver)(tenant_id.clone(), logical_name.to_string()).await;
-        Ok(raw.map(|s| mk_core::SecretBytes::from(s.into_bytes())))
+        // 1. Load the tenant config document. Missing config → Ok(None)
+        //    so callers fall back to platform defaults cleanly.
+        let config = match (self.config_resolver)(tenant_id.clone()).await {
+            Some(c) => c,
+            None => return Ok(None),
+        };
+
+        // 2. Look up the logical name in the config's secret_references
+        //    map. Missing entry → Ok(None); the caller decides whether
+        //    that's fatal (e.g. "LLM_API_KEY not set").
+        let Some(tsr) = config.secret_references.get(logical_name) else {
+            return Ok(None);
+        };
+
+        // 3. Dispatch through the typed registry by SecretReference
+        //    variant. NotFound → Ok(None); other errors surface as
+        //    adapter errors so the caller can log with context.
+        match self.secret_registry.resolve(tenant_id, &tsr.reference).await {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(crate::secret_resolver::ResolveError::NotFound { .. }) => Ok(None),
+            Err(e) => Err(RegistryAdapterError(format!(
+                "failed to resolve secret '{logical_name}' for tenant {tenant_id}: {e}"
+            ))),
+        }
     }
 
     async fn validate(&self, _config: &TenantConfigDocument) -> Result<(), Self::Error> {
@@ -1112,16 +1211,23 @@ mod tests {
         assert!(result.is_none(), "No platform default set, should be None");
     }
 
+    /// Build an empty `SecretResolverRegistry` with no resolvers —
+    /// every `.resolve()` call will return `ResolveError::NoResolver`
+    /// which the adapter surfaces as an error (treated by the caller
+    /// as "secret missing → fall back to platform default").
+    fn empty_secret_registry() -> Arc<crate::secret_resolver::SecretResolverRegistry> {
+        Arc::new(crate::secret_resolver::SecretResolverRegistry::new())
+    }
+
     #[tokio::test]
     async fn resolve_llm_with_resolvers_falls_back_when_no_config() {
         let mut registry = TenantProviderRegistry::new(None, None);
         let tenant_id = test_tenant_id();
 
-        // Resolvers that return None (no tenant config)
+        // Config resolver returns None (no tenant config).
         let config_resolver: super::ConfigResolver = Arc::new(|_tid| Box::pin(async { None }));
-        let secret_resolver: super::SecretResolver =
-            Arc::new(|_tid, _name| Box::pin(async { None }));
-        registry.set_resolvers(config_resolver, secret_resolver);
+        registry.set_config_resolver(config_resolver);
+        registry.set_secret_resolver_registry(empty_secret_registry());
 
         let result = registry.resolve_llm(&tenant_id).await;
         assert!(
@@ -1136,9 +1242,8 @@ mod tests {
         let tenant_id = test_tenant_id();
 
         let config_resolver: super::ConfigResolver = Arc::new(|_tid| Box::pin(async { None }));
-        let secret_resolver: super::SecretResolver =
-            Arc::new(|_tid, _name| Box::pin(async { None }));
-        registry.set_resolvers(config_resolver, secret_resolver);
+        registry.set_config_resolver(config_resolver);
+        registry.set_secret_resolver_registry(empty_secret_registry());
 
         let result = registry.resolve_embedding(&tenant_id).await;
         assert!(
@@ -1152,7 +1257,9 @@ mod tests {
         let mut registry = TenantProviderRegistry::new(None, None);
         let tenant_id = test_tenant_id();
 
-        // Config that references openai but no secret -> falls back to platform default
+        // Config references openai but has no matching secret_references
+        // entry → adapter returns Ok(None) for the API key → build fails
+        // → resolve_llm returns None (platform default is also None).
         let tid = tenant_id.clone();
         let config_resolver: super::ConfigResolver = Arc::new(move |_| {
             let tid = tid.clone();
@@ -1166,10 +1273,8 @@ mod tests {
                 ))
             })
         });
-        // Secret resolver returns None -> build will fail -> falls back
-        let secret_resolver: super::SecretResolver =
-            Arc::new(|_tid, _name| Box::pin(async { None }));
-        registry.set_resolvers(config_resolver, secret_resolver);
+        registry.set_config_resolver(config_resolver);
+        registry.set_secret_resolver_registry(empty_secret_registry());
 
         let result = registry.resolve_llm(&tenant_id).await;
         assert!(
@@ -1179,18 +1284,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn set_resolvers_stores_closures() {
+    async fn set_resolvers_stores_registry_handles() {
         let mut registry = TenantProviderRegistry::new(None, None);
         assert!(registry.config_resolver.is_none());
-        assert!(registry.secret_resolver.is_none());
+        assert!(registry.secret_resolver_registry.is_none());
 
         let config_resolver: super::ConfigResolver = Arc::new(|_tid| Box::pin(async { None }));
-        let secret_resolver: super::SecretResolver =
-            Arc::new(|_tid, _name| Box::pin(async { None }));
-        registry.set_resolvers(config_resolver, secret_resolver);
+        registry.set_config_resolver(config_resolver);
+        registry.set_secret_resolver_registry(empty_secret_registry());
 
         assert!(registry.config_resolver.is_some());
-        assert!(registry.secret_resolver.is_some());
+        assert!(registry.secret_resolver_registry.is_some());
     }
 
     // =======================================================================
