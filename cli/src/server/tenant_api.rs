@@ -4858,10 +4858,82 @@ async fn provision_tenant(
             }
         }
 
+        // ── B3/B4 §2.2-B — also write the manifest hierarchy to the
+        // modern tenant-scoped `companies` / `organizations` / `teams`
+        // tables so idp-sync, OPAL's `v_hierarchy` view, and the
+        // reverse-render path all see manifest-declared hierarchy.
+        //
+        // This runs *in addition* to the legacy `organizational_units`
+        // writes above — not as a replacement — because several code
+        // paths (backup, GDPR export, cascade delete, storage::postgres
+        // role resolution fallback) still read OU. The two trees
+        // intentionally have different UUIDs: OU nodes carry randomly
+        // generated ids from this function; modern rows carry
+        // DB-generated ids surfaced by `ON CONFLICT DO UPDATE …
+        // RETURNING id`. The link between them is logical (matching
+        // name/slug under the same tenant), not physical.
+        //
+        // Error handling is symmetrical to the OU path: one failure
+        // appends a message but does NOT short-circuit the tenant
+        // provision — the rest of the steps still run so the operator
+        // sees a consolidated diagnostic.
+        let modern_hierarchy_summary = match Uuid::parse_str(tenant_id.as_str()) {
+            Ok(tenant_uuid) => {
+                let company_inputs: Vec<storage::hierarchy_store::CompanyInput> = companies
+                    .iter()
+                    .map(|c| storage::hierarchy_store::CompanyInput {
+                        slug: storage::hierarchy_store::slugify(&c.name),
+                        name: c.name.clone(),
+                        orgs: c
+                            .orgs
+                            .iter()
+                            .flatten()
+                            .map(|o| storage::hierarchy_store::OrgInput {
+                                slug: storage::hierarchy_store::slugify(&o.name),
+                                name: o.name.clone(),
+                                teams: o
+                                    .teams
+                                    .iter()
+                                    .flatten()
+                                    .map(|t| storage::hierarchy_store::TeamInput {
+                                        slug: storage::hierarchy_store::slugify(&t.name),
+                                        name: t.name.clone(),
+                                    })
+                                    .collect(),
+                            })
+                            .collect(),
+                    })
+                    .collect();
+                let store =
+                    storage::hierarchy_store::HierarchyStore::new(state.postgres.pool().clone());
+                match store.upsert_hierarchy(tenant_uuid, &company_inputs).await {
+                    Ok(summary) => Some(summary),
+                    Err(err) => {
+                        hierarchy_errors.push(format!("modern hierarchy upsert: {err}"));
+                        None
+                    }
+                }
+            }
+            Err(err) => {
+                hierarchy_errors.push(format!(
+                    "tenant id is not a valid UUID, skipping modern hierarchy upsert: {err}"
+                ));
+                None
+            }
+        };
+
         if hierarchy_errors.is_empty() {
+            let extra = modern_hierarchy_summary
+                .map(|s| {
+                    format!(
+                        " (modern: {} companies, {} orgs, {} teams)",
+                        s.companies_upserted, s.orgs_upserted, s.teams_upserted
+                    )
+                })
+                .unwrap_or_default();
             steps.push(ProvisionStep::ok(
                 "hierarchy",
-                format!("{units_created} unit(s) created"),
+                format!("{units_created} unit(s) created{extra}"),
             ));
         } else {
             steps.push(ProvisionStep::fail(
