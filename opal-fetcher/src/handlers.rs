@@ -216,35 +216,25 @@ pub async fn get_users(
 /// GET /v1/agents?tenant=<uuid>
 ///
 /// Returns agents with their delegation chains and capabilities as Cedar
-/// entities.
+/// entities, scoped to a single tenant. The `tenant` query parameter is
+/// **required**.
 ///
-/// # ⚠️ Known gap — tracked in issue #130 / follow-up
-///
-/// The `agents` table (migration `009_organizational_referential.sql`)
-/// has NO `tenant_id` column today. An agent's tenant is only knowable
-/// transitively via `agents.allowed_company_ids → companies.tenant_id`,
-/// and that set can in principle span multiple tenants. This handler
-/// therefore **requires** a `tenant` query param to match the contract
-/// of its siblings (so OPAL can be configured uniformly across all
-/// fetcher endpoints) but the current implementation still returns the
-/// full agent set and emits a WARN. The follow-up work to this PR adds
-/// `agents.tenant_id` + backfill + a filtered `v_agent_permissions`
-/// view; at that point this handler becomes a SQL-layer filter like
-/// `get_hierarchy` / `get_users` above and the WARN is removed.
+/// Isolation contract: rows are filtered by `v_agent_permissions.tenant_id
+/// = $1` (column exposed by migration `029_agents_tenant_scope.sql`,
+/// backed by a backfilled+NOT-NULL-for-active `agents.tenant_id` column).
+/// Revoked / soft-deleted agents with `NULL` tenant_id are never
+/// returned because the equality filter excludes `NULL`.
 pub async fn get_agents(
     State(state): State<Arc<AppState>>,
     Query(params): Query<TenantQuery>,
 ) -> Result<Json<CedarEntitiesResponse>> {
     let tenant_id = params.tenant;
-    tracing::warn!(
-        %tenant_id,
-        "agent-permissions endpoint currently returns cross-tenant rows; \
-         tenant filtering pending agents.tenant_id schema work (see #130)"
-    );
+    tracing::debug!(%tenant_id, "Fetching agent permissions");
 
     let rows: Vec<AgentPermissionRow> = sqlx::query_as(
         r"
         SELECT
+            tenant_id,
             agent_id,
             agent_name,
             agent_type,
@@ -260,17 +250,15 @@ pub async fn get_agents(
             delegating_user_email,
             delegating_user_name
         FROM v_agent_permissions
+        WHERE tenant_id = $1
         ",
     )
+    .bind(tenant_id)
     .fetch_all(&state.pool)
     .await?;
 
     let count = rows.len();
-    tracing::debug!(
-        %tenant_id,
-        row_count = count,
-        "Fetched agent permission rows (unfiltered — see handler docs)"
-    );
+    tracing::debug!(%tenant_id, row_count = count, "Fetched agent permission rows");
 
     let entities = transform_agents(rows)?;
     let response = CedarEntitiesResponse::new(entities);
@@ -278,7 +266,7 @@ pub async fn get_agents(
     tracing::info!(
         %tenant_id,
         entity_count = response.count,
-        "Returning agent entities (unfiltered — see handler docs)"
+        "Returning agent entities"
     );
 
     Ok(Json(response))
@@ -291,9 +279,10 @@ pub async fn get_agents(
 /// sync of one tenant's OPAL data-source. The `tenant` query parameter
 /// is **required**.
 ///
-/// Tenant-filtering applied: hierarchy, users, code-search repositories
-/// / requests / identities, and project-team assignments. Agents are
-/// NOT filtered — see `get_agents` docstring for the tracked gap.
+/// Tenant-filtering applied uniformly to every entity source: hierarchy,
+/// users, agents, code-search repositories / requests / identities, and
+/// project-team assignments. There are no remaining cross-tenant gaps
+/// in this endpoint after migration `029_agents_tenant_scope.sql`.
 pub async fn get_all_entities(
     State(state): State<Arc<AppState>>,
     Query(params): Query<TenantQuery>,
@@ -322,10 +311,10 @@ pub async fn get_all_entities(
         )
         .bind(tenant_id)
         .fetch_all(&state.pool),
-        // NOTE: agents unfiltered — tracked in #130, see get_agents docstring.
         sqlx::query_as::<_, AgentPermissionRow>(
-            r"SELECT agent_id, agent_name, agent_type, delegated_by_user_id, delegated_by_agent_id, delegation_depth, capabilities, allowed_company_ids, allowed_org_ids, allowed_team_ids, allowed_project_ids, agent_status, delegating_user_email, delegating_user_name FROM v_agent_permissions"
+            r"SELECT tenant_id, agent_id, agent_name, agent_type, delegated_by_user_id, delegated_by_agent_id, delegation_depth, capabilities, allowed_company_ids, allowed_org_ids, allowed_team_ids, allowed_project_ids, agent_status, delegating_user_email, delegating_user_name FROM v_agent_permissions WHERE tenant_id = $1"
         )
+        .bind(tenant_id)
         .fetch_all(&state.pool),
         sqlx::query_as::<_, ProjectTeamAssignmentRow>(
             r"SELECT project_id, team_id, tenant_id, assignment_type FROM project_team_assignments WHERE tenant_id = $1"
@@ -348,12 +337,6 @@ pub async fn get_all_entities(
         .bind(&tenant_text)
         .fetch_all(&state.pool),
     )?;
-
-    tracing::warn!(
-        %tenant_id,
-        agent_row_count = agent_rows.len(),
-        "agent rows returned unfiltered — tenant filtering pending (#130)"
-    );
 
     // Transform all entities
     let mut all_entities = transform_hierarchy(hierarchy_rows)?;
@@ -380,7 +363,7 @@ pub async fn get_all_entities(
     tracing::info!(
         %tenant_id,
         entity_count = response.count,
-        "Returning all entities (tenant-scoped, excluding agents)"
+        "Returning all entities (tenant-scoped)"
     );
 
     Ok(Json(response))
