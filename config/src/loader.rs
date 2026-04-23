@@ -103,6 +103,7 @@ pub fn load_from_env() -> anyhow::Result<Config> {
         k8s_auth: load_k8s_auth_from_env()?,
         admin_bootstrap: load_admin_bootstrap_from_env()?,
         cca: crate::cca::CcaConfig::default(),
+        provisioning: crate::ProvisioningConfig::default(),
     };
 
     Ok(config)

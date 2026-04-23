@@ -79,9 +79,9 @@
 
 ### 4. Inline-secret gating
 
-- [ ] 4.1 Add `allow_inline_secret: bool` to server config, default `false`, off in release builds.
-- [ ] 4.2 Accept `?allowInline=true` on provision only when the server flag is set.
-- [ ] 4.3 Reject non-empty `secrets[].secretValue` unless both conditions hold; return actionable error pointing to `config.secretReferences`.
+- [x] 4.1 Add `allow_inline_secret: bool` to server config, default `false`, off in release builds. _(New `ProvisioningConfig` section on `Config` with `allow_inline_secret: bool` (default `false`). Release-build hard-off enforced in `ProvisioningConfig::effective_allow_inline_secret()` via `cfg!(debug_assertions)` — release pods ignore the flag regardless of YAML/env and cannot be opened by query parameter, header, or any other runtime path. Unit tests pin both the default and the build-profile behaviour.)_
+- [x] 4.2 Accept `?allowInline=true` on provision only when the server flag is set. _(New `allowInline: Option<bool>` on `ProvisionQuery`. Handler computes `server_allows && caller_allows` — either side missing and the gate closes. Integration test `provision_rejects_inline_secret_when_only_query_flag_is_set` locks down "query flag alone is not enough".)_
+- [x] 4.3 Reject non-empty `secrets[].secretValue` unless both conditions hold; return actionable error pointing to `config.secretReferences`. _(HTTP 422 with stable error code `inline_secret_not_allowed`. Body enumerates offending `logicalName`s (never values or lengths — would be a side-channel), and a `remediation` block names both the preferred path (`config.secretReferences`) and the exact two gates an operator must flip (`provisioning.allowInlineSecret` + `?allowInline=true`) with their current state. Empty-byte `secretValue` entries still pass — that shape is the migration target.)_
 
 ---
 

@@ -4053,6 +4053,16 @@ fn validate_manifest(m: &TenantManifest) -> Vec<String> {
 struct ProvisionQuery {
     /// When `true`, return a [`ProvisionPlan`] and skip all writes.
     dry_run: Option<bool>,
+    /// B2 task 4.2: caller opt-in for inline `secrets[].secretValue`
+    /// plaintext. Only honored when the *server* also has
+    /// `provisioning.allow_inline_secret = true` (and then, only in
+    /// non-release builds — see
+    /// [`config::ProvisioningConfig::effective_allow_inline_secret`]).
+    ///
+    /// Both switches must be on; either one missing and the endpoint
+    /// rejects non-empty inline plaintext with a 422 whose body points
+    /// the caller at `config.secretReferences` (task 4.3).
+    allow_inline: Option<bool>,
 }
 
 /// Response body for `POST /admin/tenants/provision?dryRun=true`.
@@ -4137,6 +4147,59 @@ async fn provision_tenant(
             })),
         )
             .into_response();
+    }
+
+    // ── Inline-secret gate (B2 tasks 4.1 / 4.2 / 4.3) ────────────────────
+    // Non-empty `secrets[].secretValue` is only accepted when BOTH the
+    // server flag and the caller's query param say so (and the server
+    // flag itself is forced off in release builds). Empty-valued
+    // entries are always allowed: they describe intent to have a logical
+    // name without delivering plaintext on the wire — useful for
+    // dry-runs and for manifests that bind every secret via
+    // `config.secretReferences` instead.
+    if let Some(secrets) = manifest.secrets.as_ref() {
+        let has_inline_plaintext = secrets.iter().any(|s| !s.secret_value.is_empty());
+        if has_inline_plaintext {
+            let server_allows = state.config.provisioning.effective_allow_inline_secret();
+            let caller_allows = query.allow_inline.unwrap_or(false);
+            if !(server_allows && caller_allows) {
+                // Enumerate offending logical names so the caller sees
+                // exactly which entries to migrate — do not echo the
+                // values themselves (they are SecretBytes, and even the
+                // derived length would be a side-channel hint).
+                let offending: Vec<String> = secrets
+                    .iter()
+                    .filter(|s| !s.secret_value.is_empty())
+                    .map(|s| s.logical_name.clone())
+                    .collect();
+                return (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    Json(json!({
+                        "success": false,
+                        "error": "inline_secret_not_allowed",
+                        "message":
+                            "Inline `secrets[].secretValue` plaintext is \
+                             disabled on this server. Move these entries \
+                             to `config.secretReferences` and have a \
+                             SecretReference resolver deliver the bytes, \
+                             or ask an operator to enable \
+                             `provisioning.allowInlineSecret` (dev builds \
+                             only) and re-submit with `?allowInline=true`.",
+                        "offendingSecrets": offending,
+                        "remediation": {
+                            "preferred": "config.secretReferences",
+                            "fallback": {
+                                "serverConfigKey": "provisioning.allowInlineSecret",
+                                "queryParameter": "allowInline=true",
+                                "serverFlagEnabled": server_allows,
+                                "queryFlagProvided": caller_allows,
+                            }
+                        }
+                    })),
+                )
+                    .into_response();
+            }
+        }
     }
 
     // ── Canonical hash ────────────────────────────────────────────────────
@@ -6466,6 +6529,189 @@ mod tests {
             "tenantId must be present"
         );
         assert_eq!(json["slug"], "provision-test");
+    }
+
+    // ─── inline-secret gate (B2 tasks 4.1 / 4.2 / 4.3) ────────────────────
+
+    /// Default config + no `allowInline=true` query flag → a manifest
+    /// carrying non-empty `secrets[].secretValue` is rejected with 422.
+    /// The error surface must (1) use the stable error code
+    /// `inline_secret_not_allowed`, (2) enumerate the offending logical
+    /// names (never values or lengths), and (3) point operators at
+    /// `config.secretReferences` as the preferred remediation.
+    #[tokio::test]
+    async fn provision_rejects_inline_secret_by_default() {
+        let Some((app, _tenant)) = app_with_tenant().await else {
+            eprintln!("Skipping inline-secret gate test: Docker not available");
+            return;
+        };
+
+        let manifest = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "inline-gate", "name": "Inline Gate" },
+            "secrets": [
+                { "logicalName": "openai_api_key", "secretValue": "sk-test-xxxxxxxx" },
+                { "logicalName": "anthropic_api_key", "secretValue": "sk-ant-xxxxxxxx" }
+            ]
+        });
+
+        let response = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&manifest).unwrap()),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["success"], false);
+        assert_eq!(json["error"], "inline_secret_not_allowed");
+
+        // Offending names listed, values not echoed.
+        let offending = json["offendingSecrets"].as_array().unwrap();
+        let names: Vec<&str> = offending.iter().filter_map(|v| v.as_str()).collect();
+        assert!(names.contains(&"openai_api_key"));
+        assert!(names.contains(&"anthropic_api_key"));
+
+        // Plaintext must never leak back through the error body.
+        let body_str = String::from_utf8_lossy(
+            &axum::body::to_bytes(
+                // Re-render to string for substring scan.
+                axum::body::Body::from(serde_json::to_vec(&json).unwrap()),
+                usize::MAX,
+            )
+            .await
+            .unwrap(),
+        )
+        .to_string();
+        assert!(!body_str.contains("sk-test-xxxxxxxx"));
+        assert!(!body_str.contains("sk-ant-xxxxxxxx"));
+
+        // Remediation surface points operators at the preferred path and
+        // exposes the exact two gates they need to flip.
+        assert_eq!(json["remediation"]["preferred"], "config.secretReferences");
+        assert_eq!(
+            json["remediation"]["fallback"]["serverConfigKey"],
+            "provisioning.allowInlineSecret"
+        );
+        assert_eq!(
+            json["remediation"]["fallback"]["queryParameter"],
+            "allowInline=true"
+        );
+        assert_eq!(json["remediation"]["fallback"]["serverFlagEnabled"], false);
+        assert_eq!(json["remediation"]["fallback"]["queryFlagProvided"], false);
+    }
+
+    /// `allowInline=true` on the query alone is not sufficient — the
+    /// server config gate must *also* be flipped. This proves the
+    /// fallback "both switches required" chain and guards against
+    /// a future refactor that accidentally honors the query flag on
+    /// its own. Note how the diagnostic JSON correctly reports
+    /// `queryFlagProvided=true` while `serverFlagEnabled=false`.
+    #[tokio::test]
+    async fn provision_rejects_inline_secret_when_only_query_flag_is_set() {
+        let Some((app, _tenant)) = app_with_tenant().await else {
+            eprintln!("Skipping inline-secret gate test: Docker not available");
+            return;
+        };
+
+        let manifest = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": { "slug": "inline-gate-q", "name": "Inline Gate Q" },
+            "secrets": [
+                { "logicalName": "stripe_key", "secretValue": "sk_live_xxxxxxxx" }
+            ]
+        });
+
+        let response = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision?allowInline=true",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&manifest).unwrap()),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["error"], "inline_secret_not_allowed");
+        assert_eq!(json["remediation"]["fallback"]["queryFlagProvided"], true);
+        assert_eq!(
+            json["remediation"]["fallback"]["serverFlagEnabled"], false,
+            "server flag defaults off in tests; the query flag alone \
+             must not open the gate"
+        );
+    }
+
+    /// Empty-valued `secrets[]` entries must pass the gate — they carry
+    /// a `logicalName` but no plaintext, so they express intent
+    /// (materialise a secret with this name) without violating the
+    /// policy. This is the shape callers are expected to migrate to
+    /// once `config.secretReferences` supplies the bytes.
+    #[tokio::test]
+    async fn provision_accepts_empty_secret_values_without_allow_inline() {
+        let Some((app, _tenant)) = app_with_tenant().await else {
+            eprintln!("Skipping inline-secret gate test: Docker not available");
+            return;
+        };
+
+        let manifest = serde_json::json!({
+            "apiVersion": "aeterna.io/v1",
+            "kind": "TenantManifest",
+            "tenant": {
+                "slug": "inline-gate-empty",
+                "name": "Inline Gate Empty"
+            },
+            // Empty byte string — deserializes to a 0-byte SecretBytes,
+            // which the gate explicitly allows. No `?allowInline=true`.
+            "secrets": [
+                { "logicalName": "vault_token", "secretValue": "" }
+            ]
+        });
+
+        let response = app
+            .clone()
+            .oneshot(request_with_headers(
+                "POST",
+                "/admin/tenants/provision",
+                "platformAdmin",
+                Body::from(serde_json::to_vec(&manifest).unwrap()),
+            ))
+            .await
+            .unwrap();
+
+        // Either 200 (full pipeline ran with an empty secret) or some
+        // downstream error, but NOT the 4.3 gate rejection — the gate
+        // must not fire on an empty value.
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        if status == StatusCode::UNPROCESSABLE_ENTITY {
+            let json: serde_json::Value =
+                serde_json::from_slice(&body).expect("422 body must be JSON");
+            assert_ne!(
+                json["error"], "inline_secret_not_allowed",
+                "the inline-secret gate must not reject a zero-byte \
+                 secretValue — that shape is the preferred migration \
+                 target"
+            );
+        }
     }
 
     // ─── metadata / providers schema regressions ─────────────────────────

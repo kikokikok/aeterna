@@ -30,7 +30,7 @@ pub use cca::{
 pub use config::{
     AdminBootstrapConfig, Config, DeploymentConfig, GraphConfig, JobConfig, KnowledgeRepoConfig,
     KubernetesAuthConfig, MemoryConfig, ObservabilityConfig, PluginAuthConfig, ProviderConfig,
-    ReasoningConfig, RlmConfig, SyncConfig, ToolConfig,
+    ProvisioningConfig, ReasoningConfig, RlmConfig, SyncConfig, ToolConfig,
 };
 pub use file_loader::{load_from_file, load_from_toml, load_from_yaml};
 pub use hot_reload::watch_config;

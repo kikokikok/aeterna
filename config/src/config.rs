@@ -93,6 +93,19 @@ pub struct Config {
     /// CCA (Confucius Code Agent) capabilities configuration
     #[serde(default)]
     pub cca: CcaConfig,
+
+    /// Tenant provisioning runtime gates.
+    ///
+    /// Controls which **inputs** the `POST /api/v1/admin/tenants/provision`
+    /// endpoint will accept. The knobs here govern *policy*, not
+    /// *behavior* — they let an operator explicitly opt into looser
+    /// acceptance criteria (today: inline secret plaintext in the manifest
+    /// body) that are otherwise off by default because they are hostile
+    /// to audit trails and secret hygiene.
+    ///
+    /// See `openspec/changes/harden-tenant-provisioning/tasks.md` §4.
+    #[serde(default)]
+    pub provisioning: ProvisioningConfig,
 }
 
 impl Config {
@@ -338,6 +351,65 @@ pub struct KubernetesAuthConfig {
 
 fn default_k8s_namespace() -> Option<String> {
     None
+}
+
+/// Tenant provisioning policy gates.
+///
+/// B2 task 4.1: inline secret plaintext in `secrets[].secretValue` on the
+/// provision manifest is a power-tool — it bypasses the normal
+/// reference-indirected secret flow (`SecretReference` → config provider
+/// → backend store) and puts raw material on the wire. We want it
+/// available for local dev fixtures and emergency breakglass, but
+/// **off by default** and **mechanically unreachable in release builds**.
+///
+/// The two-layer gate is:
+///
+/// 1. [`allow_inline_secret`] must be `true` in the server config.
+/// 2. The caller must additionally pass `?allowInline=true` on the
+///    provision request (task 4.2).
+///
+/// Both conditions are required; either one missing and the endpoint
+/// rejects non-empty inline `secretValue` with a 422 pointing at
+/// `config.secretReferences` (task 4.3).
+///
+/// ### Release-build hard-off
+///
+/// [`Self::effective_allow_inline_secret`] returns `false` unconditionally
+/// when `debug_assertions` is off (i.e. `--release`), regardless of what
+/// the YAML says. That is the "off in release builds" clause of task 4.1
+/// and cannot be overridden by environment variable, config file, query
+/// parameter, or header. Inline secrets are a debug/dev convenience
+/// only; a prod pod will refuse them even if someone misconfigures the
+/// container.
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default, PartialEq)]
+pub struct ProvisioningConfig {
+    /// When `true` *and* running under `debug_assertions`, the provision
+    /// endpoint will accept `secrets[].secretValue` plaintext **if** the
+    /// caller also opts in with `?allowInline=true`.
+    ///
+    /// Default: `false`. Release builds force this to `false`
+    /// (see [`Self::effective_allow_inline_secret`]).
+    #[serde(default)]
+    pub allow_inline_secret: bool,
+}
+
+impl ProvisioningConfig {
+    /// The *effective* value of [`Self::allow_inline_secret`] after the
+    /// release-build hard-off has been applied.
+    ///
+    /// This is the only method the request handler should consult. It
+    /// returns `false` in release builds regardless of config, so inline
+    /// secrets are mechanically unreachable in production even under
+    /// misconfiguration. See the type-level docs for the full gate chain.
+    #[must_use]
+    pub fn effective_allow_inline_secret(&self) -> bool {
+        if cfg!(debug_assertions) {
+            self.allow_inline_secret
+        } else {
+            // Release-build hard-off. Task 4.1: "off in release builds".
+            false
+        }
+    }
 }
 
 /// Configuration for the one-time PlatformAdmin bootstrap seeding.
@@ -1629,5 +1701,75 @@ mod tests {
         let providers = ProviderConfig::default();
         assert!(providers.graph.enabled);
         assert_eq!(providers.graph.database_path, ":memory:");
+    }
+
+    // ── ProvisioningConfig (B2 task 4.1) ────────────────────────────────
+
+    #[test]
+    fn provisioning_config_default_is_off() {
+        let p = ProvisioningConfig::default();
+        assert!(
+            !p.allow_inline_secret,
+            "default must be false so a bare config rejects inline plaintext"
+        );
+        assert!(
+            !p.effective_allow_inline_secret(),
+            "effective value on a default config must be false regardless of build"
+        );
+    }
+
+    #[test]
+    fn provisioning_config_effective_gate_matches_build_profile() {
+        // With `allow_inline_secret = true`, the effective value depends on
+        // whether `debug_assertions` is active. This asserts both halves of
+        // task 4.1 in one run: dev builds honor the flag, release builds
+        // force it off.
+        let p = ProvisioningConfig {
+            allow_inline_secret: true,
+        };
+        if cfg!(debug_assertions) {
+            assert!(
+                p.effective_allow_inline_secret(),
+                "debug build must honor allow_inline_secret=true"
+            );
+        } else {
+            assert!(
+                !p.effective_allow_inline_secret(),
+                "release build must ignore allow_inline_secret=true \
+                 (task 4.1 hard-off)"
+            );
+        }
+    }
+
+    #[test]
+    fn provisioning_config_round_trips_through_serde() {
+        // Belt-and-braces that the YAML key stays `allowInlineSecret`
+        // (camelCase via top-level field rename at the Config level is
+        // not in play here — this struct uses default snake/camel?),
+        // and that a `false` value round-trips to `false` without the
+        // serializer dropping it silently.
+        //
+        // NB: `ProvisioningConfig` does not set `#[serde(rename_all)]`
+        // itself — fields serialize as `allow_inline_secret` today. If
+        // we later harmonise everything to camelCase, update this test
+        // and the operator docs in lockstep.
+        let yaml = "allow_inline_secret: true\n";
+        let parsed: ProvisioningConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(parsed.allow_inline_secret);
+
+        let roundtrip = serde_yaml::to_string(&parsed).unwrap();
+        assert!(
+            roundtrip.contains("allow_inline_secret: true"),
+            "expected serialized YAML to round-trip the flag; got:\n{roundtrip}"
+        );
+    }
+
+    #[test]
+    fn top_level_config_default_provisioning_is_off() {
+        let cfg = Config::default();
+        assert!(
+            !cfg.provisioning.effective_allow_inline_secret(),
+            "Config::default() must reject inline secrets by default"
+        );
     }
 }
