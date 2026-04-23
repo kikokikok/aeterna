@@ -408,8 +408,38 @@ pub struct TenantSecretSetArgs {
 
     pub logical_name: String,
 
+    /// **UNSAFE.** Inline secret value. Leaks into shell history,
+    /// `ps`, and CI logs; only accepted when paired with
+    /// `--allow-inline-secret`. Prefer `--from-stdin`, `--from-file`,
+    /// `--from-env`, or `--ref` (B2 §8.1/§8.2).
     #[arg(long)]
-    pub value: String,
+    pub value: Option<String>,
+
+    /// Opt-in escape hatch that unlocks `--value`. Required for tests
+    /// and one-off debugging; never set this in CI scripts.
+    #[arg(long)]
+    pub allow_inline_secret: bool,
+
+    /// Reference name of an already-stored secret; the CLI sends
+    /// only the name (no bytes) to the server (B2 §8.1).
+    #[arg(long = "ref", value_name = "NAME")]
+    pub reference: Option<String>,
+
+    /// Path to a file whose UTF-8 contents are the secret. File mode
+    /// must be `0600` or stricter on Unix (B2 §8.1/§8.3).
+    #[arg(long, value_name = "PATH")]
+    pub from_file: Option<std::path::PathBuf>,
+
+    /// Read the secret from stdin. On a TTY echo is disabled; when
+    /// piped the bytes are read verbatim (B2 §8.1/§8.4).
+    #[arg(long)]
+    pub from_stdin: bool,
+
+    /// Read the secret from the named environment variable; the
+    /// variable is cleared from the current process after read so
+    /// child processes cannot inherit it (B2 §8.1/§8.5).
+    #[arg(long, value_name = "VAR")]
+    pub from_env: Option<String>,
 
     #[arg(long, default_value = "tenant")]
     pub ownership: String,
@@ -1744,10 +1774,51 @@ async fn run_config_validate(args: TenantConfigValidateArgs) -> anyhow::Result<(
 
 async fn run_secret_set(args: TenantSecretSetArgs) -> anyhow::Result<()> {
     let ownership = tenant_config_ownership(args.ownership.as_str())?;
-    let body = json!({
-        "ownership": ownership,
-        "secretValue": args.value,
-    });
+
+    // B2 §8.1\u2013§8.5: resolve whichever input mode the user picked
+    // through the secret-input resolver. The real-IO seam is used in
+    // production; unit tests in `secret_input::tests` exercise every
+    // branch against a fake IO.
+    let flags = crate::secret_input::SecretInputFlags {
+        inline_value: args.value.clone(),
+        allow_inline: args.allow_inline_secret,
+        reference: args.reference.clone(),
+        from_file: args.from_file.clone(),
+        from_stdin: args.from_stdin,
+        from_env: args.from_env.clone(),
+    };
+    let payload = match crate::secret_input::resolve(&flags, &mut crate::secret_input::RealSecretIo)
+    {
+        Ok(p) => p,
+        Err(e) => {
+            if args.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &json!({"success": false, "error": e.what.clone()})
+                    )?
+                );
+            } else {
+                e.display();
+            }
+            anyhow::bail!("invalid secret input: {}", e.what);
+        }
+    };
+
+    // `Inline` \u2192 secretValue; `Reference` \u2192 secretRef. The two are
+    // mutually exclusive on the wire so the server cannot confuse
+    // \"user sent a raw secret named 'vault/foo'\" with \"user sent a
+    // reference to 'vault/foo'\".
+    let body = match &payload {
+        crate::secret_input::SecretPayload::Inline(v) => json!({
+            "ownership": ownership,
+            "secretValue": v,
+        }),
+        crate::secret_input::SecretPayload::Reference(r) => json!({
+            "ownership": ownership,
+            "secretRef": r,
+        }),
+    };
 
     if let Some(client) = get_live_client_for(args.target_tenant.as_deref()).await {
         let result = if let Some(ref tenant) = args.tenant {
@@ -2537,7 +2608,12 @@ mod tests {
         let args = TenantSecretSetArgs {
             tenant: Some("acme".to_string()),
             logical_name: "repo.token".to_string(),
-            value: "s3cr3t".to_string(),
+            value: Some("s3cr3t".to_string()),
+            allow_inline_secret: true,
+            reference: None,
+            from_file: None,
+            from_stdin: false,
+            from_env: None,
             ownership: "tenant".to_string(),
             target_tenant: None,
             json: true,
@@ -2545,6 +2621,7 @@ mod tests {
         assert_eq!(args.logical_name, "repo.token");
         assert_eq!(args.ownership, "tenant");
         assert!(args.json);
+        assert!(args.allow_inline_secret);
     }
 
     #[test]

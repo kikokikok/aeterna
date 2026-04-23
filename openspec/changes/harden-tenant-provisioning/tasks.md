@@ -99,11 +99,13 @@
 
 ### 8. CLI: secure secret input
 
-- [ ] 8.1 Add `--ref`, `--from-file`, `--from-stdin`, `--from-env` flags on `tenant secret set`.
-- [ ] 8.2 Reject `--value` unless `--allow-inline-secret` is also set.
-- [ ] 8.3 `--from-file` checks mode `<= 0600`.
-- [ ] 8.4 `--from-stdin` disables terminal echo when stdin is a TTY.
-- [ ] 8.5 `--from-env` reads the named variable and clears it from child processes.
+- [x] 8.1 Add `--ref`, `--from-file`, `--from-stdin`, `--from-env` flags on `tenant secret set`. _(New `cli::secret_input` module with a `SecretInputFlags` + `resolve()` pair driving a `SecretPayload` enum (`Inline` → `secretValue`, `Reference` → `secretRef`). All four new flags plus the gated `--value` wired into `TenantSecretSetArgs` with doc comments that state the threat model each mode addresses. Exactly one source must be supplied: zero → UX error with copy-pasteable fixes, two-or-more → UX error with the exact count so the user sees the ambiguity.)_
+- [x] 8.2 Reject `--value` unless `--allow-inline-secret` is also set. _(Inline bytes leak into shell history, `ps`, and CI logs; the resolver rejects `--value` without `--allow-inline-secret` with a UX error that names all four safer modes and suggests `--from-stdin` by default.)_
+- [x] 8.3 `--from-file` checks mode `<= 0600`. _(Check is `mode & 0o177 == 0` — captures "no world bits, no group bits, no owner-execute bit" in one expression. Tests pin `0600` and `0400` to accepted, and `0644`/`0660`/`0700` to rejected with a copy-pasteable `chmod 0600 <path>` suggestion in the error. UTF-8 validation + trailing-newline stripping (LF and CRLF, exactly once, preserving other trailing whitespace) + empty-file rejection all covered. On non-Unix platforms the mode check returns `None` and skips — metadata still stats for "file not found".)_
+- [x] 8.4 `--from-stdin` disables terminal echo when stdin is a TTY. _(`RealSecretIo::read_stdin_secret` branches on `std::io::IsTerminal`: TTY → `dialoguer::Password` (stars + echo off), pipe → `read_to_string` + strip single `\n`/`\r\n` terminator. Resolver logic is driven through a `SecretIo` trait seam so unit tests script stdin deterministically without touching the real terminal.)_
+- [x] 8.5 `--from-env` reads the named variable and clears it from child processes. _(`RealSecretIo::clear_env` calls `unsafe { std::env::remove_var }` after a successful read — Rust 2024 marks env mutation `unsafe` because it is not thread-safe; a SAFETY comment justifies it by pointing at the single-threaded CLI dispatch path. Tests assert the var is both returned to the caller AND removed from the env map so child processes cannot inherit. Empty values and unset variables fail loudly; an all-whitespace `--from-env` name is rejected before any lookup.)_
+
+_§8 implemented as `cli/src/secret_input.rs` (new, 600+ lines inc. tests) wired into `run_secret_set` through a `SecretIo` trait seam — 24 unit tests cover every branch including five-source ambiguity, CRLF stripping, the negative-space 0700 case, and env-clear after read._
 
 ### 9. CLI: output and exit codes
 

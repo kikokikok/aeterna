@@ -10,6 +10,7 @@ pub mod env_vars;
 mod offline;
 mod output;
 mod profile;
+mod secret_input;
 mod server;
 pub mod ux_error;
 
