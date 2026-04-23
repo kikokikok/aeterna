@@ -11,7 +11,9 @@
 
 pub mod env;
 pub mod file;
+pub mod inline;
 pub mod k8s;
+pub mod postgres;
 
 #[cfg(feature = "vault")]
 pub mod vault;
@@ -23,5 +25,7 @@ pub use vault_stub as vault;
 
 pub use env::EnvRefResolver;
 pub use file::FileRefResolver;
+pub use inline::InlineRefResolver;
 pub use k8s::{K8sRefResolver, K8sSecretFetcher, PodDownwardApiFetcher};
+pub use postgres::PostgresRefResolver;
 pub use vault::VaultRefResolver;
