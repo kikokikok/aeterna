@@ -41,21 +41,47 @@ use serde_json::{Value, json};
 use super::AppState;
 
 /// Sections this renderer knows how to reverse-render today.
-pub const RENDERED_SECTIONS: &[&str] = &["tenant", "metadata", "config", "repository", "providers"];
+///
+/// `domainMappings` lives under `tenant.domainMappings` in the manifest
+/// shape; it is listed here at the top level because that is where the
+/// API documentation exposes it and where `notRendered` previously
+/// tracked it. Added in PR #128.
+///
+/// `providers` (llm + embedding) was added in §2.2-A — see
+/// `render_providers` below and the `#[test] render_providers_*` cases.
+pub const RENDERED_SECTIONS: &[&str] = &[
+    "tenant",
+    "metadata",
+    "config",
+    "repository",
+    "providers",
+    "domainMappings",
+];
 
 /// Sections a full `TenantManifest` can carry but this renderer does
-/// not yet cover. Reflected into `RenderedManifest::not_rendered`.
+/// not yet cover. Reflected into [`RenderedManifest::not_rendered`].
 ///
-/// `providers.memoryLayers` is still partial (deferred to §2.2-D) —
-/// the outer `providers` section is rendered for llm/embedding, but
-/// `memoryLayers` has no canonical storage convention yet.
-pub const NOT_RENDERED_SECTIONS: &[&str] = &[
-    "domainMappings",
-    "secrets",
-    "hierarchy",
-    "roles",
-    "providers.memoryLayers",
-];
+/// Intentionally excluded from this list (they are NOT gaps):
+///
+/// - **`secrets`** — the top-level `secrets:` array on the manifest
+///   INPUT shape carries plaintext values used for one-shot ingestion
+///   (`ManifestSecret { logical_name, ownership, secret_value }`). The
+///   server never retains plaintext, so there is no current state to
+///   re-emit. This is the same wire-only semantic as
+///   `SecretReference::Inline`: it can arrive, but it cannot leave.
+///   The durable form of those secrets is visible in
+///   `config.secretReferences` (already rendered). (PR #128)
+///
+/// - **`tenant.domainMappings`** moved to [`RENDERED_SECTIONS`]; it is
+///   emitted as a sorted `Vec<String>` and elided entirely when the
+///   tenant has no mappings (round-trip friendly with the input shape,
+///   which allows the field to be absent). (PR #128)
+///
+/// - **`providers`** (top-level) moved to [`RENDERED_SECTIONS`] in
+///   §2.2-A. Only its `memoryLayers` sub-section remains a gap below,
+///   deferred to §2.2-D because no canonical storage convention exists
+///   for it yet.
+pub const NOT_RENDERED_SECTIONS: &[&str] = &["hierarchy", "roles", "providers.memoryLayers"];
 
 #[derive(Debug, thiserror::Error)]
 pub enum RenderError {
@@ -147,6 +173,13 @@ pub struct RenderedTenant {
     pub source_owner: String,
     pub created_at: i64,
     pub updated_at: i64,
+    /// Domains mapped to this tenant, sorted lexicographically.
+    /// Omitted entirely when the tenant has no mappings, matching the
+    /// input shape (`ManifestTenant.domain_mappings` is `Option<Vec<_>>`)
+    /// and keeping the rendered manifest byte-identical to what a caller
+    /// would write for an unmapped tenant.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub domain_mappings: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -223,6 +256,21 @@ pub async fn render_current_manifest(
         .await
         .map_err(|e| RenderError::Storage(e.to_string()))?;
 
+    // Domain mappings are listed via the store (which also resolves the
+    // tenant ref; we pass the slug we just loaded above, so the result
+    // set is guaranteed non-`NotFound`). Empty => None so the rendered
+    // manifest matches an unmapped-tenant input byte-for-byte.
+    let domain_mappings = state
+        .tenant_store
+        .list_domain_mappings(&record.slug)
+        .await
+        .map_err(|e| RenderError::Storage(e.to_string()))?;
+    let domain_mappings = if domain_mappings.is_empty() {
+        None
+    } else {
+        Some(domain_mappings)
+    };
+
     let rendered_repository = binding.map(|b| {
         if redact {
             b.redacted()
@@ -262,6 +310,7 @@ pub async fn render_current_manifest(
             source_owner: record.source_owner.to_string(),
             created_at: record.created_at,
             updated_at: record.updated_at,
+            domain_mappings,
         },
         config: rendered_config,
         repository: rendered_repository,
@@ -553,6 +602,7 @@ mod tests {
                 source_owner: "admin".into(),
                 created_at: 1,
                 updated_at: 2,
+                domain_mappings: None,
             },
             config: None,
             repository: None,
@@ -597,6 +647,7 @@ mod tests {
                 source_owner: "admin".into(),
                 created_at: 1,
                 updated_at: 2,
+                domain_mappings: None,
             },
             config: None,
             repository: None,
@@ -611,17 +662,57 @@ mod tests {
             "absent providers must be elided, not null-serialized"
         );
         assert!(v["metadata"].get("manifestHash").is_none());
+        // domainMappings = None ⇒ absent on the wire (matches input shape
+        // where `tenant.domainMappings` is `Option<Vec<_>>`).
+        assert!(
+            v["tenant"].get("domainMappings").is_none(),
+            "tenant.domainMappings must be omitted when None, got: {}",
+            v["tenant"]
+        );
+    }
+
+    #[test]
+    fn rendered_tenant_emits_sorted_domain_mappings_when_present() {
+        // The store contract guarantees sorted output; the renderer does
+        // not re-sort. This test locks the round-trip byte shape so a
+        // future well-meaning refactor that wraps the result in a
+        // HashSet / BTreeMap iteration doesn't silently change ordering.
+        let m = RenderedManifest {
+            api_version: "aeterna.io/v1".into(),
+            kind: "TenantManifest".into(),
+            metadata: RenderedMetadata {
+                generation: 1,
+                manifest_hash: None,
+            },
+            tenant: RenderedTenant {
+                id: "id".into(),
+                slug: "acme".into(),
+                name: "Acme".into(),
+                status: "active".into(),
+                source_owner: "admin".into(),
+                created_at: 1,
+                updated_at: 2,
+                domain_mappings: Some(vec![
+                    "acme.com".into(),
+                    "beta.acme.com".into(),
+                    "zulu.acme.com".into(),
+                ]),
+            },
+            config: None,
+            repository: None,
+            providers: None,
+            not_rendered: vec![],
+        };
+        let v = serde_json::to_value(&m).unwrap();
+        assert_eq!(
+            v["tenant"]["domainMappings"],
+            json!(["acme.com", "beta.acme.com", "zulu.acme.com"])
+        );
     }
 
     #[test]
     fn not_rendered_list_contains_every_expected_section() {
-        for section in [
-            "hierarchy",
-            "roles",
-            "secrets",
-            "domainMappings",
-            "providers.memoryLayers",
-        ] {
+        for section in ["hierarchy", "roles", "providers.memoryLayers"] {
             assert!(
                 NOT_RENDERED_SECTIONS.contains(&section),
                 "section {section} missing from NOT_RENDERED"
@@ -640,6 +731,18 @@ mod tests {
             !NOT_RENDERED_SECTIONS.contains(&"providers"),
             "top-level `providers` must no longer be in the gap list"
         );
+        // PR #128 regression: `secrets` (top-level input-only ingestion
+        // form) and `domainMappings` (now rendered under
+        // `tenant.domainMappings`) MUST NOT reappear in NOT_RENDERED.
+        // If they do, a future PR accidentally re-introduced them as
+        // gaps; this test catches it.
+        for gone in ["secrets", "domainMappings"] {
+            assert!(
+                !NOT_RENDERED_SECTIONS.contains(&gone),
+                "{gone} must not be in NOT_RENDERED_SECTIONS: secrets is \
+                 wire-only input; domainMappings is rendered under tenant."
+            );
+        }
     }
 
     // ── §2.2-A render_providers unit tests ───────────────────────────────

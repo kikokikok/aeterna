@@ -121,20 +121,18 @@ async fn migration_028_establishes_tenant_scoped_companies() {
     let tenant_a_slug = format!("{tag}-a");
     let tenant_b_slug = format!("{tag}-b");
 
-    let tenant_a: Uuid = sqlx::query_scalar(
-        "INSERT INTO tenants (slug, name) VALUES ($1, $1) RETURNING id",
-    )
-    .bind(&tenant_a_slug)
-    .fetch_one(&pool)
-    .await
-    .expect("insert tenant A");
-    let tenant_b: Uuid = sqlx::query_scalar(
-        "INSERT INTO tenants (slug, name) VALUES ($1, $1) RETURNING id",
-    )
-    .bind(&tenant_b_slug)
-    .fetch_one(&pool)
-    .await
-    .expect("insert tenant B");
+    let tenant_a: Uuid =
+        sqlx::query_scalar("INSERT INTO tenants (slug, name) VALUES ($1, $1) RETURNING id")
+            .bind(&tenant_a_slug)
+            .fetch_one(&pool)
+            .await
+            .expect("insert tenant A");
+    let tenant_b: Uuid =
+        sqlx::query_scalar("INSERT INTO tenants (slug, name) VALUES ($1, $1) RETURNING id")
+            .bind(&tenant_b_slug)
+            .fetch_one(&pool)
+            .await
+            .expect("insert tenant B");
 
     // Same slug under two different tenants should now succeed.
     sqlx::query(
@@ -188,13 +186,11 @@ async fn migration_028_establishes_tenant_scoped_companies() {
         .execute(&pool)
         .await
         .expect("delete tenant A");
-    let remaining: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM companies WHERE tenant_id = $1",
-    )
-    .bind(tenant_a)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM companies WHERE tenant_id = $1")
+        .bind(tenant_a)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(
         remaining, 0,
         "deleting tenant must cascade-delete its companies"

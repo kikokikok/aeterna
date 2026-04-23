@@ -497,15 +497,14 @@ async fn find_tenant_by_selector(
 pub(crate) async fn resolve_tenant_id_from_pool(pool: &sqlx::PgPool) -> anyhow::Result<Uuid> {
     let tenant_str =
         std::env::var(crate::env_vars::AETERNA_TENANT_ID).unwrap_or_else(|_| "default".to_string());
-    let row: Option<(Uuid,)> =
-        sqlx::query_as(
-            "SELECT id FROM tenants
+    let row: Option<(Uuid,)> = sqlx::query_as(
+        "SELECT id FROM tenants
              WHERE slug = $1 OR name = $1 OR id::text = $1
              LIMIT 1",
-        )
-        .bind(&tenant_str)
-        .fetch_optional(pool)
-        .await?;
+    )
+    .bind(&tenant_str)
+    .fetch_optional(pool)
+    .await?;
 
     if let Some((id,)) = row {
         Ok(id)
