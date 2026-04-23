@@ -133,7 +133,25 @@ Recommended breakdown: **§2.2-C — roles reverse-render**, done after
 §2.2-B in the same work stream (not a cross-team dependency — just
 ordering inside this engineer's queue).
 
-## Finding 4 — `providers.memoryLayers`: no storage convention at all
+## Finding 4 — `providers.memoryLayers`: no storage convention at all ✅ CLOSED (§2.2-D)
+
+> **Status update (2026-04-23):** Closed on branch
+> `feat/b3-providers-memory-layers-fwd-apply`. Convention adopted:
+> `memory_layer.{layer}.{field}` — dot separator at the prefix boundary
+> (first `.` after `memory_layer` and last `.` before the field suffix)
+> with the inner suffix still using the flat snake_case style shared
+> with llm/embedding (`provider`, `model`, `api_key`,
+> `google_project_id`, `google_location`, `bedrock_region`). Forward
+> apply reuses the existing `apply_one` closure unchanged — only the
+> prefix is computed dynamically per layer. Reverse render scans for
+> `memory_layer.*.provider` sentinel keys, extracts the layer name,
+> and dispatches through `render_one_provider` with dynamically-built
+> key names. Layer keys are validated against `[a-z][a-z0-9_-]{0,62}`
+> at manifest validation time; dots are explicitly forbidden so the
+> prefix parser is unambiguous. `providers.memoryLayers` removed from
+> `NOT_RENDERED_SECTIONS`; only `hierarchy` and `roles` remain.
+
+### Original description (kept for historical context)
 
 Even if Finding 1 is closed for `llm` and `embedding`, the
 `providers.memoryLayers: BTreeMap<String, ManifestProvider>` sub-block
@@ -155,7 +173,7 @@ convention.**
 §2.2-A  providers llm/embedding forward-apply   (independent)
 §2.2-B  hierarchy storage + apply               (independent, biggest)
 §2.2-C  roles reverse-render                    (done after §2.2-B)
-§2.2-D  memoryLayers storage convention         (independent)
+§2.2-D  memoryLayers storage convention         ✅ CLOSED (this finding)
 ```
 
 Closing all four unblocks §2.4 (structural diff endpoint) and §7.3

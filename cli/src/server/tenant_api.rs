@@ -425,7 +425,23 @@ fn apply_manifest_providers_to_config(
     if let Some(embedding) = &providers.embedding {
         apply_one("embedding_", embedding);
     }
-    // providers.memory_layers: deferred (FINDINGS-2-2 §2.2-D).
+    // B3 §2.2-D — memoryLayers storage convention.
+    //
+    // Each entry `providers.memoryLayers.{layer}` writes under the
+    // prefix `memory_layer.{layer}.`. The dot at the prefix boundary
+    // guarantees non-collision with the flat snake_case namespace used
+    // by llm/embedding/… (`llm_provider` ≠ `memory_layer.episodic.provider`
+    // and no existing key contains `.`).
+    //
+    // Layer-key validity is enforced upstream by
+    // `is_valid_memory_layer_key` in `validate_manifest`; that guard
+    // runs before any write, so we can assume the key is safe here.
+    // A defensive re-check would add no value and would only paper
+    // over a validator regression.
+    for (layer, provider) in &providers.memory_layers {
+        let prefix = format!("memory_layer.{layer}.");
+        apply_one(&prefix, provider);
+    }
 }
 
 fn reject_non_tenant_owned_config(
@@ -3763,6 +3779,34 @@ impl ProvisionStep {
 
 /// Validate a manifest before processing any steps.
 /// Returns a list of human-readable error strings; empty means valid.
+/// B3 §2.2-D — memory-layer key charset check.
+///
+/// Layer names are operator-provided and become part of the config-field
+/// key namespace. Restricting them to `[a-z][a-z0-9_-]{0,62}` gives us:
+///   * zero collision risk with existing flat snake_case keys
+///     (`llm_provider`, `embedding_bedrock_region`, …) because the
+///     memoryLayer keys are dot-separated at the prefix boundary,
+///   * deterministic, operator-readable config dumps,
+///   * a shape that already round-trips through k8s label / JSON key /
+///     URL-path constraints without needing escape rules.
+///
+/// `.` is explicitly forbidden so `memory_layer.{layer}.provider`
+/// parses back unambiguously (otherwise `memory_layer.a.b.provider`
+/// would be either layer `a.b` field `provider` or layer `a` field
+/// `b.provider`).
+fn is_valid_memory_layer_key(layer: &str) -> bool {
+    let bytes = layer.as_bytes();
+    if bytes.is_empty() || bytes.len() > 63 {
+        return false;
+    }
+    if !matches!(bytes[0], b'a'..=b'z') {
+        return false;
+    }
+    bytes[1..]
+        .iter()
+        .all(|b| matches!(b, b'a'..=b'z' | b'0'..=b'9' | b'_' | b'-'))
+}
+
 fn validate_manifest(m: &TenantManifest) -> Vec<String> {
     let mut errors: Vec<String> = Vec::new();
 
@@ -3875,8 +3919,26 @@ fn validate_manifest(m: &TenantManifest) -> Vec<String> {
             check_provider("embedding", emb, &declared_refs, &mut errors);
         }
         for (layer, p) in &providers.memory_layers {
+            // B3 §2.2-D — layer names become part of the config-field
+            // key namespace (`memory_layer.{layer}.provider`, etc.).
+            // Restrict to `[a-z][a-z0-9_-]{0,62}` (k8s-label shape):
+            //   - starts lowercase alpha (no leading digit / underscore
+            //     / dash — avoids confusion with flat existing keys
+            //     like `llm_bedrock_region`),
+            //   - remaining chars are lowercase alphanumeric + `_` / `-`,
+            //   - max 63 so the full key stays under storage's
+            //     `TenantConfigField.key` length bound with headroom for
+            //     the longest suffix (`google_project_id` = 17 chars).
+            // Dots are forbidden to keep the `.`-separator unambiguous
+            // at the prefix boundary.
             if layer.trim().is_empty() {
                 errors.push("providers.memoryLayers has an entry with an empty key".into());
+            } else if !is_valid_memory_layer_key(layer) {
+                errors.push(format!(
+                    "providers.memoryLayers key '{layer}' is invalid: must match \
+                     [a-z][a-z0-9_-]{{0,62}} (lowercase, 1–63 chars, starts with a \
+                     letter, no dots)"
+                ));
             }
             check_provider(
                 &format!("memoryLayers.{layer}"),
@@ -7170,17 +7232,17 @@ mod tests {
     }
 
     #[test]
-    fn apply_providers_memory_layers_are_not_written() {
-        // §2.2-D deferred. memoryLayers must not produce any config
-        // fields — the helper has no convention to map them to yet,
-        // and silently writing garbage keys would corrupt the
-        // canonical hash.
+    fn apply_providers_memory_layers_write_dot_prefixed_keys() {
+        // B3 §2.2-D: memoryLayers now round-trip. Each layer produces
+        // `memory_layer.{layer}.provider` (+ optional `.model` /
+        // `.api_key` / provider-kind extras). Dot-separator at the
+        // prefix boundary is the collision-free namespace marker.
         let providers = ManifestProviders {
             memory_layers: BTreeMap::from([(
                 "episodic".to_string(),
                 ManifestProvider {
                     kind: "qdrant".to_string(),
-                    model: None,
+                    model: Some("text-embedding-3-small".to_string()),
                     secret_ref: None,
                     config: BTreeMap::new(),
                 },
@@ -7189,12 +7251,140 @@ mod tests {
         };
         let mut doc = empty_doc();
         apply_manifest_providers_to_config(&providers, &mut doc);
-        assert!(
-            doc.fields.is_empty(),
-            "memoryLayers wrote fields unexpectedly: {:?}",
-            doc.fields.keys().collect::<Vec<_>>()
+
+        assert_eq!(
+            doc.fields
+                .get("memory_layer.episodic.provider")
+                .unwrap()
+                .value,
+            serde_json::json!("qdrant")
         );
+        assert_eq!(
+            doc.fields.get("memory_layer.episodic.model").unwrap().value,
+            serde_json::json!("text-embedding-3-small")
+        );
+        // No secret_ref on this fixture → no api_key alias written.
+        assert!(!doc.fields.contains_key("memory_layer.episodic.api_key"));
         assert!(doc.secret_references.is_empty());
+        // Exactly two fields (provider + model) — nothing leaked.
+        assert_eq!(doc.fields.len(), 2);
+    }
+
+    #[test]
+    fn apply_providers_memory_layers_write_secret_alias_and_bedrock_extra() {
+        // Stacks §2.2-D on top of §2.2-A's apply_one machinery:
+        // bedrock extras + secret aliasing should pass through with
+        // the layer-scoped prefix unchanged.
+        let mut doc = empty_doc();
+        doc.secret_references.insert(
+            "episodic_key".to_string(),
+            TenantSecretReference {
+                logical_name: "episodic_key".to_string(),
+                ownership: TenantConfigOwnership::Platform,
+                reference: mk_core::SecretReference::Env {
+                    var: "AETERNA_EPISODIC".to_string(),
+                },
+            },
+        );
+        let providers = ManifestProviders {
+            memory_layers: BTreeMap::from([(
+                "episodic".to_string(),
+                ManifestProvider {
+                    kind: "bedrock".to_string(),
+                    model: None,
+                    secret_ref: Some("episodic_key".to_string()),
+                    config: BTreeMap::from([("region".to_string(), "eu-west-3".to_string())]),
+                },
+            )]),
+            ..Default::default()
+        };
+        apply_manifest_providers_to_config(&providers, &mut doc);
+
+        assert_eq!(
+            doc.fields
+                .get("memory_layer.episodic.bedrock_region")
+                .unwrap()
+                .value,
+            json!("eu-west-3")
+        );
+        // Canonical api_key alias points at the same SecretReference
+        // as the operator name — identical to how llm/embedding alias.
+        let operator = doc.secret_references.get("episodic_key").unwrap();
+        let canonical = doc
+            .secret_references
+            .get("memory_layer.episodic.api_key")
+            .unwrap();
+        assert_eq!(operator.reference, canonical.reference);
+    }
+
+    #[test]
+    fn memory_layer_key_validation_accepts_valid_and_rejects_invalid() {
+        // Positive: lowercase alpha start, alphanumeric + `_`/`-` body,
+        // 1–63 chars.
+        for ok in &["a", "episodic", "long_term", "short-term", "l0"] {
+            assert!(is_valid_memory_layer_key(ok), "expected {ok:?} to be valid");
+        }
+        // Negative: empty, too long, leading digit, leading dash,
+        // leading underscore, uppercase, dot, whitespace, unicode.
+        let too_long = "a".repeat(64);
+        for bad in &[
+            "",
+            too_long.as_str(),
+            "0abc",
+            "-abc",
+            "_abc",
+            "Episodic",
+            "a.b",
+            "a b",
+            "épisode",
+        ] {
+            assert!(
+                !is_valid_memory_layer_key(bad),
+                "expected {bad:?} to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_manifest_rejects_invalid_memory_layer_key() {
+        // Validator surfaces a diagnostic that names the bad key, so
+        // operators can grep their manifest file.
+        let mut layers = BTreeMap::new();
+        layers.insert(
+            "Bad.Name".to_string(),
+            ManifestProvider {
+                kind: "qdrant".to_string(),
+                model: None,
+                secret_ref: None,
+                config: BTreeMap::new(),
+            },
+        );
+        let m = TenantManifest {
+            api_version: "aeterna.io/v1".into(),
+            kind: "TenantManifest".into(),
+            metadata: None,
+            tenant: ManifestTenant {
+                slug: "acme".into(),
+                name: "Acme".into(),
+                domain_mappings: None,
+            },
+            config: None,
+            secrets: None,
+            providers: Some(ManifestProviders {
+                memory_layers: layers,
+                ..Default::default()
+            }),
+            repository: None,
+            hierarchy: None,
+            roles: None,
+        };
+        let errors = validate_manifest(&m);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("Bad.Name") && e.contains("invalid")),
+            "missing validator error for invalid layer key: {errors:?}"
+        );
     }
 
     // ── B1 §1.2 SecretReference variant validation tests ─────────────────
