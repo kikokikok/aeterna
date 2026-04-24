@@ -3852,6 +3852,46 @@ impl ProvisionStep {
     }
 }
 
+/// B2 §7.5 — record a completed step in the response vector **and**
+/// broadcast a matching `TenantChangeKind::ProvisioningStep` event on
+/// the tenant-event bus so active `aeterna tenant watch` clients see
+/// progress in real time.
+///
+/// Skipped (response-only, no broadcast) during dry-run because a
+/// preview is not an apply and watchers correlating events with an
+/// in-flight `apply` would be misled. Callers inside the dry-run
+/// branch still push to `steps` directly.
+async fn push_step_and_publish(
+    state: &AppState,
+    slug: &str,
+    steps: &mut Vec<ProvisionStep>,
+    step: ProvisionStep,
+) {
+    // Mirror the ProvisionStep fields onto the pubsub wire shape:
+    //   ok=true  → status="ok",     detail = step.detail
+    //   ok=false → status="failed", detail = step.error
+    // Both map cleanly onto the ProvisioningStep variant's `detail`
+    // slot; the UTF-8-safe 512 B truncator inside `publish_step`
+    // handles runaway error bodies.
+    let wire_status = if step.ok { "ok" } else { "failed" };
+    let wire_detail = if step.ok {
+        step.detail.clone()
+    } else {
+        step.error.clone()
+    };
+    super::tenant_pubsub::publish_step(state, slug, &step.step, wire_status, wire_detail).await;
+    steps.push(step);
+}
+
+/// B2 §7.5 — broadcast a `started` marker for a step that is about to
+/// begin. Opt-in: only the long-running steps (secrets resolution,
+/// hierarchy upsert) emit these; cheap steps (domain mappings, role
+/// bindings) fire only `ok`/`failed` to keep the event cardinality
+/// sane (one apply → ~7–10 events, not 14–20).
+async fn publish_step_started(state: &AppState, slug: &str, step: &str) {
+    super::tenant_pubsub::publish_step(state, slug, step, "started", None).await;
+}
+
 /// Validate a manifest before processing any steps.
 /// Returns a list of human-readable error strings; empty means valid.
 /// B3 §2.2-D — memory-layer key charset check.
@@ -4540,6 +4580,13 @@ async fn provision_tenant(
     let mut steps: Vec<ProvisionStep> = Vec::new();
     let mut overall_ok = true;
 
+    // B2 §7.5 — slug is captured once, up-front, for use by
+    // `push_step_and_publish` at each step boundary. The manifest is
+    // still fully owned after parse so borrowing `&manifest.tenant.slug`
+    // would also work, but caching avoids a subtle aliasing risk if a
+    // future refactor moves the manifest into a step handler.
+    let watch_slug: String = manifest.tenant.slug.clone();
+
     // ── Step 1: Create or ensure tenant ──────────────────────────────────
     let tenant_record = match state
         .tenant_store
@@ -4578,18 +4625,30 @@ async fn provision_tenant(
                 },
             )
             .await;
-            steps.push(ProvisionStep::ok(
-                "tenant",
-                format!(
-                    "Tenant '{}' ensured (id={})",
-                    record.slug,
-                    record.id.as_str()
+            push_step_and_publish(
+                state.as_ref(),
+                &watch_slug,
+                &mut steps,
+                ProvisionStep::ok(
+                    "tenant",
+                    format!(
+                        "Tenant '{}' ensured (id={})",
+                        record.slug,
+                        record.id.as_str()
+                    ),
                 ),
-            ));
+            )
+            .await;
             record
         }
         Err(err) => {
-            steps.push(ProvisionStep::fail("tenant", err.to_string()));
+            push_step_and_publish(
+                state.as_ref(),
+                &watch_slug,
+                &mut steps,
+                ProvisionStep::fail("tenant", err.to_string()),
+            )
+            .await;
             return (
                 StatusCode::BAD_REQUEST,
                 Json(json!({
@@ -4618,15 +4677,24 @@ async fn provision_tenant(
             }
         }
         if domain_errors.is_empty() {
-            steps.push(ProvisionStep::ok(
-                "domain_mappings",
-                format!("{} domain(s) mapped", domains.len()),
-            ));
+            push_step_and_publish(
+                state.as_ref(),
+                &watch_slug,
+                &mut steps,
+                ProvisionStep::ok(
+                    "domain_mappings",
+                    format!("{} domain(s) mapped", domains.len()),
+                ),
+            )
+            .await;
         } else {
-            steps.push(ProvisionStep::fail(
-                "domain_mappings",
-                domain_errors.join("; "),
-            ));
+            push_step_and_publish(
+                state.as_ref(),
+                &watch_slug,
+                &mut steps,
+                ProvisionStep::fail("domain_mappings", domain_errors.join("; ")),
+            )
+            .await;
             overall_ok = false;
         }
     }
@@ -4669,13 +4737,25 @@ async fn provision_tenant(
                         },
                     )
                     .await;
-                    steps.push(ProvisionStep::ok(
-                        "config",
-                        format!("{} field(s) applied", config.fields.len()),
-                    ));
+                    push_step_and_publish(
+                        state.as_ref(),
+                        &watch_slug,
+                        &mut steps,
+                        ProvisionStep::ok(
+                            "config",
+                            format!("{} field(s) applied", config.fields.len()),
+                        ),
+                    )
+                    .await;
                 }
                 Err(err) => {
-                    steps.push(ProvisionStep::fail("config", err.to_string()));
+                    push_step_and_publish(
+                        state.as_ref(),
+                        &watch_slug,
+                        &mut steps,
+                        ProvisionStep::fail("config", err.to_string()),
+                    )
+                    .await;
                     overall_ok = false;
                 }
             }
@@ -4684,6 +4764,11 @@ async fn provision_tenant(
 
     // ── Step 4: Secrets ───────────────────────────────────────────────────
     if let Some(secrets) = &manifest.secrets {
+        // B2 §7.5 — secrets can take seconds to resolve (external
+        // SecretReference fetches: AWS SM, Vault, etc.). Emit a
+        // `started` marker so watchers see the phase enter, not a
+        // ~2s gap followed by `ok`.
+        publish_step_started(state.as_ref(), &watch_slug, "secrets").await;
         let mut secret_errors: Vec<String> = Vec::new();
         let mut secrets_ok: usize = 0;
         for s in secrets {
@@ -4702,12 +4787,21 @@ async fn provision_tenant(
             }
         }
         if secret_errors.is_empty() {
-            steps.push(ProvisionStep::ok(
-                "secrets",
-                format!("{secrets_ok} secret(s) stored"),
-            ));
+            push_step_and_publish(
+                state.as_ref(),
+                &watch_slug,
+                &mut steps,
+                ProvisionStep::ok("secrets", format!("{secrets_ok} secret(s) stored")),
+            )
+            .await;
         } else {
-            steps.push(ProvisionStep::fail("secrets", secret_errors.join("; ")));
+            push_step_and_publish(
+                state.as_ref(),
+                &watch_slug,
+                &mut steps,
+                ProvisionStep::fail("secrets", secret_errors.join("; ")),
+            )
+            .await;
             overall_ok = false;
         }
     }
@@ -4820,7 +4914,11 @@ async fn provision_tenant(
         if !repo_step.ok {
             overall_ok = false;
         }
-        steps.push(repo_step);
+        // Repository binding can validate connection membership + git
+        // provider auth end-to-end, so it's one of the slower steps;
+        // broadcast the terminal state (ok/failed) alongside the
+        // response push.
+        push_step_and_publish(state.as_ref(), &watch_slug, &mut steps, repo_step).await;
     }
 
     // ── Step 6: Organizational hierarchy ─────────────────────────────────
@@ -4835,6 +4933,10 @@ async fn provision_tenant(
     };
 
     if let Some(companies) = &manifest.hierarchy {
+        // B2 §7.5 — hierarchy upsert loops through every company /
+        // organization / team and round-trips to Postgres per unit.
+        // Emit a `started` marker so watchers see the phase enter.
+        publish_step_started(state.as_ref(), &watch_slug, "hierarchy").await;
         let mut hierarchy_errors: Vec<String> = Vec::new();
         let mut units_created: usize = 0;
         let now = chrono::Utc::now().timestamp();
@@ -5103,15 +5205,24 @@ async fn provision_tenant(
                     )
                 })
                 .unwrap_or_default();
-            steps.push(ProvisionStep::ok(
-                "hierarchy",
-                format!("{units_created} unit(s) created{extra}"),
-            ));
+            push_step_and_publish(
+                state.as_ref(),
+                &watch_slug,
+                &mut steps,
+                ProvisionStep::ok(
+                    "hierarchy",
+                    format!("{units_created} unit(s) created{extra}"),
+                ),
+            )
+            .await;
         } else {
-            steps.push(ProvisionStep::fail(
-                "hierarchy",
-                hierarchy_errors.join("; "),
-            ));
+            push_step_and_publish(
+                state.as_ref(),
+                &watch_slug,
+                &mut steps,
+                ProvisionStep::fail("hierarchy", hierarchy_errors.join("; ")),
+            )
+            .await;
             overall_ok = false;
         }
     }
@@ -5183,12 +5294,21 @@ async fn provision_tenant(
         }
 
         if role_errors.is_empty() {
-            steps.push(ProvisionStep::ok(
-                "roles",
-                format!("{roles_ok} role(s) assigned"),
-            ));
+            push_step_and_publish(
+                state.as_ref(),
+                &watch_slug,
+                &mut steps,
+                ProvisionStep::ok("roles", format!("{roles_ok} role(s) assigned")),
+            )
+            .await;
         } else {
-            steps.push(ProvisionStep::fail("roles", role_errors.join("; ")));
+            push_step_and_publish(
+                state.as_ref(),
+                &watch_slug,
+                &mut steps,
+                ProvisionStep::fail("roles", role_errors.join("; ")),
+            )
+            .await;
             overall_ok = false;
         }
     }
@@ -5221,16 +5341,28 @@ async fn provision_tenant(
             // so the caller does not assume the short-circuit will work on
             // the next apply. All the body mutations above are already
             // committed; returning 207 here preserves that visibility.
-            steps.push(ProvisionStep::fail(
-                "manifest_state",
-                format!("failed to persist manifest fingerprint: {err}"),
-            ));
+            push_step_and_publish(
+                state.as_ref(),
+                &watch_slug,
+                &mut steps,
+                ProvisionStep::fail(
+                    "manifest_state",
+                    format!("failed to persist manifest fingerprint: {err}"),
+                ),
+            )
+            .await;
             overall_ok = false;
         } else {
-            steps.push(ProvisionStep::ok(
-                "manifest_state",
-                format!("hash={incoming_hash} generation={new_generation}"),
-            ));
+            push_step_and_publish(
+                state.as_ref(),
+                &watch_slug,
+                &mut steps,
+                ProvisionStep::ok(
+                    "manifest_state",
+                    format!("hash={incoming_hash} generation={new_generation}"),
+                ),
+            )
+            .await;
         }
     }
 

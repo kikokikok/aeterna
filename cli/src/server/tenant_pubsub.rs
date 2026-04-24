@@ -247,8 +247,8 @@ impl TenantChangeEvent {
 pub async fn publish_step(
     state: &AppState,
     slug: &str,
-    step: &'static str,
-    status: &'static str,
+    step: &str,
+    status: &str,
     detail: Option<String>,
 ) {
     let event = TenantChangeEvent::step(slug, step, status, detail);
