@@ -737,6 +737,30 @@ pub struct TenantApplyArgs {
     /// (B2 §7.7)
     #[arg(long, default_value_t = 0, value_name = "SECS")]
     pub watch_timeout: u64,
+
+    /// Continue streaming events **after** the apply HTTP response
+    /// arrives, until a lifecycle event of the given kind is
+    /// observed. Intended for async reconciliation flows where the
+    /// apply merely *enqueues* work (e.g. background IAM sync) and
+    /// the caller wants to block until that work completes.
+    ///
+    /// Accepted kinds: `provisioned`, `updated`, `deactivated`,
+    /// `lagged`, or any `provisioning_step` kind name the server
+    /// happens to emit. A leading `step:` prefix is also accepted
+    /// (e.g. `--watch-until=step:iam_sync_complete`) so future
+    /// per-step reconcilers remain nameable without CLI changes.
+    ///
+    /// Interactions:
+    /// * Only meaningful with `--watch` (ignored otherwise).
+    /// * Honours `--watch-timeout` — a stall during the post-apply
+    ///   wait still aborts.
+    /// * Unset (the default) preserves the prior §7.6 behaviour:
+    ///   cancel the subscription immediately when the apply
+    ///   round-trip returns.
+    ///
+    /// (B2 §7.8)
+    #[arg(long, value_name = "EVENT")]
+    pub watch_until: Option<String>,
 }
 
 #[derive(Args)]
@@ -3115,6 +3139,7 @@ async fn run_apply(args: TenantApplyArgs) -> anyhow::Result<()> {
                 } else {
                     None
                 };
+                let until_event = args.watch_until.clone();
                 let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
                 let task = tokio::spawn(async move {
                     // Non-fatal at the subscription layer: if the
@@ -3138,6 +3163,7 @@ async fn run_apply(args: TenantApplyArgs) -> anyhow::Result<()> {
                         FrameSink::Stderr,
                         cancel_rx,
                         stall_timeout,
+                        until_event.as_deref(),
                     )
                     .await
                     {
@@ -3191,38 +3217,63 @@ async fn run_apply(args: TenantApplyArgs) -> anyhow::Result<()> {
     //
     // When `--watch` is not set, `watch_handle` is `None` and we
     // just await the apply straight — the existing 957-test path.
+    // Semantics of the race:
+    //
+    // * Apply finishes first → behaviour forks on `--watch-until`:
+    //     - Unset: cancel the watch task, 200 ms flush, continue.
+    //       (§7.6 behaviour, preserved exactly.)
+    //     - Set:   DO NOT cancel — instead await the task, which
+    //              now returns on target-event match, stall, or EOF.
+    //              Target match = success; stall = fatal.
+    //       (§7.8 behaviour, new.)
+    // * Watch task returns first →
+    //     - Stall (`Some(err)`): abort the apply with the stall
+    //       error (tokio::select! drops the losing arm).
+    //     - EOF (`None`) mid-apply: unusual but non-fatal; await
+    //       the apply normally and surface its result.
+    //     - JoinError (panic): warn + await apply anyway.
     let apply_result = if let Some((cancel_tx, task)) = watch_handle {
         let apply_fut = client.tenant_apply(&manifest, args.allow_inline);
         tokio::pin!(apply_fut);
         tokio::pin!(task);
 
         tokio::select! {
-            // Apply finished first — cancel the watch task and drain
-            // it briefly so any in-flight frame renders before the
-            // summary line hits stdout.
             res = &mut apply_fut => {
-                let _ = cancel_tx.send(());
-                let _ = tokio::time::timeout(
-                    std::time::Duration::from_millis(200),
-                    task,
-                ).await;
+                if args.watch_until.is_some() {
+                    // §7.8 — keep streaming until the target event
+                    // arrives (or the stall-timer fires, or the
+                    // server closes the stream). The apply HTTP
+                    // response is already in hand; we're just
+                    // waiting for the reconciler to settle.
+                    //
+                    // Note on JSON mode: the final apply response
+                    // still needs to hit stdout eventually. We
+                    // defer that until AFTER the task finishes so
+                    // the SSE trail on stderr precedes the stdout
+                    // summary — matching what a human reader
+                    // expects.
+                    match (&mut task).await {
+                        Ok(Some(stall_err)) => return Err(stall_err),
+                        Ok(None) => { /* target matched or EOF */ }
+                        Err(je) => {
+                            eprintln!("warning: watch task panicked: {je}");
+                        }
+                    }
+                    // cancel_tx drops here — harmless, task is done.
+                    drop(cancel_tx);
+                } else {
+                    // §7.6 — cancel + 200 ms flush.
+                    let _ = cancel_tx.send(());
+                    let _ = tokio::time::timeout(
+                        std::time::Duration::from_millis(200),
+                        task,
+                    ).await;
+                }
                 res
             }
-            // Watch task finished first — either stall-timeout fired
-            // or the server closed the stream. Stall is fatal; EOF
-            // is recoverable (keep waiting on the apply).
             task_res = &mut task => {
                 match task_res {
-                    // Stall timeout fired — drop the apply future
-                    // (tokio::select! drops the losing arm on
-                    // break) and bail with the stall error. The
-                    // server-side apply may still complete, but
-                    // the CLI has explicitly opted to fail fast.
                     Ok(Some(stall_err)) => return Err(stall_err),
-                    // Stream EOF mid-apply — odd, but non-fatal.
-                    // Let the apply round-trip finish. `cancel_tx`
-                    // drops here; the now-completed task future is
-                    // left untouched (already resolved).
                     Ok(None) => {
                         drop(cancel_tx);
                         apply_fut.await
@@ -3520,6 +3571,7 @@ async fn run_watch(args: TenantWatchArgs) -> anyhow::Result<()> {
         FrameSink::Stdout,
         cancel_rx,
         None, // `tenant watch` has no stall timeout — it's an interactive tail
+        None, // and no target event — it runs until Ctrl-C / EOF
     )
     .await
 }
@@ -3636,6 +3688,43 @@ fn render_watch_frame_to(frame: &SseFrame, json_mode: bool, sink: FrameSink) {
     }
 }
 
+/// Decide whether an SSE frame satisfies a `--watch-until=<target>`
+/// predicate.
+///
+/// Matching rules (in order):
+/// * bare kind (`provisioned`, `updated`, `deactivated`, `lagged`,
+///   `provisioning_step`) → matches iff `frame.event_name()` equals
+///   the target;
+/// * `step:<name>` → matches iff `event_name() == "provisioning_step"`
+///   AND the parsed JSON payload carries
+///   `kind.provisioning_step.step == <name>` AND
+///   `kind.provisioning_step.status == "ok"` (we always wait for the
+///   *completion* of a step, never its `started`). This gives the
+///   CLI a stable way to block on "step X finished successfully"
+///   without needing a CLI release each time the server adds a
+///   new step name.
+fn frame_matches_target(frame: &SseFrame, target: &str) -> bool {
+    if let Some(step_name) = target.strip_prefix("step:") {
+        if frame.event_name() != "provisioning_step" {
+            return false;
+        }
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(&frame.data) else {
+            return false;
+        };
+        let step_obj = v.get("kind").and_then(|k| k.get("provisioning_step"));
+        let name_matches = step_obj
+            .and_then(|s| s.get("step"))
+            .and_then(|s| s.as_str())
+            == Some(step_name);
+        let status_ok = step_obj
+            .and_then(|s| s.get("status"))
+            .and_then(|s| s.as_str())
+            == Some("ok");
+        return name_matches && status_ok;
+    }
+    frame.event_name() == target
+}
+
 /// Open an SSE subscription for `slug` and forward frames to `sink`
 /// until either the server closes the stream or `cancel` is fired.
 ///
@@ -3649,6 +3738,14 @@ fn render_watch_frame_to(frame: &SseFrame, json_mode: bool, sink: FrameSink) {
 /// (not every parsed frame — a batched chunk is one reset, which
 /// is the correct signal: the server is still live). When `None`,
 /// the stream runs untimed. (B2 §7.7)
+///
+/// `until_event`: when `Some(name)`, returns `Ok(())` as soon as
+/// a frame with `event_name() == name` is parsed (and rendered).
+/// Accepts a bare kind (`provisioned`, `updated`, `deactivated`,
+/// `lagged`, `provisioning_step`) or a `step:<name>` form — the
+/// latter matches any `provisioning_step` frame whose parsed
+/// `kind.provisioning_step.step` field equals `<name>`. When
+/// `None`, the stream runs until EOF / cancel / stall. (B2 §7.8)
 async fn stream_tenant_events(
     client: &crate::client::AeternaClient,
     slug: &str,
@@ -3656,6 +3753,7 @@ async fn stream_tenant_events(
     sink: FrameSink,
     mut cancel: tokio::sync::oneshot::Receiver<()>,
     stall_timeout: Option<std::time::Duration>,
+    until_event: Option<&str>,
 ) -> anyhow::Result<()> {
     use futures_util::StreamExt;
 
@@ -3713,6 +3811,16 @@ async fn stream_tenant_events(
                 let text = String::from_utf8_lossy(&chunk);
                 for frame in parser.feed(&text) {
                     render_watch_frame_to(&frame, json_mode, sink);
+                    // --watch-until match check — done AFTER the
+                    // render so the matching frame is visible in
+                    // the user's event trail (consistent with how
+                    // `kubectl wait` prints the state that made it
+                    // satisfy the condition).
+                    if let Some(target) = until_event
+                        && frame_matches_target(&frame, target)
+                    {
+                        return Ok(());
+                    }
                 }
             }
         }
@@ -4826,6 +4934,133 @@ mod tests {
             }
             _ => panic!("expected Apply variant"),
         }
+    }
+
+    #[test]
+    fn test_frame_matches_target_bare_kinds() {
+        // B2 §7.8 — bare-kind targets must match on `event:` name.
+        let frame = SseFrame {
+            event: Some("provisioned".into()),
+            data: r#"{"slug":"acme","kind":"provisioned"}"#.into(),
+        };
+        assert!(frame_matches_target(&frame, "provisioned"));
+        assert!(!frame_matches_target(&frame, "updated"));
+        assert!(!frame_matches_target(&frame, "deactivated"));
+
+        // Default event name (no explicit `event:` field) is
+        // `message` — which should NOT match "provisioned".
+        let msg_frame = SseFrame {
+            event: None,
+            data: "{}".into(),
+        };
+        assert!(!frame_matches_target(&msg_frame, "provisioned"));
+    }
+
+    #[test]
+    fn test_frame_matches_target_step_prefix_requires_ok() {
+        // B2 §7.8 — `step:<name>` must require status==ok. A
+        // `started` or `failed` frame for the same step must NOT
+        // satisfy the target; otherwise `--watch-until=step:iam`
+        // would trip on the first half-millisecond.
+        let started = SseFrame {
+            event: Some("provisioning_step".into()),
+            data:
+                r#"{"slug":"acme","kind":{"provisioning_step":{"step":"iam","status":"started"}}}"#
+                    .into(),
+        };
+        assert!(!frame_matches_target(&started, "step:iam"));
+
+        let ok = SseFrame {
+            event: Some("provisioning_step".into()),
+            data: r#"{"slug":"acme","kind":{"provisioning_step":{"step":"iam","status":"ok"}}}"#
+                .into(),
+        };
+        assert!(frame_matches_target(&ok, "step:iam"));
+
+        let failed = SseFrame {
+            event: Some("provisioning_step".into()),
+            data:
+                r#"{"slug":"acme","kind":{"provisioning_step":{"step":"iam","status":"failed"}}}"#
+                    .into(),
+        };
+        assert!(!frame_matches_target(&failed, "step:iam"));
+
+        // Wrong step name must not match.
+        let other_step = SseFrame {
+            event: Some("provisioning_step".into()),
+            data: r#"{"slug":"acme","kind":{"provisioning_step":{"step":"dns","status":"ok"}}}"#
+                .into(),
+        };
+        assert!(!frame_matches_target(&other_step, "step:iam"));
+
+        // `step:` prefix on a non-step event must not match.
+        let provisioned = SseFrame {
+            event: Some("provisioned".into()),
+            data: r#"{"slug":"acme"}"#.into(),
+        };
+        assert!(!frame_matches_target(&provisioned, "step:iam"));
+    }
+
+    #[test]
+    fn test_tenant_apply_watch_until_parses() {
+        // B2 §7.8 — `--watch-until=<kind>` must parse as
+        // `Option<String>` and default to None. Also verifies it
+        // composes with `--watch --watch-timeout` (all three flags
+        // together are the expected CI shape for reconciliation
+        // flows).
+        use clap::Parser;
+
+        #[derive(Parser)]
+        struct Wrap {
+            #[command(subcommand)]
+            cmd: TenantCommand,
+        }
+
+        // Default: None.
+        let parsed = Wrap::try_parse_from(["prog", "apply", "-f", "m.json"]).unwrap();
+        let TenantCommand::Apply(args) = parsed.cmd else {
+            panic!("expected Apply variant");
+        };
+        assert_eq!(args.watch_until, None);
+
+        // Full combo.
+        let parsed = Wrap::try_parse_from([
+            "prog",
+            "apply",
+            "-f",
+            "m.json",
+            "--yes",
+            "--json",
+            "--watch",
+            "--watch-timeout",
+            "60",
+            "--watch-until",
+            "provisioned",
+        ])
+        .unwrap();
+        let TenantCommand::Apply(args) = parsed.cmd else {
+            panic!("expected Apply variant");
+        };
+        assert!(args.watch);
+        assert_eq!(args.watch_timeout, 60);
+        assert_eq!(args.watch_until.as_deref(), Some("provisioned"));
+
+        // step:<name> form must parse verbatim — no splitting, no
+        // special-case in clap.
+        let parsed = Wrap::try_parse_from([
+            "prog",
+            "apply",
+            "-f",
+            "m.json",
+            "--watch",
+            "--watch-until",
+            "step:iam_sync_complete",
+        ])
+        .unwrap();
+        let TenantCommand::Apply(args) = parsed.cmd else {
+            panic!("expected Apply variant");
+        };
+        assert_eq!(args.watch_until.as_deref(), Some("step:iam_sync_complete"));
     }
 
     #[test]
