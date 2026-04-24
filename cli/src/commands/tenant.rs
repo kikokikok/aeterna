@@ -76,6 +76,12 @@ pub enum TenantCommand {
         about = "Render the server's current-state manifest for a tenant"
     )]
     Render(TenantRenderArgs),
+
+    #[command(
+        name = "diff",
+        about = "Diff an incoming tenant manifest against the server's current state"
+    )]
+    Diff(TenantDiffArgs),
 }
 
 // ---------------------------------------------------------------------------
@@ -540,6 +546,77 @@ pub struct TenantRenderArgs {
     pub target_tenant: Option<String>,
 }
 
+/// Output format for `aeterna tenant diff` (§7.3).
+///
+/// `unified` is the default and produces a git-diff-style text view
+/// (added/removed leaves colourless, one per line) that a human
+/// operator can scan during a manifest review. `json` emits the raw
+/// [`TenantDiff`][crate::server::tenant_diff::TenantDiff] wire
+/// shape verbatim — useful for piping into `jq` or a CI gate that
+/// enforces "no drift" by asserting `operation == "noop"`.
+///
+/// Kept explicit (no `short = 'o'` collision with `--output` path
+/// flags elsewhere) because the format choice is orthogonal to where
+/// output goes; diff always writes to stdout.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+#[clap(rename_all = "lowercase")]
+pub enum TenantDiffFormat {
+    /// Git-style unified text: one line per changed leaf with
+    /// `+`/`-` prefixes and the dot-notation path.
+    Unified,
+    /// Raw `TenantDiff` JSON as emitted by the server. Stable wire
+    /// shape — safe for scripts.
+    Json,
+}
+
+/// Args for `aeterna tenant diff` (B2 §7.3).
+///
+/// Wraps `POST /api/v1/admin/tenants/diff` (B3 §2.4). The server
+/// takes the candidate manifest, renders the tenant's current state,
+/// walks both JSON trees in lockstep, and returns a `TenantDiff`
+/// whose `operation` is `create` / `update` / `noop`. The slug is
+/// taken from the manifest body (`manifest.tenant.slug`), not from a
+/// CLI flag — mirroring the `tenant validate` contract — so editing
+/// the manifest is the only way to change which tenant is targeted.
+///
+/// Exit codes:
+/// - `0` on 200 with `operation == noop` (clean) OR when the diff
+///   rendered successfully, regardless of operation. Scripts that
+///   want to gate on "no drift" should parse the `operation` field
+///   of `-o json` output rather than relying on exit code: a legit
+///   `create`/`update` is not a CLI failure.
+/// - Non-zero on server errors, HTTP 422 (manifest invalid), or
+///   transport failures.
+///
+/// Rationale for NOT returning non-zero on `update`/`create`: the
+/// CLI should be composable. `aeterna tenant diff -f x.json` is the
+/// moral equivalent of `diff a b`, and `diff` exits 0 when it
+/// succeeds — the *caller* decides whether "differences exist" is a
+/// failure by inspecting the output.
+#[derive(Args)]
+pub struct TenantDiffArgs {
+    /// Path to a candidate manifest JSON file. Use `-` to read from
+    /// stdin. Identical semantics to `tenant validate --file`; a
+    /// `tenant render -o foo.json | tenant diff -f -` pipeline is
+    /// the intended drift-check shape.
+    #[arg(short = 'f', long)]
+    pub file: String,
+
+    /// Output format. `unified` (default) is human-readable; `json`
+    /// emits the structured `TenantDiff` response for scripting.
+    #[arg(short = 'o', long = "output", value_enum, default_value_t = TenantDiffFormat::Unified)]
+    pub output: TenantDiffFormat,
+
+    /// Target a specific tenant context (PlatformAdmin only — for
+    /// cross-tenant operations). Kept for symmetry with `tenant
+    /// render` / `tenant validate`. The tenant being diffed is
+    /// ALWAYS the one named in the manifest body; this flag only
+    /// selects which active-tenant context the HTTP client uses
+    /// (matters for audit attribution and admin-scope evaluation).
+    #[arg(long)]
+    pub target_tenant: Option<String>,
+}
+
 #[derive(Args)]
 pub struct TenantSecretDeleteArgs {
     #[arg(long)]
@@ -590,6 +667,7 @@ pub async fn run(cmd: TenantCommand) -> anyhow::Result<()> {
         },
         TenantCommand::Validate(args) => run_validate(args).await,
         TenantCommand::Render(args) => run_render(args).await,
+        TenantCommand::Diff(args) => run_diff(args).await,
     }
 }
 
@@ -2508,6 +2586,185 @@ async fn run_render(args: TenantRenderArgs) -> anyhow::Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// tenant diff (§7.3)
+// ---------------------------------------------------------------------------
+
+/// Render a 200 `TenantDiff` response as git-style unified text.
+///
+/// Format:
+///
+/// ```text
+/// Tenant diff: <slug>
+/// Operation:   create|update|noop
+/// Summary:     +<A> -<R> ~<M> (sections: a, b, c)
+///
+/// - <path>: <before-value>
+/// + <path>: <after-value>
+/// ~ <path>: <before> → <after>
+/// ```
+///
+/// Factored out of `run_diff` so unit tests can lock the byte shape
+/// without a live server. Kept `Value`-typed because the function
+/// does not need the typed [`TenantDiff`] struct — walking the JSON
+/// tree keeps the CLI forward-compatible with additive server
+/// fields (new `changeKind` variants would render as an unknown
+/// prefix rather than failing to deserialise).
+fn render_diff_unified(diff: &Value) -> String {
+    let mut out = String::new();
+    let slug = diff.get("slug").and_then(|v| v.as_str()).unwrap_or("?");
+    let op = diff
+        .get("operation")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    out.push_str(&format!("Tenant diff: {slug}\n"));
+    out.push_str(&format!("Operation:   {op}\n"));
+
+    let summary = diff.get("summary");
+    let added = summary
+        .and_then(|s| s.get("added"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let removed = summary
+        .and_then(|s| s.get("removed"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let modified = summary
+        .and_then(|s| s.get("modified"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let sections: Vec<&str> = summary
+        .and_then(|s| s.get("changedSections"))
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+    let sections_str = if sections.is_empty() {
+        "none".to_string()
+    } else {
+        sections.join(", ")
+    };
+    out.push_str(&format!(
+        "Summary:     +{added} -{removed} ~{modified} (sections: {sections_str})\n"
+    ));
+
+    if op == "noop" {
+        out.push_str("\n  (no changes — a re-apply would be a no-op)\n");
+        return out;
+    }
+
+    out.push('\n');
+    let empty = Vec::new();
+    let changes = diff
+        .get("changes")
+        .and_then(|v| v.as_array())
+        .unwrap_or(&empty);
+    for change in changes {
+        let path = change.get("path").and_then(|v| v.as_str()).unwrap_or("?");
+        let kind = change.get("kind").and_then(|v| v.as_str()).unwrap_or("?");
+        // `compact_value` keeps the line single-row for primitives
+        // and short arrays/objects; multi-line JSON gets folded onto
+        // one line with spacing collapsed. Operators reviewing diffs
+        // scan vertically by path — wrapping blobs across lines
+        // defeats that pattern.
+        let before = change.get("before").map(compact_value);
+        let after = change.get("after").map(compact_value);
+        match kind {
+            "added" => {
+                out.push_str(&format!(
+                    "+ {path}: {}\n",
+                    after.as_deref().unwrap_or("(null)")
+                ));
+            }
+            "removed" => {
+                out.push_str(&format!(
+                    "- {path}: {}\n",
+                    before.as_deref().unwrap_or("(null)")
+                ));
+            }
+            "modified" => {
+                out.push_str(&format!(
+                    "~ {path}: {} → {}\n",
+                    before.as_deref().unwrap_or("(null)"),
+                    after.as_deref().unwrap_or("(null)"),
+                ));
+            }
+            other => {
+                // Forward-compat: unknown kind → show both sides.
+                out.push_str(&format!(
+                    "? {path} [{other}]: before={} after={}\n",
+                    before.as_deref().unwrap_or("(null)"),
+                    after.as_deref().unwrap_or("(null)"),
+                ));
+            }
+        }
+    }
+    out
+}
+
+/// Render a JSON `Value` on a single line, using compact separators.
+/// Strings lose their surrounding quotes for readability in the
+/// unified view (the path column already disambiguates — a path
+/// ending in a list index obviously carries a non-string leaf).
+fn compact_value(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Null => "(null)".to_string(),
+        _ => serde_json::to_string(v).unwrap_or_else(|_| "<?>".to_string()),
+    }
+}
+
+async fn run_diff(args: TenantDiffArgs) -> anyhow::Result<()> {
+    let manifest = read_manifest_input(&args.file)?;
+
+    let Some(client) = get_live_client_for(args.target_tenant.as_deref()).await else {
+        anyhow::bail!("Not logged in — run `aeterna auth login` first.");
+    };
+
+    let body = client.tenant_diff(&manifest).await.inspect_err(|e| {
+        ux_error::UxError::new(e.to_string())
+            .fix("Run: aeterna auth login")
+            .display();
+    })?;
+
+    // 200 = TenantDiff (no top-level `success` field); 422 =
+    // validation-errors envelope with `success: false`. Same split
+    // as `tenant_provision_dry_run`.
+    let is_validation_error = body
+        .get("success")
+        .and_then(|v| v.as_bool())
+        .map(|b| !b)
+        .unwrap_or(false);
+
+    if is_validation_error {
+        match args.output {
+            TenantDiffFormat::Json => {
+                println!("{}", serde_json::to_string_pretty(&body)?);
+            }
+            TenantDiffFormat::Unified => {
+                render_validation_errors(&body);
+            }
+        }
+        anyhow::bail!("tenant manifest is invalid");
+    }
+
+    match args.output {
+        TenantDiffFormat::Json => {
+            // Pretty-print for human readability; scripts that care
+            // about byte stability should pipe through `jq -c`. We
+            // deliberately do NOT emit compact JSON here — matches
+            // the `tenant render` convention (pretty + trailing NL).
+            let mut s = serde_json::to_string_pretty(&body)?;
+            s.push('\n');
+            print!("{s}");
+        }
+        TenantDiffFormat::Unified => {
+            print!("{}", render_diff_unified(&body));
+        }
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Unit tests
 // ---------------------------------------------------------------------------
 
@@ -3110,5 +3367,177 @@ mod tests {
             args.output.as_deref(),
             Some(std::path::Path::new("/tmp/acme.json"))
         );
+    }
+
+    // -----------------------------------------------------------------
+    // §7.3 tenant diff — unified-output byte shape locks
+    // -----------------------------------------------------------------
+
+    /// Canonical 200 `TenantDiff` shape used across the unified
+    /// renderer tests. Mirrors the server's
+    /// `cli/src/server/tenant_diff.rs::TenantDiff` wire format
+    /// (camelCase, lowercase enums). Kept as a hand-written `json!`
+    /// literal rather than deserialising from the typed struct so
+    /// the CLI renderer is exercised against the actual wire bytes
+    /// it will see in production.
+    fn sample_update_diff() -> Value {
+        json!({
+            "slug": "acme",
+            "operation": "update",
+            "changes": [
+                { "path": "tenant.name", "kind": "modified",
+                  "before": "Acme", "after": "Acme Corp" },
+                { "path": "providers.llm.kind", "kind": "added",
+                  "after": "openai" },
+                { "path": "hierarchy.0.slug", "kind": "removed",
+                  "before": "legacy-org" },
+            ],
+            "summary": {
+                "added": 1,
+                "removed": 1,
+                "modified": 1,
+                "changedSections": ["hierarchy", "providers", "tenant"]
+            }
+        })
+    }
+
+    #[test]
+    fn test_render_diff_unified_update_shape() {
+        let out = render_diff_unified(&sample_update_diff());
+        // Header lines, exact byte-positions matter for CI grep
+        // patterns; lock them here.
+        assert!(out.starts_with("Tenant diff: acme\nOperation:   update\n"));
+        assert!(out.contains("Summary:     +1 -1 ~1 (sections: hierarchy, providers, tenant)\n"));
+        // One line per change, in the order the server emitted.
+        assert!(out.contains("~ tenant.name: Acme → Acme Corp\n"));
+        assert!(out.contains("+ providers.llm.kind: openai\n"));
+        assert!(out.contains("- hierarchy.0.slug: legacy-org\n"));
+    }
+
+    #[test]
+    fn test_render_diff_unified_noop_shape() {
+        let diff = json!({
+            "slug": "acme",
+            "operation": "noop",
+            "changes": [],
+            "summary": {
+                "added": 0, "removed": 0, "modified": 0,
+                "changedSections": []
+            }
+        });
+        let out = render_diff_unified(&diff);
+        assert!(out.contains("Operation:   noop\n"));
+        assert!(out.contains("Summary:     +0 -0 ~0 (sections: none)\n"));
+        // NoOp short-circuits — no per-change lines, just the hint.
+        assert!(out.contains("(no changes — a re-apply would be a no-op)\n"));
+        assert!(!out.contains("\n+ "));
+        assert!(!out.contains("\n- "));
+        assert!(!out.contains("\n~ "));
+    }
+
+    #[test]
+    fn test_render_diff_unified_create_shape() {
+        // First-apply: operation=create, every field appears as Added.
+        let diff = json!({
+            "slug": "fresh",
+            "operation": "create",
+            "changes": [
+                { "path": "tenant.slug", "kind": "added", "after": "fresh" },
+                { "path": "tenant.name", "kind": "added", "after": "Fresh Co" },
+            ],
+            "summary": {
+                "added": 2, "removed": 0, "modified": 0,
+                "changedSections": ["tenant"]
+            }
+        });
+        let out = render_diff_unified(&diff);
+        assert!(out.contains("Operation:   create\n"));
+        assert!(out.contains("+ tenant.slug: fresh\n"));
+        assert!(out.contains("+ tenant.name: Fresh Co\n"));
+        // create is NOT a noop — the hint must not appear.
+        assert!(!out.contains("no-op"));
+    }
+
+    #[test]
+    fn test_render_diff_unified_complex_values() {
+        // Non-string leaves render as compact JSON; null renders as
+        // `(null)` so grep-on-operator output never shows bare `null`
+        // ambiguously against a real string value of that name.
+        let diff = json!({
+            "slug": "acme",
+            "operation": "update",
+            "changes": [
+                { "path": "providers.memoryLayers.semantic.ttl",
+                  "kind": "modified", "before": 3600, "after": 7200 },
+                { "path": "domainMappings",
+                  "kind": "added",
+                  "after": [{"domain": "acme.test", "verified": true}] },
+                { "path": "providers.memoryLayers.episodic",
+                  "kind": "removed", "before": null },
+            ],
+            "summary": {
+                "added": 1, "removed": 1, "modified": 1,
+                "changedSections": ["domainMappings", "providers"]
+            }
+        });
+        let out = render_diff_unified(&diff);
+        assert!(out.contains("~ providers.memoryLayers.semantic.ttl: 3600 → 7200\n"));
+        assert!(out.contains("+ domainMappings: [{\"domain\":\"acme.test\",\"verified\":true}]\n"));
+        assert!(out.contains("- providers.memoryLayers.episodic: (null)\n"));
+    }
+
+    #[test]
+    fn test_render_diff_unified_unknown_kind_forward_compat() {
+        // A server that adds a new `ChangeKind` variant (e.g.
+        // `moved`) must not crash older CLIs. Render a fallback
+        // `? path [kind]: ...` line instead.
+        let diff = json!({
+            "slug": "acme",
+            "operation": "update",
+            "changes": [
+                { "path": "tenant.slug", "kind": "moved",
+                  "before": "old", "after": "new" },
+            ],
+            "summary": {
+                "added": 0, "removed": 0, "modified": 0,
+                "changedSections": ["tenant"]
+            }
+        });
+        let out = render_diff_unified(&diff);
+        assert!(out.contains("? tenant.slug [moved]: before=old after=new\n"));
+    }
+
+    #[test]
+    fn test_tenant_diff_args_defaults() {
+        // Surface check: `-o` defaults to `unified`, `-f` required.
+        use clap::Parser;
+
+        #[derive(Parser)]
+        struct Wrap {
+            #[command(subcommand)]
+            cmd: TenantCommand,
+        }
+
+        let parsed = Wrap::try_parse_from(["prog", "diff", "-f", "m.json"]).unwrap();
+        match parsed.cmd {
+            TenantCommand::Diff(args) => {
+                assert_eq!(args.file, "m.json");
+                assert!(matches!(args.output, TenantDiffFormat::Unified));
+                assert!(args.target_tenant.is_none());
+            }
+            _ => panic!("expected Diff variant"),
+        }
+
+        let parsed = Wrap::try_parse_from(["prog", "diff", "-f", "-", "-o", "json"]).unwrap();
+        match parsed.cmd {
+            TenantCommand::Diff(args) => {
+                assert_eq!(args.file, "-");
+                assert!(matches!(args.output, TenantDiffFormat::Json));
+            }
+            _ => panic!("expected Diff variant"),
+        }
+
+        // `-f` is required — omitting it is a clap error.
+        assert!(Wrap::try_parse_from(["prog", "diff"]).is_err());
     }
 }

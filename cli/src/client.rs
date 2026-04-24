@@ -686,6 +686,31 @@ impl AeternaClient {
         bail!("Dry-run provision failed (HTTP {status}): {text}");
     }
 
+    /// POST `/api/v1/admin/tenants/diff` — B3 §2.4 / CLI §7.3.
+    ///
+    /// Posts the candidate manifest and returns the structured
+    /// [`TenantDiff`][crate::server::tenant_diff::TenantDiff] JSON
+    /// payload on 200, OR the `manifest_validation_failed` envelope
+    /// on 422. Mirrors the 200/422 dual-success handling of
+    /// [`Self::tenant_provision_dry_run`] so callers can share
+    /// rendering infrastructure (`render_validation_errors` already
+    /// knows how to project the 422 shape).
+    ///
+    /// Server extracts the tenant slug from
+    /// `manifest.tenant.slug`; there is no path parameter. PA-gated.
+    pub async fn tenant_diff(&self, manifest: &serde_json::Value) -> Result<serde_json::Value> {
+        let resp = self.post("/api/v1/admin/tenants/diff", manifest).await?;
+        let status = resp.status();
+        if status.is_success() || status == reqwest::StatusCode::UNPROCESSABLE_ENTITY {
+            return resp
+                .json::<serde_json::Value>()
+                .await
+                .context("Invalid JSON response from tenant diff");
+        }
+        let text = resp.text().await.unwrap_or_default();
+        bail!("Tenant diff failed (HTTP {status}): {text}");
+    }
+
     pub async fn my_tenant_config_inspect(&self) -> Result<serde_json::Value> {
         parse_json_response(self.get("/api/v1/admin/tenant-config").await?).await
     }
