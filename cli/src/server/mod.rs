@@ -23,6 +23,7 @@ pub mod project_api;
 pub mod request_context;
 pub mod role_grants;
 pub mod router;
+pub mod service_token_validator;
 pub mod service_tokens;
 pub mod sessions;
 pub mod sync;
@@ -110,6 +111,13 @@ pub struct AppState {
     pub a2a_config: Arc<A2aConfig>,
     pub a2a_auth_state: Arc<A2aAuthState>,
     pub plugin_auth_state: Arc<PluginAuthState>,
+    /// B2 §10.3 + §10.5 — in-process TTL-bounded cache of
+    /// service-token validation state. Warmed by
+    /// `service_tokens::mint_handler` (cold-read avoidance) and
+    /// `service_token_validator::validate_service_token` (miss path);
+    /// invalidated by `service_tokens::revoke_handler`. Cross-instance
+    /// convergence is bounded by `REVOCATION_CACHE_TTL` (60s).
+    pub revocation_cache: Arc<service_token_validator::RevocationCache>,
     pub k8s_auth_config: config::KubernetesAuthConfig,
     pub idp_config: Option<Arc<IdpSyncConfig>>,
     pub idp_sync_service: Option<Arc<IdpSyncService>>,

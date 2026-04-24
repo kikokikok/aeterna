@@ -42,6 +42,7 @@ use sync::websocket::{AuthToken, TokenValidator, WsResult, WsServer};
 use tools::server::McpServer;
 
 use super::plugin_auth::{RefreshTokenStore, RefreshTokenStoreBackend};
+use super::service_token_validator;
 use super::{AppState, PluginAuthState, bootstrap_tracker};
 
 const DEFAULT_K8S_NAMESPACE: &str = "default";
@@ -453,6 +454,9 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         a2a_config,
         a2a_auth_state,
         plugin_auth_state,
+        revocation_cache: Arc::new(service_token_validator::RevocationCache::new(
+            redis_conn.clone(),
+        )),
         k8s_auth_config,
         idp_config,
         idp_sync_service,
