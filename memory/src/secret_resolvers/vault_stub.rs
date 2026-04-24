@@ -14,9 +14,9 @@
 //! construction code identical across builds.
 
 use async_trait::async_trait;
+use mk_core::SecretBytes;
 use mk_core::secret::SecretReference;
 use mk_core::types::TenantId;
-use mk_core::SecretBytes;
 
 use crate::secret_resolver::{ResolveError, SecretRefResolver};
 
@@ -92,8 +92,16 @@ mod tests {
     #[tokio::test]
     async fn wrong_kind_is_rejected() {
         let r = VaultRefResolver::new();
-        let env = SecretReference::Env { var: "X".to_string() };
+        let env = SecretReference::Env {
+            var: "X".to_string(),
+        };
         let err = r.resolve(&tid(), &env).await.unwrap_err();
-        assert!(matches!(err, ResolveError::WrongKind { expected: "vault", actual: "env" }));
+        assert!(matches!(
+            err,
+            ResolveError::WrongKind {
+                expected: "vault",
+                actual: "env"
+            }
+        ));
     }
 }

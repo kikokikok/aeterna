@@ -310,8 +310,7 @@ impl TenantProviderRegistry {
             Some(reg) => reg.resolve(tenant, reference).await,
             None => Err(crate::secret_resolver::ResolveError::BackendUnavailable {
                 kind: "none",
-                reason: "no SecretResolverRegistry installed on TenantProviderRegistry"
-                    .to_string(),
+                reason: "no SecretResolverRegistry installed on TenantProviderRegistry".to_string(),
             }),
         }
     }
@@ -865,7 +864,11 @@ impl mk_core::traits::TenantConfigProvider for RegistryConfigAdapter {
         // 3. Dispatch through the typed registry by SecretReference
         //    variant. NotFound → Ok(None); other errors surface as
         //    adapter errors so the caller can log with context.
-        match self.secret_registry.resolve(tenant_id, &tsr.reference).await {
+        match self
+            .secret_registry
+            .resolve(tenant_id, &tsr.reference)
+            .await
+        {
             Ok(bytes) => Ok(Some(bytes)),
             Err(crate::secret_resolver::ResolveError::NotFound { .. }) => Ok(None),
             Err(e) => Err(RegistryAdapterError(format!(

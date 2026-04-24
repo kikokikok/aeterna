@@ -20,9 +20,9 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use mk_core::SecretBytes;
 use mk_core::secret::SecretReference;
 use mk_core::types::TenantId;
-use mk_core::SecretBytes;
 use storage::secret_backend::{SecretBackend, SecretBackendError};
 
 use crate::secret_resolver::{ResolveError, SecretRefResolver};
@@ -116,9 +116,7 @@ mod tests {
         }
         fn not_found() -> Arc<Self> {
             Arc::new(Self {
-                response: Mutex::new(Some(Err(SecretBackendError::NotFound(
-                    "stub".to_string(),
-                )))),
+                response: Mutex::new(Some(Err(SecretBackendError::NotFound("stub".to_string())))),
             })
         }
         fn db_error() -> Arc<Self> {
@@ -144,15 +142,16 @@ mod tests {
         ) -> Result<Vec<(String, SecretReference)>, SecretBackendError> {
             Ok(Vec::new())
         }
-        async fn get(&self, _reference: &SecretReference) -> Result<SecretBytes, SecretBackendError> {
+        async fn get(
+            &self,
+            _reference: &SecretReference,
+        ) -> Result<SecretBytes, SecretBackendError> {
             match self.response.lock().unwrap().as_ref() {
                 Some(Ok(v)) => Ok(SecretBytes::from(v.clone())),
                 Some(Err(SecretBackendError::NotFound(s))) => {
                     Err(SecretBackendError::NotFound(s.clone()))
                 }
-                Some(Err(SecretBackendError::Aead(s))) => {
-                    Err(SecretBackendError::Aead(s.clone()))
-                }
+                Some(Err(SecretBackendError::Aead(s))) => Err(SecretBackendError::Aead(s.clone())),
                 Some(Err(_)) | None => Err(SecretBackendError::Aead("stub".to_string())),
             }
         }
@@ -198,17 +197,28 @@ mod tests {
     async fn db_error_surfaces_as_backend_unavailable() {
         let r = PostgresRefResolver::new(StubBackend::db_error());
         let err = r.resolve(&tid(), &pg_ref()).await.unwrap_err();
-        assert!(matches!(err, ResolveError::BackendUnavailable { kind: "postgres", .. }));
+        assert!(matches!(
+            err,
+            ResolveError::BackendUnavailable {
+                kind: "postgres",
+                ..
+            }
+        ));
     }
 
     #[tokio::test]
     async fn wrong_kind_is_rejected_without_backend_call() {
         let r = PostgresRefResolver::new(StubBackend::ok(b"x"));
-        let env = SecretReference::Env { var: "X".to_string() };
+        let env = SecretReference::Env {
+            var: "X".to_string(),
+        };
         let err = r.resolve(&tid(), &env).await.unwrap_err();
         assert!(matches!(
             err,
-            ResolveError::WrongKind { expected: "postgres", actual: "env" }
+            ResolveError::WrongKind {
+                expected: "postgres",
+                actual: "env"
+            }
         ));
     }
 }

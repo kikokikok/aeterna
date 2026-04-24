@@ -32,9 +32,9 @@ use std::fmt;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use mk_core::SecretBytes;
 use mk_core::secret::SecretReference;
 use mk_core::types::TenantId;
-use mk_core::SecretBytes;
 
 use crate::secret_resolver::{ResolveError, SecretRefResolver};
 
@@ -94,7 +94,12 @@ impl<F: K8sSecretFetcher + 'static> SecretRefResolver for K8sRefResolver<F> {
         tenant: &TenantId,
         reference: &SecretReference,
     ) -> Result<SecretBytes, ResolveError> {
-        let SecretReference::K8s { namespace, name, key } = reference else {
+        let SecretReference::K8s {
+            namespace,
+            name,
+            key,
+        } = reference
+        else {
             return Err(ResolveError::WrongKind {
                 expected: "k8s",
                 actual: reference.kind(),
@@ -222,7 +227,11 @@ impl PodDownwardApiFetcher {
         match tokio::fs::read_to_string(path).await {
             Ok(s) => {
                 let t = s.trim();
-                if t.is_empty() { None } else { Some(t.to_string()) }
+                if t.is_empty() {
+                    None
+                } else {
+                    Some(t.to_string())
+                }
             }
             Err(_) => None,
         }
@@ -259,7 +268,7 @@ mod live {
     //! Live Kubernetes HTTP client. Private submodule so tests don't
     //! have to compile it without the feature flag.
     use super::*;
-    use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+    use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
     use serde_json::Value as JsonValue;
     use std::time::Duration;
 
@@ -269,7 +278,7 @@ mod live {
     #[derive(Debug)]
     pub(super) struct LiveK8sFetcher {
         client: reqwest::Client,
-        base_url: String, // e.g. https://10.0.0.1:443
+        base_url: String,            // e.g. https://10.0.0.1:443
         token: mk_core::SecretBytes, // bearer token; redacted on Debug
     }
 
@@ -286,18 +295,16 @@ mod live {
 
             // Read CA cert (PEM) and SA token. Both are blocking reads,
             // but from_pod_environment runs at bootstrap time — fine.
-            let ca_pem = std::fs::read(SA_CA_CERT_PATH).map_err(|e| {
-                ResolveError::BackendUnavailable {
+            let ca_pem =
+                std::fs::read(SA_CA_CERT_PATH).map_err(|e| ResolveError::BackendUnavailable {
                     kind: "k8s",
                     reason: format!("read CA cert {SA_CA_CERT_PATH}: {e}"),
-                }
-            })?;
-            let token_raw = std::fs::read(SA_TOKEN_PATH).map_err(|e| {
-                ResolveError::BackendUnavailable {
+                })?;
+            let token_raw =
+                std::fs::read(SA_TOKEN_PATH).map_err(|e| ResolveError::BackendUnavailable {
                     kind: "k8s",
                     reason: format!("read SA token {SA_TOKEN_PATH}: {e}"),
-                }
-            })?;
+                })?;
             let token = mk_core::SecretBytes::from(token_raw);
 
             let ca = reqwest::Certificate::from_pem(&ca_pem).map_err(|e| {
@@ -316,7 +323,11 @@ mod live {
                     reason: format!("build http client: {e}"),
                 })?;
 
-            Ok(Self { client, base_url, token })
+            Ok(Self {
+                client,
+                base_url,
+                token,
+            })
         }
 
         pub(super) async fn fetch(
@@ -365,10 +376,8 @@ mod live {
                     // retags this NotFound with the caller's real
                     // TenantId before it escapes the module.
                     return Err(ResolveError::NotFound {
-                        tenant: TenantId::new(
-                            "00000000-0000-0000-0000-000000000000".to_string(),
-                        )
-                        .expect("dummy zero-uuid is a valid TenantId"),
+                        tenant: TenantId::new("00000000-0000-0000-0000-000000000000".to_string())
+                            .expect("dummy zero-uuid is a valid TenantId"),
                         kind: "k8s",
                     });
                 }
@@ -380,10 +389,13 @@ mod live {
                 }
             }
 
-            let body: JsonValue = resp.json().await.map_err(|e| ResolveError::BackendUnavailable {
-                kind: "k8s",
-                reason: format!("parse Secret JSON: {e}"),
-            })?;
+            let body: JsonValue =
+                resp.json()
+                    .await
+                    .map_err(|e| ResolveError::BackendUnavailable {
+                        kind: "k8s",
+                        reason: format!("parse Secret JSON: {e}"),
+                    })?;
 
             // Secrets look like: { "data": { "<key>": "<base64>" }, ... }
             let b64 = body
@@ -395,10 +407,12 @@ mod live {
                     reason: format!("key '{key}' not present in Secret {namespace}/{name}"),
                 })?;
 
-            let raw = B64.decode(b64).map_err(|e| ResolveError::BackendUnavailable {
-                kind: "k8s",
-                reason: format!("base64 decode of Secret value failed: {e}"),
-            })?;
+            let raw = B64
+                .decode(b64)
+                .map_err(|e| ResolveError::BackendUnavailable {
+                    kind: "k8s",
+                    reason: format!("base64 decode of Secret value failed: {e}"),
+                })?;
             Ok(SecretBytes::from(raw))
         }
     }
@@ -453,10 +467,11 @@ mod tests {
             name: &str,
             key: &str,
         ) -> Result<SecretBytes, ResolveError> {
-            self.calls
-                .lock()
-                .unwrap()
-                .push((namespace.to_string(), name.to_string(), key.to_string()));
+            self.calls.lock().unwrap().push((
+                namespace.to_string(),
+                name.to_string(),
+                key.to_string(),
+            ));
             match &*self.response.lock().unwrap() {
                 Ok(v) => Ok(SecretBytes::from(v.clone())),
                 Err(e) => Err(clone_err(e)),
@@ -466,21 +481,26 @@ mod tests {
 
     fn clone_err(e: &ResolveError) -> ResolveError {
         match e {
-            ResolveError::NotFound { tenant, kind } => {
-                ResolveError::NotFound { tenant: tenant.clone(), kind }
-            }
-            ResolveError::PermissionDenied { kind, reason } => {
-                ResolveError::PermissionDenied { kind, reason: reason.clone() }
-            }
-            ResolveError::BackendUnavailable { kind, reason } => {
-                ResolveError::BackendUnavailable { kind, reason: reason.clone() }
-            }
-            ResolveError::MalformedReference { kind, reason } => {
-                ResolveError::MalformedReference { kind, reason: reason.clone() }
-            }
-            ResolveError::WrongKind { expected, actual } => {
-                ResolveError::WrongKind { expected: *expected, actual: *actual }
-            }
+            ResolveError::NotFound { tenant, kind } => ResolveError::NotFound {
+                tenant: tenant.clone(),
+                kind,
+            },
+            ResolveError::PermissionDenied { kind, reason } => ResolveError::PermissionDenied {
+                kind,
+                reason: reason.clone(),
+            },
+            ResolveError::BackendUnavailable { kind, reason } => ResolveError::BackendUnavailable {
+                kind,
+                reason: reason.clone(),
+            },
+            ResolveError::MalformedReference { kind, reason } => ResolveError::MalformedReference {
+                kind,
+                reason: reason.clone(),
+            },
+            ResolveError::WrongKind { expected, actual } => ResolveError::WrongKind {
+                expected: *expected,
+                actual: *actual,
+            },
         }
     }
 
@@ -492,10 +512,13 @@ mod tests {
 
     #[tokio::test]
     async fn explicit_namespace_wins_over_default() {
-        let r = K8sRefResolver::new(MockFetcher::ok(b"payload"))
-            .with_default_namespace("fallback-ns");
+        let r =
+            K8sRefResolver::new(MockFetcher::ok(b"payload")).with_default_namespace("fallback-ns");
         let out = r
-            .resolve(&tid(), &k8s_ref(Some("explicit-ns"), "my-secret", "api-key"))
+            .resolve(
+                &tid(),
+                &k8s_ref(Some("explicit-ns"), "my-secret", "api-key"),
+            )
             .await
             .unwrap();
         assert_eq!(out.expose(), b"payload");
@@ -507,16 +530,20 @@ mod tests {
 
     #[tokio::test]
     async fn default_namespace_used_when_reference_omits_it() {
-        let r = K8sRefResolver::new(MockFetcher::ok(b"payload"))
-            .with_default_namespace("pod-ns");
-        r.resolve(&tid(), &k8s_ref(None, "my-secret", "api-key")).await.unwrap();
+        let r = K8sRefResolver::new(MockFetcher::ok(b"payload")).with_default_namespace("pod-ns");
+        r.resolve(&tid(), &k8s_ref(None, "my-secret", "api-key"))
+            .await
+            .unwrap();
         assert_eq!(r.fetcher.last_call().unwrap().0, "pod-ns");
     }
 
     #[tokio::test]
     async fn missing_namespace_and_no_default_is_malformed() {
         let r = K8sRefResolver::new(MockFetcher::ok(b"x"));
-        let err = r.resolve(&tid(), &k8s_ref(None, "my-secret", "k")).await.unwrap_err();
+        let err = r
+            .resolve(&tid(), &k8s_ref(None, "my-secret", "k"))
+            .await
+            .unwrap_err();
         match err {
             ResolveError::MalformedReference { kind, reason } => {
                 assert_eq!(kind, "k8s");
@@ -529,10 +556,22 @@ mod tests {
     #[tokio::test]
     async fn empty_name_or_key_is_malformed() {
         let r = K8sRefResolver::new(MockFetcher::ok(b"x")).with_default_namespace("ns");
-        let err = r.resolve(&tid(), &k8s_ref(None, "", "k")).await.unwrap_err();
-        assert!(matches!(err, ResolveError::MalformedReference { kind: "k8s", .. }));
-        let err = r.resolve(&tid(), &k8s_ref(None, "n", "")).await.unwrap_err();
-        assert!(matches!(err, ResolveError::MalformedReference { kind: "k8s", .. }));
+        let err = r
+            .resolve(&tid(), &k8s_ref(None, "", "k"))
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            ResolveError::MalformedReference { kind: "k8s", .. }
+        ));
+        let err = r
+            .resolve(&tid(), &k8s_ref(None, "n", ""))
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            ResolveError::MalformedReference { kind: "k8s", .. }
+        ));
     }
 
     #[tokio::test]
@@ -544,7 +583,10 @@ mod tests {
             key: "k".to_string(),
         };
         let err = r.resolve(&tid(), &bad).await.unwrap_err();
-        assert!(matches!(err, ResolveError::MalformedReference { kind: "k8s", .. }));
+        assert!(matches!(
+            err,
+            ResolveError::MalformedReference { kind: "k8s", .. }
+        ));
     }
 
     #[tokio::test]
@@ -555,7 +597,10 @@ mod tests {
         }))
         .with_default_namespace("ns");
         let tenant = tid();
-        let err = r.resolve(&tenant, &k8s_ref(None, "n", "k")).await.unwrap_err();
+        let err = r
+            .resolve(&tenant, &k8s_ref(None, "n", "k"))
+            .await
+            .unwrap_err();
         match err {
             ResolveError::NotFound { tenant: t, kind } => {
                 assert_eq!(t, tenant);
@@ -568,9 +613,17 @@ mod tests {
     #[tokio::test]
     async fn wrong_kind_is_rejected() {
         let r = K8sRefResolver::new(MockFetcher::ok(b"x")).with_default_namespace("ns");
-        let env = SecretReference::Env { var: "X".to_string() };
+        let env = SecretReference::Env {
+            var: "X".to_string(),
+        };
         let err = r.resolve(&tid(), &env).await.unwrap_err();
-        assert!(matches!(err, ResolveError::WrongKind { expected: "k8s", actual: "env" }));
+        assert!(matches!(
+            err,
+            ResolveError::WrongKind {
+                expected: "k8s",
+                actual: "env"
+            }
+        ));
     }
 
     #[test]

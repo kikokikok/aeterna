@@ -11,9 +11,9 @@
 //! No I/O, no configuration. Construction is pure.
 
 use async_trait::async_trait;
+use mk_core::SecretBytes;
 use mk_core::secret::SecretReference;
 use mk_core::types::TenantId;
-use mk_core::SecretBytes;
 
 use crate::secret_resolver::{ResolveError, SecretRefResolver};
 
@@ -80,8 +80,16 @@ mod tests {
     #[tokio::test]
     async fn wrong_kind_is_rejected() {
         let r = InlineRefResolver::new();
-        let env = SecretReference::Env { var: "X".to_string() };
+        let env = SecretReference::Env {
+            var: "X".to_string(),
+        };
         let err = r.resolve(&tid(), &env).await.unwrap_err();
-        assert!(matches!(err, ResolveError::WrongKind { expected: "inline", actual: "env" }));
+        assert!(matches!(
+            err,
+            ResolveError::WrongKind {
+                expected: "inline",
+                actual: "env"
+            }
+        ));
     }
 }

@@ -443,11 +443,7 @@ impl AeternaClient {
     /// flag only controls whether the *names* of the secret refs are
     /// visible. This matches the `RenderQuery` contract in
     /// `manifest_api.rs`.
-    pub async fn tenant_manifest(
-        &self,
-        tenant: &str,
-        redact: bool,
-    ) -> Result<serde_json::Value> {
+    pub async fn tenant_manifest(&self, tenant: &str, redact: bool) -> Result<serde_json::Value> {
         let path = if redact {
             format!("/api/v1/admin/tenants/{tenant}/manifest?redact=true")
         } else {

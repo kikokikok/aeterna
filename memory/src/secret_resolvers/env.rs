@@ -15,9 +15,9 @@
 //!   preserved into [`SecretBytes`] without lossy conversion.
 
 use async_trait::async_trait;
+use mk_core::SecretBytes;
 use mk_core::secret::SecretReference;
 use mk_core::types::TenantId;
-use mk_core::SecretBytes;
 
 use crate::secret_resolver::{ResolveError, SecretRefResolver};
 
@@ -87,7 +87,9 @@ mod tests {
     }
 
     fn env_ref(var: &str) -> SecretReference {
-        SecretReference::Env { var: var.to_string() }
+        SecretReference::Env {
+            var: var.to_string(),
+        }
     }
 
     // Use a unique env-var prefix per test to avoid cross-test
@@ -117,7 +119,10 @@ mod tests {
     async fn unset_variable_is_not_found() {
         unsafe { std::env::remove_var(TEST_VAR_UNSET) };
         let r = EnvRefResolver::new();
-        let err = r.resolve(&tid(), &env_ref(TEST_VAR_UNSET)).await.unwrap_err();
+        let err = r
+            .resolve(&tid(), &env_ref(TEST_VAR_UNSET))
+            .await
+            .unwrap_err();
         match err {
             ResolveError::NotFound { kind, .. } => assert_eq!(kind, "env"),
             other => panic!("expected NotFound, got {other:?}"),
@@ -141,13 +146,18 @@ mod tests {
     async fn var_name_with_equals_is_malformed() {
         let r = EnvRefResolver::new();
         let err = r.resolve(&tid(), &env_ref("FOO=BAR")).await.unwrap_err();
-        assert!(matches!(err, ResolveError::MalformedReference { kind: "env", .. }));
+        assert!(matches!(
+            err,
+            ResolveError::MalformedReference { kind: "env", .. }
+        ));
     }
 
     #[tokio::test]
     async fn wrong_kind_is_rejected() {
         let r = EnvRefResolver::new();
-        let file_ref = SecretReference::File { path: "/x".to_string() };
+        let file_ref = SecretReference::File {
+            path: "/x".to_string(),
+        };
         let err = r.resolve(&tid(), &file_ref).await.unwrap_err();
         match err {
             ResolveError::WrongKind { expected, actual } => {
