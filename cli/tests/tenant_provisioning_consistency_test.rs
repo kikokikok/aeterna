@@ -106,10 +106,7 @@ async fn body_json(resp: axum::response::Response) -> Value {
 
 /// Submit `manifest` via the canonical provision route and return the
 /// (status, body) pair.
-async fn provision(
-    app: &axum::Router,
-    manifest: &Value,
-) -> (StatusCode, Value) {
+async fn provision(app: &axum::Router, manifest: &Value) -> (StatusCode, Value) {
     let resp = app
         .clone()
         .oneshot(admin_request(
@@ -326,6 +323,7 @@ async fn consistency_api_runner_inline_secret_rejected_by_default() {
     assert!(
         status == StatusCode::BAD_REQUEST || status == StatusCode::FORBIDDEN,
         "inline secret should be rejected when server config does not opt in (got {} body={})",
-        status, body
+        status,
+        body
     );
 }

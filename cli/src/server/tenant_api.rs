@@ -1089,15 +1089,10 @@ async fn list_tenants(
     headers: HeaderMap,
     Query(query): Query<TenantListQuery>,
 ) -> impl IntoResponse {
-    // Migrated to the #44.d resolver chain: the old path required an
-    // X-Tenant-ID header to produce a TenantContext, even though this
-    // endpoint never consults it. `request_context` lets PlatformAdmins
-    // hit it with no tenant selected.
-    let ctx = match super::context::request_context(&state, &headers).await {
-        Ok(c) => c,
-        Err(response) => return response,
-    };
-    if let Err(response) = super::context::require_platform_admin(&ctx) {
+    // B2 §10.5 — accept either a PlatformAdmin user OR a service token
+    // carrying the `tenants:read` scope. Read-only endpoint, no audit
+    // rows, so the principal is discarded after the gate.
+    if let Err(response) = require_platform_admin_or_scope(&state, &headers, "tenants:read").await {
         return response;
     }
 
@@ -1131,7 +1126,8 @@ async fn show_tenant(
     headers: HeaderMap,
     Path(tenant): Path<String>,
 ) -> impl IntoResponse {
-    if let Err(response) = require_platform_admin(&state, &headers).await {
+    // B2 §10.5 — PA user OR service token with `tenants:read`.
+    if let Err(response) = require_platform_admin_or_scope(&state, &headers, "tenants:read").await {
         return response;
     }
 
@@ -2283,7 +2279,7 @@ async fn require_platform_admin(
 /// audit the action borrow the principal as an [`AuditActor`] via
 /// [`AuthPrincipal::as_audit_actor`] — the B2 §11.4 refactor makes
 /// the audit helpers accept either kind uniformly.
-async fn require_platform_admin_or_scope(
+pub(super) async fn require_platform_admin_or_scope(
     state: &AppState,
     headers: &HeaderMap,
     required_scope: &str,
@@ -2385,7 +2381,7 @@ impl<'a> From<&'a crate::server::service_token_validator::ServicePrincipal> for 
 /// borrow it as an `AuditActor` at each audit call site without
 /// re-authenticating.
 #[derive(Debug)]
-pub(crate) enum AuthPrincipal {
+pub(super) enum AuthPrincipal {
     User(TenantContext),
     Service(crate::server::service_token_validator::ServicePrincipal),
 }
@@ -2452,6 +2448,44 @@ impl AuthPrincipal {
             }
         }
     }
+
+    /// Return a [`TenantContext`] suitable for the **admin pool** write
+    /// path — `with_admin_context`, `persist_governance_event`, and the
+    /// `audit_tenant_action*` family when the call site already holds a
+    /// `&TenantContext` from pre-§10.5 days.
+    ///
+    /// Differs from [`to_downstream_tenant_context`] in *which* tenant
+    /// the synthesized context binds:
+    ///
+    ///   - For `User`: returns the user's own ctx (cloned). Behaviour
+    ///     identical to pre-§11.4.
+    ///   - For `Service`: binds `tenant_id = service-token's OWN
+    ///     tenant`, `target_tenant_id = None`, `user_id = agent_uuid`,
+    ///     `agent_id = Some(agent_uuid)`, empty roles. The caller's
+    ///     audit row therefore links *cause* (which agent in which
+    ///     tenant) rather than *effect* (the targeted tenant — which
+    ///     is already covered by the action's `target_id`).
+    ///
+    /// This is the same shape `provision_tenant` synthesizes inline
+    /// today; extracted here so grant/revoke connection (and any
+    /// future scope-gated mutation) can stop duplicating the match.
+    pub(crate) fn to_admin_pool_context(&self) -> mk_core::types::TenantContext {
+        match self {
+            AuthPrincipal::User(ctx) => ctx.clone(),
+            AuthPrincipal::Service(sp) => {
+                let agent_str = sp.agent_id.to_string();
+                mk_core::types::TenantContext {
+                    tenant_id: mk_core::TenantId::new(sp.tenant_id.to_string())
+                        .expect("service principal tenant_id is a valid uuid"),
+                    user_id: mk_core::types::UserId::new(agent_str.clone())
+                        .expect("agent UUID string fits UserId bounds"),
+                    roles: Vec::new(),
+                    target_tenant_id: None,
+                    agent_id: Some(agent_str),
+                }
+            }
+        }
+    }
 }
 
 /// B2 §11.4 — resolve an [`AuditActor`] to the audit-row fields.
@@ -2464,7 +2498,12 @@ impl AuthPrincipal {
 /// principals simply leave `selectedTargetTenantId` as `null`).
 fn audit_actor_fields(
     actor: AuditActor<'_>,
-) -> (PrincipalType, Option<uuid::Uuid>, Option<uuid::Uuid>, serde_json::Value) {
+) -> (
+    PrincipalType,
+    Option<uuid::Uuid>,
+    Option<uuid::Uuid>,
+    serde_json::Value,
+) {
     match actor {
         AuditActor::User(ctx) => {
             let actor_id = uuid::Uuid::parse_str(ctx.user_id.as_str()).ok();
@@ -3688,10 +3727,18 @@ async fn grant_git_provider_connection_to_tenant(
     headers: HeaderMap,
     Path((connection_id, tenant)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    let ctx = match require_platform_admin(&state, &headers).await {
-        Ok(ctx) => ctx,
-        Err(response) => return response,
-    };
+    // B2 §10.5 — accepts PA user OR service token with
+    // `connections:manage`. Mutation: must thread the authenticated
+    // principal so audit rows attribute to the correct actor kind
+    // (user vs agent) and so the admin-pool write path
+    // (`persist_governance_event`) gets a synthesized ctx for service
+    // callers — same pattern as `provision_tenant`.
+    let principal =
+        match require_platform_admin_or_scope(&state, &headers, "connections:manage").await {
+            Ok(p) => p,
+            Err(response) => return response,
+        };
+    let ctx = principal.to_admin_pool_context();
 
     let tenant_record =
         match resolve_tenant_record_or_404(&state, &tenant, "connection_grant_failed").await {
@@ -3714,7 +3761,7 @@ async fn grant_git_provider_connection_to_tenant(
             persist_governance_event(state.as_ref(), &ctx, &event).await;
             audit_tenant_action(
                 state.as_ref(),
-                &ctx,
+                principal.as_audit_actor(),
                 "git_provider_connection_grant",
                 Some(connection_id.as_str()),
                 json!({
@@ -3742,10 +3789,13 @@ async fn revoke_git_provider_connection_from_tenant(
     headers: HeaderMap,
     Path((connection_id, tenant)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    let ctx = match require_platform_admin(&state, &headers).await {
-        Ok(ctx) => ctx,
-        Err(response) => return response,
-    };
+    // B2 §10.5 — see `grant_git_provider_connection_to_tenant`.
+    let principal =
+        match require_platform_admin_or_scope(&state, &headers, "connections:manage").await {
+            Ok(p) => p,
+            Err(response) => return response,
+        };
+    let ctx = principal.to_admin_pool_context();
 
     let tenant_record =
         match resolve_tenant_record_or_404(&state, &tenant, "connection_revoke_failed").await {
@@ -3768,7 +3818,7 @@ async fn revoke_git_provider_connection_from_tenant(
             persist_governance_event(state.as_ref(), &ctx, &event).await;
             audit_tenant_action(
                 state.as_ref(),
-                &ctx,
+                principal.as_audit_actor(),
                 "git_provider_connection_revoke",
                 Some(connection_id.as_str()),
                 json!({
@@ -4502,47 +4552,22 @@ async fn provision_tenant(
     // provisioning audit rows therefore link cause (which principal)
     // to effect (target tenant + manifest hash + generation) whether
     // the apply came from a CI pipeline or a PA operator.
-    let principal = match require_platform_admin_or_scope(
-        &state,
-        &headers,
-        "tenants:provision",
-    )
-    .await
-    {
-        Ok(p) => p,
-        Err(response) => return response,
-    };
+    let principal =
+        match require_platform_admin_or_scope(&state, &headers, "tenants:provision").await {
+            Ok(p) => p,
+            Err(response) => return response,
+        };
 
     // B2 §11.4 — synthesize a `TenantContext` from the authenticated
     // principal so helpers that still require a ctx (notably
     // [`persist_governance_event`], which forwards it to the admin-pool
     // `with_admin_context` write path) accept both callers uniformly.
-    //
-    // For the User variant this is the authenticated user's own ctx
-    // (unchanged behaviour). For the Service variant we fabricate one
-    // with `tenant_id = service-token's own tenant`, `user_id =
-    // agent_uuid`, empty roles, and `agent_id = Some(agent_uuid)` so
-    // admin-context writes are attributable to the service agent.
-    //
-    // Audit rows use `principal.as_audit_actor()` directly (below) so
-    // they record `actor_type = 'agent'` for service callers — this
-    // ctx is only for call sites that still type-require
-    // `&TenantContext`.
-    let ctx: mk_core::types::TenantContext = match &principal {
-        AuthPrincipal::User(c) => c.clone(),
-        AuthPrincipal::Service(sp) => {
-            let agent_str = sp.agent_id.to_string();
-            mk_core::types::TenantContext {
-                tenant_id: mk_core::TenantId::new(sp.tenant_id.to_string())
-                    .expect("service principal tenant_id is a valid uuid"),
-                user_id: mk_core::types::UserId::new(agent_str.clone())
-                    .expect("agent UUID string fits UserId bounds"),
-                roles: Vec::new(),
-                target_tenant_id: None,
-                agent_id: Some(agent_str),
-            }
-        }
-    };
+    // See [`AuthPrincipal::to_admin_pool_context`] for the per-variant
+    // synthesis rules. Audit rows use `principal.as_audit_actor()`
+    // directly (below) so they record `actor_type = 'agent'` for
+    // service callers — this ctx is only for call sites that still
+    // type-require `&TenantContext`.
+    let ctx: mk_core::types::TenantContext = principal.to_admin_pool_context();
 
     // B2 §11.4 — base request-context extensions for every audit row this
     // handler writes. Cloned + amended at each call site with the values
@@ -5691,13 +5716,7 @@ async fn diff_tenant(
     // `_ctx` is `None` on the service-token path because the diff
     // handler emits no audit rows and therefore needs no user
     // attribution. See `docs/security/tenant-provisioning-security.md` §2.
-    let _ctx = match require_platform_admin_or_scope(
-        &state,
-        &headers,
-        "tenants:diff",
-    )
-    .await
-    {
+    let _ctx = match require_platform_admin_or_scope(&state, &headers, "tenants:diff").await {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
@@ -5834,20 +5853,20 @@ mod tests {
             tenant_id: mk_core::TenantId::new(actor_tenant.to_string()).unwrap(),
             user_id: mk_core::types::UserId::new(user_uuid.to_string()).unwrap(),
             roles: Vec::new(),
-            target_tenant_id: Some(
-                mk_core::TenantId::new(target_tenant.to_string()).unwrap(),
-            ),
+            target_tenant_id: Some(mk_core::TenantId::new(target_tenant.to_string()).unwrap()),
             agent_id: None,
         };
 
-        let (_, _, acting_as, envelope) =
-            super::audit_actor_fields(super::AuditActor::User(&ctx));
+        let (_, _, acting_as, envelope) = super::audit_actor_fields(super::AuditActor::User(&ctx));
 
         // `acting_as_tenant_id` is the filter key for
         // `/govern/audit?tenant=<slug>`; when the caller targeted a
         // different tenant we MUST record the target, not the actor.
         assert_eq!(acting_as, Some(target_tenant));
-        assert_eq!(envelope["selectedTargetTenantId"], target_tenant.to_string());
+        assert_eq!(
+            envelope["selectedTargetTenantId"],
+            target_tenant.to_string()
+        );
     }
 
     #[test]
@@ -5920,9 +5939,68 @@ mod tests {
         // `user_id` / `agent_id` both carry the agent UUID so the
         // downstream write path can attribute ownership.
         assert_eq!(ctx.user_id.as_str(), agent_uuid.to_string());
-        assert_eq!(ctx.agent_id.as_deref(), Some(agent_uuid.to_string().as_str()));
+        assert_eq!(
+            ctx.agent_id.as_deref(),
+            Some(agent_uuid.to_string().as_str())
+        );
         // Roles are empty — downstream MUST NOT re-check role for a
         // service caller; scope was already validated at the gate.
+        assert!(ctx.roles.is_empty());
+    }
+
+    #[test]
+    fn auth_principal_to_admin_pool_ctx_user_returns_clone() {
+        // User variant: identical to pre-§10.5 `require_platform_admin`
+        // ctx. No synthesis, no field changes — the admin pool path
+        // sees exactly what the authenticated user supplied.
+        let mut original = mk_core::types::TenantContext::default();
+        original.tenant_id =
+            mk_core::TenantId::new("11111111-1111-1111-1111-111111111111".to_string())
+                .expect("uuid string parses as TenantId");
+        original.user_id = mk_core::types::UserId::new("the-user".to_string()).unwrap();
+        original.roles = vec![Role::PlatformAdmin.into()];
+        let principal = super::AuthPrincipal::User(original.clone());
+
+        let ctx = principal.to_admin_pool_context();
+
+        assert_eq!(ctx.tenant_id, original.tenant_id);
+        assert_eq!(ctx.user_id, original.user_id);
+        assert_eq!(ctx.roles, original.roles);
+        assert_eq!(ctx.target_tenant_id, original.target_tenant_id);
+        assert_eq!(ctx.agent_id, original.agent_id);
+    }
+
+    #[test]
+    fn auth_principal_to_admin_pool_ctx_service_binds_principal_tenant() {
+        // Service variant binds the SERVICE-TOKEN'S OWN tenant_id —
+        // NOT the URL path's tenant_id (which `provision_tenant`,
+        // `grant_connection`, etc. read separately). This is what the
+        // admin pool's `with_admin_context` records as the *cause*
+        // tenant; the *effect* tenant is recorded via the action's
+        // `target_id`.
+        let agent_uuid = uuid::Uuid::new_v4();
+        let principal_tenant = uuid::Uuid::new_v4();
+        let principal = super::AuthPrincipal::Service(
+            crate::server::service_token_validator::ServicePrincipal {
+                agent_id: agent_uuid,
+                tenant_id: principal_tenant,
+                scopes: vec!["connections:manage".into()],
+            },
+        );
+
+        let ctx = principal.to_admin_pool_context();
+
+        // tenant bound to the service token's tenant, NOT some target.
+        assert_eq!(ctx.tenant_id.as_str(), principal_tenant.to_string());
+        // No impersonation — service tokens don't carry that concept.
+        assert!(ctx.target_tenant_id.is_none());
+        // Stable identity: user_id and agent_id both carry the agent UUID.
+        assert_eq!(ctx.user_id.as_str(), agent_uuid.to_string());
+        assert_eq!(
+            ctx.agent_id.as_deref(),
+            Some(agent_uuid.to_string().as_str())
+        );
+        // Empty roles — scope check at the gate is the auth gate.
         assert!(ctx.roles.is_empty());
     }
 
