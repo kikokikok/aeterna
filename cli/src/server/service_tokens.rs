@@ -375,6 +375,24 @@ async fn mint_handler(
         }
     };
 
+    // §10.3: warm the revocation cache (Redis/Dragonfly in HA mode,
+    // in-memory fallback otherwise) so the first request bearing
+    // this token does not pay the Postgres round-trip. Mirrors the
+    // exact columns `validate_service_token` would have read on a
+    // miss.
+    state
+        .revocation_cache
+        .warm(
+            agent_id,
+            crate::server::service_token_validator::CachedAgent {
+                status: crate::server::service_token_validator::AgentStatus::Active,
+                tenant_id: tenant_uuid,
+                capabilities: req.capabilities.clone(),
+                expires_at,
+            },
+        )
+        .await;
+
     tracing::info!(
         agent_id = %agent_id,
         tenant_id = %tenant_uuid,
@@ -430,6 +448,12 @@ async fn revoke_handler(
             "service token not found, already revoked, or not a service token",
         ),
         Ok(_) => {
+            // §10.3: `DEL revocation:agent:<uuid>` — in HA mode this
+            // is observed by every other instance on its next
+            // lookup with zero staleness. In single-instance mode
+            // this is a local-only eviction with identical
+            // semantics.
+            state.revocation_cache.invalidate(token_id).await;
             tracing::info!(token_id = %token_id, "Revoked service token");
             (
                 StatusCode::OK,
