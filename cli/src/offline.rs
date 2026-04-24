@@ -152,7 +152,11 @@ impl OfflineCliClient {
 
     /// Check server reachability on CLI start (13.6.2).
     pub async fn check_server_reachability(&self) -> bool {
-        let client = reqwest::Client::new();
+        // B2 §7.7 — even the health probe is CLI-originated traffic and
+        // must advertise `X-Aeterna-Client-Kind: cli` so the reachability
+        // check shows up attributed in request logs rather than as an
+        // anonymous `via=api` row.
+        let client = crate::client::tagged_http_client();
         match client
             .get(format!("{}/health", self.server_url))
             .timeout(Duration::from_secs(5))

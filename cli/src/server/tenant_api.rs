@@ -25,7 +25,9 @@ use storage::tenant_config_provider::TenantConfigProviderError;
 use storage::tenant_store::UpsertTenantRepositoryBinding;
 use uuid::Uuid;
 
-use super::{AppState, authenticated_tenant_context, manifest_render, tenant_diff, tenant_scoped_context};
+use super::{
+    AppState, authenticated_tenant_context, manifest_render, tenant_diff, tenant_scoped_context,
+};
 
 const OWNERSHIP_PLATFORM: &str = "platform";
 
