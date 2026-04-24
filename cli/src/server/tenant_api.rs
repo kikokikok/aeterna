@@ -25,7 +25,7 @@ use storage::tenant_config_provider::TenantConfigProviderError;
 use storage::tenant_store::UpsertTenantRepositoryBinding;
 use uuid::Uuid;
 
-use super::{AppState, authenticated_tenant_context, tenant_scoped_context};
+use super::{AppState, authenticated_tenant_context, manifest_render, tenant_diff, tenant_scoped_context};
 
 const OWNERSHIP_PLATFORM: &str = "platform";
 
@@ -265,6 +265,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/admin/tenants/provision",
             post(provision_tenant),
+        )
+        .route(
+            "/admin/tenants/diff",
+            post(diff_tenant),
         )
         // Provider configuration routes
         .route(
@@ -5264,6 +5268,125 @@ async fn provision_tenant(
         })),
     )
         .into_response()
+}
+
+/// `POST /api/v1/admin/tenants/diff` — B3 §2.4.
+///
+/// Compute a structured delta between the submitted manifest and the
+/// tenant's current DB state (rendered via
+/// [`manifest_render::render_current_manifest`]). The diff is
+/// *read-only*: no rows are written, no audit row is emitted (that's
+/// `provision_tenant` with `dryRun=true`'s job, §2.5), and the handler
+/// never resolves secrets.
+///
+/// **Auth:** PlatformAdmin, same gate as `provision_tenant`.
+///
+/// **Response shape:** [`tenant_diff::TenantDiff`] — see that module
+/// for the per-change wire format. CLI renders `-o json` directly
+/// and `-o unified` by walking the structured form.
+///
+/// **Create vs Update vs NoOp:**
+/// - Tenant missing → `operation: "create"`, every leaf of the
+///   incoming manifest appears as `Added`.
+/// - Tenant present, rendered-vs-incoming identical → `NoOp`.
+/// - Otherwise → `Update` with the leaf list.
+///
+/// Unlike `provision_tenant`, this handler does NOT enforce the
+/// inline-secret gate — a diff against a manifest with inline
+/// plaintext is still a legitimate read operation, and refusing it
+/// would force operators to hand-edit their manifests before they
+/// can preview. The gate stays on the write path only.
+async fn diff_tenant(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(raw): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let _ctx = match require_platform_admin(&state, &headers).await {
+        Ok(ctx) => ctx,
+        Err(response) => return response,
+    };
+
+    let manifest: TenantManifest = match serde_json::from_value(raw.clone()) {
+        Ok(m) => m,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "success": false,
+                    "error": "manifest_parse_failed",
+                    "details": e.to_string(),
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    let validation_errors = validate_manifest(&manifest);
+    if !validation_errors.is_empty() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({
+                "success": false,
+                "error": "manifest_validation_failed",
+                "validationErrors": validation_errors,
+            })),
+        )
+            .into_response();
+    }
+
+    let slug = manifest.tenant.slug.clone();
+
+    // Render the current state. `NotFound` → diff against an empty
+    // baseline → `operation: "create"`. Any other error is a
+    // legitimate 500 — we cannot compute a trustworthy diff without a
+    // consistent read of the current state.
+    let current_rendered =
+        match manifest_render::render_current_manifest(&state, &slug, false).await {
+            Ok(rendered) => Some(rendered),
+            Err(manifest_render::RenderError::NotFound(_)) => None,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "success": false,
+                        "error": "current_state_render_failed",
+                        "details": e.to_string(),
+                    })),
+                )
+                    .into_response();
+            }
+        };
+
+    // Serialize both sides uniformly so the diff walker operates on a
+    // single shape. `serde_json::to_value` on known-good types is
+    // effectively infallible, but we surface any failure as 500
+    // rather than unwrap — a panic here would take the admin API
+    // down on a malformed row.
+    let current_json = match current_rendered {
+        Some(r) => match serde_json::to_value(&r) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "success": false,
+                        "error": "current_state_serialize_failed",
+                        "details": e.to_string(),
+                    })),
+                )
+                    .into_response();
+            }
+        },
+        None => None,
+    };
+    // `TenantManifest` is `Deserialize`-only by design (the input
+    // type never needs to re-emit wire JSON; the renderer owns that).
+    // We've already validated `raw` by successfully deserializing it
+    // into `TenantManifest`, so feeding `raw` directly to the diff
+    // walker is sound and avoids requiring a `Serialize` impl on
+    // every sub-type of the input schema.
+    let diff = tenant_diff::compute_diff(slug, current_json, raw);
+    (StatusCode::OK, Json(diff)).into_response()
 }
 
 #[cfg(test)]

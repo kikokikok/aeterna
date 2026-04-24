@@ -29,6 +29,7 @@ pub mod sessions;
 pub mod sync;
 pub mod team_api;
 pub mod tenant_api;
+pub mod tenant_diff;
 pub mod tenant_eager_wire;
 pub mod tenant_lazy_wire;
 pub mod tenant_metrics;
