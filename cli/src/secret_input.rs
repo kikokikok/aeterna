@@ -163,16 +163,17 @@ fn read_from_file<I: SecretIo>(path: &Path, io: &mut I) -> Result<String, UxErro
     // owner-execute bit" — i.e. at most `rw-------`. We report the
     // octal so the user can copy-paste the chmod.
     if let Some(m) = mode
-        && m & 0o177 != 0 {
-            return Err(UxError::new(format!(
-                "File {} is too permissive ({:04o}); required mode is 0600 or stricter",
-                path.display(),
-                m & 0o777
-            ))
-            .why("Group- or world-readable files leak secrets to any process on the host")
-            .fix(format!("Run: chmod 0600 {}", path.display()))
-            .suggest(format!("chmod 0600 {}", path.display())));
-        }
+        && m & 0o177 != 0
+    {
+        return Err(UxError::new(format!(
+            "File {} is too permissive ({:04o}); required mode is 0600 or stricter",
+            path.display(),
+            m & 0o777
+        ))
+        .why("Group- or world-readable files leak secrets to any process on the host")
+        .fix(format!("Run: chmod 0600 {}", path.display()))
+        .suggest(format!("chmod 0600 {}", path.display())));
+    }
     // On non-Unix platforms `file_mode` returns `None` — we skip the
     // check rather than forcing an error the user cannot satisfy.
 

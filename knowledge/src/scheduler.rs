@@ -37,7 +37,7 @@ impl GovernanceScheduler {
             quick_scan_interval,
             semantic_scan_interval,
             report_interval,
-            dlq_processing_interval: Duration::from_secs(300),
+            dlq_processing_interval: Duration::from_mins(5),
             redis: None,
             job_config: JobConfig::default(),
         }
@@ -1063,9 +1063,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler.run_batch_drift_scan().await;
@@ -1085,9 +1085,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler.run_batch_drift_scan().await;
@@ -1120,9 +1120,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler.run_semantic_analysis_job().await;
@@ -1162,9 +1162,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler.run_weekly_report_job().await;
@@ -1184,9 +1184,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler.run_weekly_report_job().await;
@@ -1213,9 +1213,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler
@@ -1239,9 +1239,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler
@@ -1266,9 +1266,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler
@@ -1300,9 +1300,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler.run_weekly_report_job().await;
@@ -1335,9 +1335,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler.run_weekly_report_job().await;
@@ -1358,9 +1358,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler.run_batch_drift_scan().await;
@@ -1380,13 +1380,13 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         )
-        .with_dlq_interval(Duration::from_secs(600));
+        .with_dlq_interval(Duration::from_mins(10));
 
-        assert_eq!(scheduler.dlq_processing_interval, Duration::from_secs(600));
+        assert_eq!(scheduler.dlq_processing_interval, Duration::from_mins(10));
     }
 
     #[test]
@@ -1410,9 +1410,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         )
         .with_job_config(job_config.clone());
 
@@ -1433,9 +1433,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler.run_dlq_processing_job().await;
@@ -1467,9 +1467,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler.run_dlq_processing_job().await;
@@ -1506,9 +1506,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler.run_dlq_processing_job().await;
@@ -1536,9 +1536,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         )
         .with_job_config(job_config);
 
@@ -1566,9 +1566,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler.run_semantic_analysis_job().await;
@@ -1600,9 +1600,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler.run_batch_drift_scan().await;
@@ -1622,15 +1622,15 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
-        assert_eq!(scheduler.quick_scan_interval, Duration::from_secs(300));
-        assert_eq!(scheduler.semantic_scan_interval, Duration::from_secs(3600));
-        assert_eq!(scheduler.report_interval, Duration::from_secs(86400));
-        assert_eq!(scheduler.dlq_processing_interval, Duration::from_secs(300));
+        assert_eq!(scheduler.quick_scan_interval, Duration::from_mins(5));
+        assert_eq!(scheduler.semantic_scan_interval, Duration::from_hours(1));
+        assert_eq!(scheduler.report_interval, Duration::from_hours(24));
+        assert_eq!(scheduler.dlq_processing_interval, Duration::from_mins(5));
         assert!(scheduler.redis.is_none());
     }
 
@@ -1647,9 +1647,9 @@ mod tests {
             engine,
             repo,
             config,
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler
@@ -1703,9 +1703,9 @@ mod tests {
             engine,
             repo,
             DeploymentConfig::default(),
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         )
         .with_redis(redis_storage)
         .with_job_config(JobConfig {
@@ -1754,9 +1754,9 @@ mod tests {
             engine,
             repo,
             DeploymentConfig::default(),
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         )
         .with_redis(redis_storage);
 
@@ -1788,9 +1788,9 @@ mod tests {
             engine,
             repo,
             DeploymentConfig::default(),
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         )
         .with_redis(redis_storage.clone())
         .with_job_config(JobConfig {
@@ -1883,9 +1883,9 @@ mod tests {
             engine,
             repo,
             DeploymentConfig::default(),
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-            Duration::from_secs(86400),
+            Duration::from_mins(5),
+            Duration::from_hours(1),
+            Duration::from_hours(24),
         );
 
         let result = scheduler.run_semantic_analysis_job().await;

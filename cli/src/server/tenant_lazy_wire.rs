@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn cooldown_elapsed_on_past_stamp() {
-        let past = SystemTime::now() - Duration::from_secs(120);
+        let past = SystemTime::now() - Duration::from_mins(2);
         assert!(cooldown_elapsed(past));
     }
 
@@ -258,7 +258,7 @@ mod tests {
     fn cooldown_not_elapsed_on_future_stamp() {
         // Clock skew: last_attempt_at is in the future. We must not
         // retry — that would invite a storm every time NTP re-syncs.
-        let future = SystemTime::now() + Duration::from_secs(60);
+        let future = SystemTime::now() + Duration::from_mins(1);
         assert!(!cooldown_elapsed(future));
     }
 }

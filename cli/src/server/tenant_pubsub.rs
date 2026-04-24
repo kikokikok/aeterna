@@ -131,7 +131,7 @@ pub const CHANNEL: &str = "aeterna:tenant:changed";
 const RECONNECT_BACKOFF_INITIAL: Duration = Duration::from_millis(250);
 /// Upper bound on reconnect backoff. A minute is more than enough for
 /// transient Redis hiccups; longer outages are visible via `/ready`.
-const RECONNECT_BACKOFF_CAP: Duration = Duration::from_secs(60);
+const RECONNECT_BACKOFF_CAP: Duration = Duration::from_mins(1);
 
 /// Payload published on [`CHANNEL`] for every tenant mutation.
 ///

@@ -184,7 +184,7 @@ async fn bench_policy_evaluation_throughput() {
 #[tokio::test]
 async fn bench_cached_policy_evaluation() {
     let inner = Arc::new(BenchPolicyEvaluator);
-    let cached = CachedPolicyEvaluator::new(inner, Duration::from_secs(300));
+    let cached = CachedPolicyEvaluator::new(inner, Duration::from_mins(5));
 
     let ctx = PolicyContext {
         principal_id: "bench-user".to_string(),
@@ -220,7 +220,7 @@ async fn bench_cached_policy_evaluation() {
 #[tokio::test]
 async fn bench_cached_policy_mixed_actions() {
     let inner = Arc::new(BenchPolicyEvaluator);
-    let cached = CachedPolicyEvaluator::new(inner, Duration::from_secs(300));
+    let cached = CachedPolicyEvaluator::new(inner, Duration::from_mins(5));
 
     let actions = [
         "RequestRepository",

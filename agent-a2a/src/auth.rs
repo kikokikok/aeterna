@@ -244,9 +244,10 @@ pub async fn auth_middleware(
     if let Some(api_key) = &state.api_key {
         if let Some(auth_header) = request.headers().get(AUTHORIZATION)
             && let Ok(auth_str) = auth_header.to_str()
-                && auth_str == format!("Bearer {api_key}") {
-                    return Ok(next.run(request).await);
-                }
+            && auth_str == format!("Bearer {api_key}")
+        {
+            return Ok(next.run(request).await);
+        }
         return Err(StatusCode::UNAUTHORIZED);
     }
 
@@ -276,13 +277,14 @@ pub async fn auth_middleware(
 pub async fn tenant_context_middleware(mut request: Request, next: Next) -> Response {
     if let Some(auth_state) = request.extensions().get::<Arc<AuthState>>()
         && auth_state.trusted_identity.enabled
-            && let Some(tenant_context) = TenantContext::from_trusted_identity_headers(
-                request.headers(),
-                &auth_state.trusted_identity,
-            ) {
-                request.extensions_mut().insert(tenant_context);
-                return next.run(request).await;
-            }
+        && let Some(tenant_context) = TenantContext::from_trusted_identity_headers(
+            request.headers(),
+            &auth_state.trusted_identity,
+        )
+    {
+        request.extensions_mut().insert(tenant_context);
+        return next.run(request).await;
+    }
 
     if let Some(tenant_context) = TenantContext::from_headers(&request) {
         request.extensions_mut().insert(tenant_context);

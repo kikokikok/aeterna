@@ -119,10 +119,11 @@ async fn handle_okta_webhook(
     Json(payload): Json<OktaWebhookPayload>,
 ) -> StatusCode {
     if let Some(ref secret) = state.webhook_secret
-        && !verify_okta_signature(&headers, secret) {
-            warn!("Invalid Okta webhook signature");
-            return StatusCode::UNAUTHORIZED;
-        }
+        && !verify_okta_signature(&headers, secret)
+    {
+        warn!("Invalid Okta webhook signature");
+        return StatusCode::UNAUTHORIZED;
+    }
 
     debug!(event_type = %payload.event_type, "Received Okta webhook");
 

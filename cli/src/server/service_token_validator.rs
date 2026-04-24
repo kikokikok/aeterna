@@ -61,7 +61,7 @@ use crate::server::AppState;
 use crate::server::plugin_auth::{PluginIdentity, PluginTokenClaims};
 
 /// 60s cross-instance bounded-staleness window (B2 §10.3).
-pub const REVOCATION_CACHE_TTL: Duration = Duration::from_secs(60);
+pub const REVOCATION_CACHE_TTL: Duration = Duration::from_mins(1);
 
 /// Redis key namespace for the revocation cache. Kept narrow so a
 /// `SCAN revocation:agent:*` surfaces exactly these entries during
@@ -623,7 +623,7 @@ mod tests {
         // §10.3 contract: pin the TTL so any future change is a
         // deliberate, reviewable edit, not a silent widening of the
         // staleness window.
-        assert_eq!(REVOCATION_CACHE_TTL, Duration::from_secs(60));
+        assert_eq!(REVOCATION_CACHE_TTL, Duration::from_mins(1));
     }
 
     fn make_principal(scopes: Vec<&str>) -> ServicePrincipal {

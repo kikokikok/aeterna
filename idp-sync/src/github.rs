@@ -70,7 +70,7 @@ impl GitHubClient {
 
         let token_cache = Arc::new(Mutex::new(Some(CachedToken {
             token,
-            expires_at: std::time::Instant::now() + std::time::Duration::from_secs(55 * 60),
+            expires_at: std::time::Instant::now() + std::time::Duration::from_mins(55),
         })));
 
         let team_filter = config
@@ -139,7 +139,7 @@ impl GitHubClient {
             match *cache {
                 Some(ref cached) => {
                     cached.expires_at
-                        <= std::time::Instant::now() + std::time::Duration::from_secs(5 * 60)
+                        <= std::time::Instant::now() + std::time::Duration::from_mins(5)
                 }
                 None => true,
             }
@@ -167,7 +167,7 @@ impl GitHubClient {
         *self.client.lock().await = new_client;
         *self.token_cache.lock().await = Some(CachedToken {
             token,
-            expires_at: std::time::Instant::now() + std::time::Duration::from_secs(55 * 60),
+            expires_at: std::time::Instant::now() + std::time::Duration::from_mins(55),
         });
 
         Ok(())

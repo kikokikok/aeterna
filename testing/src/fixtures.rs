@@ -207,7 +207,7 @@ pub async fn qdrant() -> Option<&'static QdrantFixture> {
                 .with_exposed_port(ContainerPort::Tcp(6334))
                 // Wait for gRPC to be ready (appears after HTTP)
                 .with_wait_for(WaitFor::message_on_stdout("Qdrant gRPC listening on 6334"))
-                .with_startup_timeout(std::time::Duration::from_secs(60))
+                .with_startup_timeout(std::time::Duration::from_mins(1))
                 .start()
                 .await;
 

@@ -1087,28 +1087,29 @@ async fn run_import(args: AdminImportArgs) -> anyhow::Result<()> {
 
     // If validation failed, report and bail.
     if let Some(ref rpt) = report
-        && !rpt.valid {
-            if args.json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&json!({
-                        "success": false,
-                        "error": "validation_failed",
-                        "manifest_ok": rpt.manifest_ok,
-                        "schema_compatible": rpt.schema_compatible,
-                        "checksum_mismatches": rpt.checksum_mismatches.len(),
-                        "errors": rpt.errors,
-                    }))?
-                );
-            } else {
-                ux_error::UxError::new("Archive validation failed")
-                    .why(rpt.errors.join("; "))
-                    .fix("Ensure the archive is not corrupted")
-                    .fix("Re-export from the source instance")
-                    .display();
-            }
-            anyhow::bail!("Archive validation failed: {}", rpt.errors.join("; "));
+        && !rpt.valid
+    {
+        if args.json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "success": false,
+                    "error": "validation_failed",
+                    "manifest_ok": rpt.manifest_ok,
+                    "schema_compatible": rpt.schema_compatible,
+                    "checksum_mismatches": rpt.checksum_mismatches.len(),
+                    "errors": rpt.errors,
+                }))?
+            );
+        } else {
+            ux_error::UxError::new("Archive validation failed")
+                .why(rpt.errors.join("; "))
+                .fix("Ensure the archive is not corrupted")
+                .fix("Re-export from the source instance")
+                .display();
         }
+        anyhow::bail!("Archive validation failed: {}", rpt.errors.join("; "));
+    }
 
     // Read the manifest from the archive for display.
     let reader = ArchiveReader::open(&args.input)?;

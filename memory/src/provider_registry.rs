@@ -97,7 +97,7 @@ pub type ConfigResolver = Arc<
 // backend impls (Inline, Postgres, Env, File, K8s, Vault).
 
 /// Default cache TTL: 1 hour.
-const DEFAULT_CACHE_TTL: Duration = Duration::from_secs(3600);
+const DEFAULT_CACHE_TTL: Duration = Duration::from_hours(1);
 
 /// Error surface for the fallible resolver APIs (`try_get_llm_service`,
 /// `try_get_embedding_service`).
@@ -1174,7 +1174,7 @@ mod tests {
     #[test]
     fn cached_entry_is_expired_returns_false_when_fresh() {
         let entry = CachedEntry::new(42);
-        assert!(!entry.is_expired(Duration::from_secs(3600)));
+        assert!(!entry.is_expired(Duration::from_hours(1)));
     }
 
     #[test]
@@ -1188,8 +1188,8 @@ mod tests {
 
     #[test]
     fn with_ttl_constructor_sets_custom_ttl() {
-        let registry = TenantProviderRegistry::with_ttl(None, None, Duration::from_secs(300));
-        assert_eq!(registry.cache_ttl, Duration::from_secs(300));
+        let registry = TenantProviderRegistry::with_ttl(None, None, Duration::from_mins(5));
+        assert_eq!(registry.cache_ttl, Duration::from_mins(5));
     }
 
     #[test]

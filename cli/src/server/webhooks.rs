@@ -313,9 +313,10 @@ fn webhook_tenant_context(state: &Arc<AppState>) -> TenantContext {
         && let (Some(tid), Some(uid)) = (
             mk_core::types::TenantId::new(tenant_id.clone()),
             mk_core::types::UserId::new("github-webhook".to_string()),
-        ) {
-            return TenantContext::new(tid, uid);
-        }
+        )
+    {
+        return TenantContext::new(tid, uid);
+    }
     tracing::warn!(
         "No tenant configured for webhook events; using default tenant.          Set AETERNA_DEFAULT_TENANT_ID or configure plugin_auth.default_tenant_id."
     );

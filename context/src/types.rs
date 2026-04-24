@@ -83,10 +83,8 @@ impl Default for ResolvedContext {
 
 impl ResolvedContext {
     pub fn to_tenant_context(&self) -> mk_core::TenantContext {
-        let tenant_id = mk_core::TenantId::new(self.tenant_id.value.clone())
-            .unwrap_or_default();
-        let user_id = mk_core::UserId::new(self.user_id.value.clone())
-            .unwrap_or_default();
+        let tenant_id = mk_core::TenantId::new(self.tenant_id.value.clone()).unwrap_or_default();
+        let user_id = mk_core::UserId::new(self.user_id.value.clone()).unwrap_or_default();
 
         match &self.agent_id {
             Some(agent) => {

@@ -118,9 +118,9 @@ async fn test_scheduler_locked_job_execution() {
         engine.clone(),
         repo.clone(),
         config,
-        Duration::from_secs(300),
-        Duration::from_secs(3600),
-        Duration::from_secs(86400),
+        Duration::from_mins(5),
+        Duration::from_hours(1),
+        Duration::from_hours(24),
     )
     .with_redis(redis.clone())
     .with_job_config(job_config.clone());
@@ -164,9 +164,9 @@ async fn test_scheduler_deduplication() {
         engine.clone(),
         repo.clone(),
         config,
-        Duration::from_secs(300),
-        Duration::from_secs(3600),
-        Duration::from_secs(86400),
+        Duration::from_mins(5),
+        Duration::from_hours(1),
+        Duration::from_hours(24),
     )
     .with_redis(redis.clone())
     .with_job_config(job_config);

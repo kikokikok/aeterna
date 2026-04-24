@@ -44,9 +44,10 @@ impl AzureAdClient {
         {
             let cached = self.access_token.read().await;
             if let Some(ref token) = *cached
-                && token.expires_at > Utc::now() + chrono::Duration::minutes(5) {
-                    return Ok(token.token.clone());
-                }
+                && token.expires_at > Utc::now() + chrono::Duration::minutes(5)
+            {
+                return Ok(token.token.clone());
+            }
         }
 
         let token_url = format!(

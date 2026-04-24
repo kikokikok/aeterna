@@ -1500,9 +1500,10 @@ async fn find_entry_by_id(
             .knowledge_repository
             .list(ctx.clone(), *layer, "")
             .await
-            && let Some(entry) = entries.into_iter().find(|entry| entry.path == id) {
-                return Some(entry);
-            }
+            && let Some(entry) = entries.into_iter().find(|entry| entry.path == id)
+        {
+            return Some(entry);
+        }
     }
     None
 }

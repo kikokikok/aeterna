@@ -45,9 +45,10 @@ pub fn generate_all(config: &SetupConfig, output_dir: &Path) -> Result<Vec<PathB
     }
 
     if config.opencode_enabled
-        && let Some(mcp_path) = generate_opencode_config(config)? {
-            generated.push(mcp_path);
-        }
+        && let Some(mcp_path) = generate_opencode_config(config)?
+    {
+        generated.push(mcp_path);
+    }
 
     Ok(generated)
 }

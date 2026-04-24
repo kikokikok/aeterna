@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
-const RTO_LIMIT: Duration = Duration::from_secs(900);
+const RTO_LIMIT: Duration = Duration::from_mins(15);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 enum DrDrillStep {

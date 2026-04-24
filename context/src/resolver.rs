@@ -180,17 +180,19 @@ impl ContextResolver {
 
         // Layer 5: Git config user.email -> user_id
         if let Some(ref git_path) = git_root
-            && let Some(email) = self.resolve_git_user_email(git_path) {
-                trace!("Found git user.email: {}", email);
-                ctx.user_id = ResolvedValue::new(email, ContextSource::GitConfig);
-            }
+            && let Some(email) = self.resolve_git_user_email(git_path)
+        {
+            trace!("Found git user.email: {}", email);
+            ctx.user_id = ResolvedValue::new(email, ContextSource::GitConfig);
+        }
 
         // Layer 4: Git remote URL -> project_id
         if let Some(ref git_path) = git_root
-            && let Some(project_id) = self.resolve_git_project_id(git_path) {
-                trace!("Found git project_id: {}", project_id);
-                ctx.project_id = Some(ResolvedValue::new(project_id, ContextSource::GitRemote));
-            }
+            && let Some(project_id) = self.resolve_git_project_id(git_path)
+        {
+            trace!("Found git project_id: {}", project_id);
+            ctx.project_id = Some(ResolvedValue::new(project_id, ContextSource::GitRemote));
+        }
 
         // Layer 3: Context file (.aeterna/context.toml)
         if let Some(ref toml_path) = context_toml_path {
@@ -440,10 +442,11 @@ impl ContextResolver {
 
         // Handle preset override
         if let Some(value) = self.explicit_overrides.get("preset")
-            && let Ok(preset) = value.parse() {
-                let hints = OperationHints::from_preset(preset);
-                ctx.hints = ResolvedValue::explicit(hints);
-            }
+            && let Ok(preset) = value.parse()
+        {
+            let hints = OperationHints::from_preset(preset);
+            ctx.hints = ResolvedValue::explicit(hints);
+        }
     }
 }
 
@@ -506,44 +509,46 @@ impl CedarContextResolver {
 
         if let Some(ref project) = ctx.project_id
             && project.source == ContextSource::GitRemote
-                && let Ok(cedar_project) = self
-                    .client
-                    .resolve_project_by_git_remote(&project.value)
-                    .await
-                {
-                    debug!(
-                        "Resolved project from Cedar Agent: {}",
-                        cedar_project.uid.id
-                    );
-                    ctx.project_id = Some(ResolvedValue::new(
-                        cedar_project.uid.id.clone(),
-                        ContextSource::CedarAgent,
-                    ));
+            && let Ok(cedar_project) = self
+                .client
+                .resolve_project_by_git_remote(&project.value)
+                .await
+        {
+            debug!(
+                "Resolved project from Cedar Agent: {}",
+                cedar_project.uid.id
+            );
+            ctx.project_id = Some(ResolvedValue::new(
+                cedar_project.uid.id.clone(),
+                ContextSource::CedarAgent,
+            ));
 
-                    if let Some(team_parent) = cedar_project
-                        .parents
-                        .iter()
-                        .find(|p| p.entity_type == "Aeterna::Team")
-                    {
-                        ctx.team_id = Some(ResolvedValue::new(
-                            team_parent.id.clone(),
-                            ContextSource::CedarAgent,
-                        ));
-                    }
-                }
-
-        if ctx.user_id.source == ContextSource::GitConfig && ctx.user_id.value.contains('@')
-            && let Ok(cedar_user) = self.client.resolve_user_by_email(&ctx.user_id.value).await {
-                debug!("Resolved user from Cedar Agent: {}", cedar_user.uid.id);
-                ctx.user_id =
-                    ResolvedValue::new(cedar_user.uid.id.clone(), ContextSource::CedarAgent);
-
-                if ctx.tenant_id.source == ContextSource::SystemDefault
-                    && let Some(company_slug) = cedar_user.get_attr_str("company_slug") {
-                        ctx.tenant_id =
-                            ResolvedValue::new(company_slug.to_string(), ContextSource::CedarAgent);
-                    }
+            if let Some(team_parent) = cedar_project
+                .parents
+                .iter()
+                .find(|p| p.entity_type == "Aeterna::Team")
+            {
+                ctx.team_id = Some(ResolvedValue::new(
+                    team_parent.id.clone(),
+                    ContextSource::CedarAgent,
+                ));
             }
+        }
+
+        if ctx.user_id.source == ContextSource::GitConfig
+            && ctx.user_id.value.contains('@')
+            && let Ok(cedar_user) = self.client.resolve_user_by_email(&ctx.user_id.value).await
+        {
+            debug!("Resolved user from Cedar Agent: {}", cedar_user.uid.id);
+            ctx.user_id = ResolvedValue::new(cedar_user.uid.id.clone(), ContextSource::CedarAgent);
+
+            if ctx.tenant_id.source == ContextSource::SystemDefault
+                && let Some(company_slug) = cedar_user.get_attr_str("company_slug")
+            {
+                ctx.tenant_id =
+                    ResolvedValue::new(company_slug.to_string(), ContextSource::CedarAgent);
+            }
+        }
 
         Ok(ctx)
     }

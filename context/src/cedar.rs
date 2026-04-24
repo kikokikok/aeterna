@@ -152,9 +152,10 @@ impl CedarConfig {
         }
 
         if let Ok(timeout) = std::env::var("CEDAR_AGENT_TIMEOUT")
-            && let Ok(secs) = timeout.parse() {
-                config.timeout_secs = secs;
-            }
+            && let Ok(secs) = timeout.parse()
+        {
+            config.timeout_secs = secs;
+        }
 
         if let Ok(cache) = std::env::var("CEDAR_AGENT_CACHE_ENABLED") {
             config.cache_enabled = cache.parse().unwrap_or(true);
@@ -631,10 +632,11 @@ impl CedarClient {
             for (uid, (entity, _)) in &cache.entities {
                 if uid.entity_type == "Aeterna::User"
                     && let Some(e) = entity.get_attr_str("email")
-                        && e == email {
-                            trace!("User found in cache: {}", uid);
-                            return Ok(entity.clone());
-                        }
+                    && e == email
+                {
+                    trace!("User found in cache: {}", uid);
+                    return Ok(entity.clone());
+                }
             }
         }
 
@@ -664,10 +666,11 @@ impl CedarClient {
             for (uid, (entity, _)) in &cache.entities {
                 if uid.entity_type == "Aeterna::Project"
                     && let Some(remote) = entity.get_attr_str("git_remote")
-                        && remote == git_remote {
-                            trace!("Project found in cache: {}", uid);
-                            return Ok(entity.clone());
-                        }
+                    && remote == git_remote
+                {
+                    trace!("Project found in cache: {}", uid);
+                    return Ok(entity.clone());
+                }
             }
         }
 
@@ -837,9 +840,10 @@ impl CedarClient {
                             if let Some(org) = all_entities.iter().find(|e| e.uid == *team_parent) {
                                 for org_parent in &org.parents {
                                     if org_parent.entity_type == "Aeterna::Company"
-                                        && !layers.company_ids.contains(&org_parent.id) {
-                                            layers.company_ids.push(org_parent.id.clone());
-                                        }
+                                        && !layers.company_ids.contains(&org_parent.id)
+                                    {
+                                        layers.company_ids.push(org_parent.id.clone());
+                                    }
                                 }
                             }
                         }

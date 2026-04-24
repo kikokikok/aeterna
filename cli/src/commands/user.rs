@@ -423,17 +423,18 @@ async fn run_show(args: UserShowArgs) -> anyhow::Result<()> {
             println!("  Name:   {}", result["name"].as_str().unwrap_or("?"));
             println!("  Status: {}", result["status"].as_str().unwrap_or("?"));
             if args.verbose
-                && let Some(roles) = result["roles"].as_array() {
-                    println!();
-                    output::subheader("Roles");
-                    for role in roles {
-                        println!(
-                            "  {}  {}",
-                            role["scope"].as_str().unwrap_or("?"),
-                            role["role"].as_str().unwrap_or("?")
-                        );
-                    }
+                && let Some(roles) = result["roles"].as_array()
+            {
+                println!();
+                output::subheader("Roles");
+                for role in roles {
+                    println!(
+                        "  {}  {}",
+                        role["scope"].as_str().unwrap_or("?"),
+                        role["role"].as_str().unwrap_or("?")
+                    );
                 }
+            }
             println!();
         }
         return Ok(());

@@ -724,13 +724,14 @@ async fn delete_tenant_secret(
         {
             Ok(Some(existing)) => {
                 if let Some(ref_entry) = existing.secret_references.get(&logical_name)
-                    && ref_entry.ownership == TenantConfigOwnership::Platform {
-                        return error_response(
-                            StatusCode::FORBIDDEN,
-                            "forbidden",
-                            "TenantAdmin cannot delete a platform-owned secret entry",
-                        );
-                    }
+                    && ref_entry.ownership == TenantConfigOwnership::Platform
+                {
+                    return error_response(
+                        StatusCode::FORBIDDEN,
+                        "forbidden",
+                        "TenantAdmin cannot delete a platform-owned secret entry",
+                    );
+                }
             }
             Ok(None) => {}
             Err(err) => return map_tenant_config_provider_error("secret_delete", err),
@@ -1000,14 +1001,14 @@ async fn delete_my_tenant_secret(
         .as_ref()
         .and_then(|config| config.secret_references.get(&logical_name))
         && reference.ownership == TenantConfigOwnership::Platform
-            && !ctx.has_known_role(&Role::PlatformAdmin)
-        {
-            return error_response(
-                StatusCode::FORBIDDEN,
-                "forbidden",
-                "TenantAdmin cannot delete platform-owned secret entries",
-            );
-        }
+        && !ctx.has_known_role(&Role::PlatformAdmin)
+    {
+        return error_response(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "TenantAdmin cannot delete platform-owned secret entries",
+        );
+    }
 
     match state
         .tenant_config_provider
@@ -4008,19 +4009,20 @@ fn validate_manifest(m: &TenantManifest) -> Vec<String> {
                 errors.push(format!("providers.{slot}.kind must not be empty"));
             }
             if let Some(ref_name) = &p.secret_ref
-                && !declared_refs.contains(ref_name.as_str()) {
-                    let declared_list = if declared_refs.is_empty() {
-                        "none".to_string()
-                    } else {
-                        let mut v: Vec<&str> = declared_refs.iter().copied().collect();
-                        v.sort();
-                        v.join(", ")
-                    };
-                    errors.push(format!(
-                        "providers.{slot}.secretRef '{ref_name}' does not resolve in \
+                && !declared_refs.contains(ref_name.as_str())
+            {
+                let declared_list = if declared_refs.is_empty() {
+                    "none".to_string()
+                } else {
+                    let mut v: Vec<&str> = declared_refs.iter().copied().collect();
+                    v.sort();
+                    v.join(", ")
+                };
+                errors.push(format!(
+                    "providers.{slot}.secretRef '{ref_name}' does not resolve in \
                          config.secretReferences (declared: {declared_list})"
-                    ));
-                }
+                ));
+            }
         }
 
         if let Some(llm) = &providers.llm {
@@ -4064,11 +4066,10 @@ fn validate_manifest(m: &TenantManifest) -> Vec<String> {
     //    sentinel for "unset" and rejecting it catches accidental `0` from
     //    serializers that default numbers).
     if let Some(meta) = &m.metadata
-        && meta.generation == Some(0) {
-            errors.push(
-                "metadata.generation must be >= 1 when set (use omit for auto-assign)".into(),
-            );
-        }
+        && meta.generation == Some(0)
+    {
+        errors.push("metadata.generation must be >= 1 when set (use omit for auto-assign)".into());
+    }
 
     // ── secret_references: per-variant well-formedness (B1 §1.2). The
     //    serde `tag = "kind"` union already rejects unknown kinds at parse
@@ -4143,11 +4144,12 @@ fn validate_manifest(m: &TenantManifest) -> Vec<String> {
                         ));
                     }
                     if let Some(ns) = namespace
-                        && ns.trim().is_empty() {
-                            errors.push(format!(
+                        && ns.trim().is_empty()
+                    {
+                        errors.push(format!(
                                 "config.secretReferences.{ref_name}.namespace, when set, must not be empty (omit to use the server's namespace)"
                             ));
-                        }
+                    }
                 }
                 mk_core::SecretReference::Vault { mount, path, field } => {
                     for (label, value) in [("mount", mount), ("path", path), ("field", field)] {
@@ -4433,48 +4435,49 @@ async fn provision_tenant(
     // match some stored sentinel — there is no sentinel, but the
     // `if Some(prior)` guard documents the intent.
     if let Some((Some(prior_hash), _)) = prior_state.as_ref()
-        && prior_hash == &incoming_hash {
-            let is_dry_run = query.dry_run.unwrap_or(false);
-            // Dry-run on an unchanged manifest audits a preview event,
-            // not a real unchanged-apply. Callers treat these separately
-            // (a preview does not imply the operator decided to proceed).
-            audit_tenant_action_ext(
-                state.as_ref(),
-                &ctx,
-                if is_dry_run {
-                    "tenant_provision_dry_run_unchanged"
-                } else {
-                    "tenant_provision_unchanged"
-                },
-                None,
-                json!({
-                    "slug": manifest.tenant.slug,
-                    "hash": incoming_hash,
-                    "generation": current_generation,
-                    "dryRun": is_dry_run,
-                }),
-                AuditExtensions {
-                    manifest_hash: Some(incoming_hash.clone()),
-                    generation: Some(current_generation),
-                    dry_run: Some(is_dry_run),
-                    ..audit_ext_base.clone()
-                },
-            )
-            .await;
-            return (
-                StatusCode::OK,
-                Json(json!({
-                    "success": true,
-                    "status": "unchanged",
-                    "slug": manifest.tenant.slug,
-                    "hash": incoming_hash,
-                    "generation": current_generation,
-                    "steps": Vec::<ProvisionStep>::new(),
-                    "dryRun": is_dry_run,
-                })),
-            )
-                .into_response();
-        }
+        && prior_hash == &incoming_hash
+    {
+        let is_dry_run = query.dry_run.unwrap_or(false);
+        // Dry-run on an unchanged manifest audits a preview event,
+        // not a real unchanged-apply. Callers treat these separately
+        // (a preview does not imply the operator decided to proceed).
+        audit_tenant_action_ext(
+            state.as_ref(),
+            &ctx,
+            if is_dry_run {
+                "tenant_provision_dry_run_unchanged"
+            } else {
+                "tenant_provision_unchanged"
+            },
+            None,
+            json!({
+                "slug": manifest.tenant.slug,
+                "hash": incoming_hash,
+                "generation": current_generation,
+                "dryRun": is_dry_run,
+            }),
+            AuditExtensions {
+                manifest_hash: Some(incoming_hash.clone()),
+                generation: Some(current_generation),
+                dry_run: Some(is_dry_run),
+                ..audit_ext_base.clone()
+            },
+        )
+        .await;
+        return (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "status": "unchanged",
+                "slug": manifest.tenant.slug,
+                "hash": incoming_hash,
+                "generation": current_generation,
+                "steps": Vec::<ProvisionStep>::new(),
+                "dryRun": is_dry_run,
+            })),
+        )
+            .into_response();
+    }
 
     // Strict-monotonic generation check. Only rejects when the caller
     // explicitly set a non-increasing value; omitted `generation` is
