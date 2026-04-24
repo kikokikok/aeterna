@@ -721,6 +721,22 @@ pub struct TenantApplyArgs {
     /// output keeps working. (B2 §7.6)
     #[arg(long)]
     pub watch: bool,
+
+    /// Abort the apply if no lifecycle event arrives within this
+    /// many seconds. Only meaningful together with `--watch`.
+    ///
+    /// Resets on every received frame — the wall-clock for the
+    /// entire apply is unbounded, it's specifically *stalls* that
+    /// trigger the bail. Designed for CI pipelines that tolerate a
+    /// slow provisioner but want to fail fast when the provisioner
+    /// wedges (e.g. the IAM step is waiting on an external service
+    /// that's down).
+    ///
+    /// `0` (the default) means no timeout. Typical values: `30`
+    /// for fast tests, `300` for real provisioning flows.
+    /// (B2 §7.7)
+    #[arg(long, default_value_t = 0, value_name = "SECS")]
+    pub watch_timeout: u64,
 }
 
 #[derive(Args)]
@@ -3094,24 +3110,48 @@ async fn run_apply(args: TenantApplyArgs) -> anyhow::Result<()> {
             Some(slug) => {
                 let client_clone = client.clone();
                 let json_mode = args.json;
+                let stall_timeout = if args.watch_timeout > 0 {
+                    Some(std::time::Duration::from_secs(args.watch_timeout))
+                } else {
+                    None
+                };
                 let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
                 let task = tokio::spawn(async move {
-                    // Non-fatal: if the subscription fails (server
-                    // returned 404 because the tenant doesn't exist
-                    // yet on first create, or the caller lacks the
-                    // read scope), log and move on — the apply
-                    // itself still runs and the operator gets the
-                    // final response the usual way.
-                    if let Err(e) = stream_tenant_events(
+                    // Non-fatal at the subscription layer: if the
+                    // stream fails to open (server returned 404
+                    // because the tenant doesn't exist yet on first
+                    // create, or the caller lacks the read scope),
+                    // log and move on — the apply itself still runs
+                    // and the operator gets the final response the
+                    // usual way.
+                    //
+                    // EXCEPT: a `watch_stall` error (from the stall
+                    // timeout arm) is re-raised to the foreground
+                    // as a fatal — the whole point of `--watch-timeout`
+                    // is to abort the apply when the stream wedges.
+                    // We signal this by returning the error, which
+                    // the main task inspects after cancellation.
+                    match stream_tenant_events(
                         &client_clone,
                         &slug,
                         json_mode,
                         FrameSink::Stderr,
                         cancel_rx,
+                        stall_timeout,
                     )
                     .await
                     {
-                        eprintln!("warning: watch stream ended: {e}");
+                        Ok(()) => None,
+                        Err(e) => {
+                            let msg = e.to_string();
+                            if msg.starts_with("watch_stall:") {
+                                eprintln!("{msg}");
+                                Some(e)
+                            } else {
+                                eprintln!("warning: watch stream ended: {e}");
+                                None
+                            }
+                        }
                     }
                 });
                 // Give the server a tick to register the subscriber
@@ -3136,16 +3176,68 @@ async fn run_apply(args: TenantApplyArgs) -> anyhow::Result<()> {
         None
     };
 
-    let apply_result = client.tenant_apply(&manifest, args.allow_inline).await;
+    // Race the apply against the watch task. Semantics:
+    //
+    // * Apply finishes first  → cancel the watch task, drain it
+    //                           briefly to flush buffered frames,
+    //                           proceed with the normal result path.
+    // * Watch task returns    → either the stream EOF'd (Ok(None))
+    //                           or the stall-timeout fired
+    //                           (Ok(Some(err))).  On EOF keep
+    //                           waiting on apply; on stall, drop
+    //                           the apply future (tokio::select!
+    //                           drops the losing arm) and bail with
+    //                           the stall error.
+    //
+    // When `--watch` is not set, `watch_handle` is `None` and we
+    // just await the apply straight — the existing 957-test path.
+    let apply_result = if let Some((cancel_tx, task)) = watch_handle {
+        let apply_fut = client.tenant_apply(&manifest, args.allow_inline);
+        tokio::pin!(apply_fut);
+        tokio::pin!(task);
 
-    // Cancel the watch subscription and briefly wait for the task to
-    // flush any in-flight frames already buffered in reqwest. Done
-    // before we interpret the apply result so the operator sees the
-    // step events before the summary line.
-    if let Some((cancel_tx, task)) = watch_handle {
-        let _ = cancel_tx.send(());
-        let _ = tokio::time::timeout(std::time::Duration::from_millis(200), task).await;
-    }
+        tokio::select! {
+            // Apply finished first — cancel the watch task and drain
+            // it briefly so any in-flight frame renders before the
+            // summary line hits stdout.
+            res = &mut apply_fut => {
+                let _ = cancel_tx.send(());
+                let _ = tokio::time::timeout(
+                    std::time::Duration::from_millis(200),
+                    task,
+                ).await;
+                res
+            }
+            // Watch task finished first — either stall-timeout fired
+            // or the server closed the stream. Stall is fatal; EOF
+            // is recoverable (keep waiting on the apply).
+            task_res = &mut task => {
+                match task_res {
+                    // Stall timeout fired — drop the apply future
+                    // (tokio::select! drops the losing arm on
+                    // break) and bail with the stall error. The
+                    // server-side apply may still complete, but
+                    // the CLI has explicitly opted to fail fast.
+                    Ok(Some(stall_err)) => return Err(stall_err),
+                    // Stream EOF mid-apply — odd, but non-fatal.
+                    // Let the apply round-trip finish. `cancel_tx`
+                    // drops here; the now-completed task future is
+                    // left untouched (already resolved).
+                    Ok(None) => {
+                        drop(cancel_tx);
+                        apply_fut.await
+                    }
+                    Err(je) => {
+                        eprintln!("warning: watch task panicked: {je}");
+                        drop(cancel_tx);
+                        apply_fut.await
+                    }
+                }
+            }
+        }
+    } else {
+        client.tenant_apply(&manifest, args.allow_inline).await
+    };
 
     let body = apply_result.inspect_err(|e| {
         if args.json {
@@ -3421,7 +3513,15 @@ async fn run_watch(args: TenantWatchArgs) -> anyhow::Result<()> {
     // which the select! arm also treats as cancellation. But in
     // practice `run_watch` ends on stream EOF, not cancellation.
     let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
-    stream_tenant_events(&client, &args.slug, args.json, FrameSink::Stdout, cancel_rx).await
+    stream_tenant_events(
+        &client,
+        &args.slug,
+        args.json,
+        FrameSink::Stdout,
+        cancel_rx,
+        None, // `tenant watch` has no stall timeout — it's an interactive tail
+    )
+    .await
 }
 
 /// Target stream for rendered frames.
@@ -3539,15 +3639,23 @@ fn render_watch_frame_to(frame: &SseFrame, json_mode: bool, sink: FrameSink) {
 /// Open an SSE subscription for `slug` and forward frames to `sink`
 /// until either the server closes the stream or `cancel` is fired.
 ///
-/// Used by `run_watch` (sink = stdout, cancel = never) and by
-/// `run_apply --watch` (sink = stderr, cancel = fired after the
-/// apply HTTP round-trip returns).
+/// Used by `run_watch` (sink = stdout, cancel = never, no stall
+/// timeout) and by `run_apply --watch [--watch-timeout=N]`
+/// (sink = stderr, cancel = fired after the apply HTTP round-trip
+/// returns, stall timeout resets on every incoming byte chunk).
+///
+/// `stall_timeout`: when `Some(dur)`, bails with a `watch_stall`
+/// error if no chunk arrives within `dur`. Resets on every chunk
+/// (not every parsed frame — a batched chunk is one reset, which
+/// is the correct signal: the server is still live). When `None`,
+/// the stream runs untimed. (B2 §7.7)
 async fn stream_tenant_events(
     client: &crate::client::AeternaClient,
     slug: &str,
     json_mode: bool,
     sink: FrameSink,
     mut cancel: tokio::sync::oneshot::Receiver<()>,
+    stall_timeout: Option<std::time::Duration>,
 ) -> anyhow::Result<()> {
     use futures_util::StreamExt;
 
@@ -3575,6 +3683,15 @@ async fn stream_tenant_events(
     let mut parser = SseParser::new();
 
     loop {
+        // Build a stall-timeout future each iteration. When the flag
+        // is off, substitute a future that never resolves so the
+        // select! below treats it as a permanently pending arm.
+        let stall_fut: std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> =
+            match stall_timeout {
+                Some(dur) => Box::pin(tokio::time::sleep(dur)),
+                None => Box::pin(std::future::pending::<()>()),
+            };
+
         tokio::select! {
             // Cancellation wins if both arms are ready, so a late
             // frame arriving concurrently with the cancel signal
@@ -3583,6 +3700,13 @@ async fn stream_tenant_events(
             // "trailing frame" window to whatever's already buffered
             // in reqwest's chunk queue.
             _ = &mut cancel => return Ok(()),
+            () = stall_fut => {
+                anyhow::bail!(
+                    "watch_stall: no event received from tenant '{slug}' within {}s \
+                     (server may be wedged — check `aeterna admin health`)",
+                    stall_timeout.map(|d| d.as_secs()).unwrap_or(0),
+                );
+            }
             maybe_chunk = stream.next() => {
                 let Some(chunk) = maybe_chunk else { return Ok(()) };
                 let chunk = chunk.map_err(|e| anyhow::anyhow!("stream read failed: {e}"))?;
@@ -4702,6 +4826,59 @@ mod tests {
             }
             _ => panic!("expected Apply variant"),
         }
+    }
+
+    #[test]
+    fn test_tenant_apply_watch_timeout_parses() {
+        // B2 §7.7 — `--watch-timeout=30` must parse as an integer
+        // seconds count (NOT a humantime string; we deliberately
+        // avoid that dep). Also verifies default is 0 (disabled)
+        // and that `--watch-timeout` composes with `--watch`.
+        use clap::Parser;
+
+        #[derive(Parser)]
+        struct Wrap {
+            #[command(subcommand)]
+            cmd: TenantCommand,
+        }
+
+        // Default: 0 means "no stall timeout".
+        let parsed = Wrap::try_parse_from(["prog", "apply", "-f", "m.json"]).unwrap();
+        let TenantCommand::Apply(args) = parsed.cmd else {
+            panic!("expected Apply variant");
+        };
+        assert_eq!(args.watch_timeout, 0);
+
+        // With both flags.
+        let parsed = Wrap::try_parse_from([
+            "prog",
+            "apply",
+            "-f",
+            "m.json",
+            "--yes",
+            "--watch",
+            "--watch-timeout",
+            "45",
+        ])
+        .unwrap();
+        let TenantCommand::Apply(args) = parsed.cmd else {
+            panic!("expected Apply variant");
+        };
+        assert!(args.watch);
+        assert_eq!(args.watch_timeout, 45);
+
+        // `--watch-timeout` without `--watch` is accepted by clap
+        // (we treat it as a no-op at runtime — the flag is only
+        // meaningful together with `--watch`). Keeps the clap
+        // surface simple.
+        let parsed =
+            Wrap::try_parse_from(["prog", "apply", "-f", "m.json", "--watch-timeout", "10"])
+                .unwrap();
+        let TenantCommand::Apply(args) = parsed.cmd else {
+            panic!("expected Apply variant");
+        };
+        assert!(!args.watch);
+        assert_eq!(args.watch_timeout, 10);
     }
 
     #[test]
