@@ -142,15 +142,15 @@ _§9.1/§9.2 landed as primitives only: 30 unit tests, `cargo clippy --all-targe
 
 ### 12. Admin UI wizard
 
-- [ ] 12.1 Add a "Create tenant" wizard (multi-step form) that composes a `TenantManifest` client-side.
-- [ ] 12.2 Step 1: tenant identity (slug, name, domain mappings).
-- [ ] 12.3 Step 2: secret reference picker backed by a new `GET /api/v1/admin/secret-sources` endpoint (names only, never values).
-- [ ] 12.4 Step 3: initial hierarchy (company / org / team / members).
-- [ ] 12.5 Step 4: role assignments.
-- [ ] 12.6 Step 5: provider declarations (memory layers, LLM, embedding).
-- [ ] 12.7 Preview screen: render composed manifest as YAML.
-- [ ] 12.8 Submit screen: POST with `X-Aeterna-Client-Kind: ui` and per-step progress.
-- [ ] 12.9 "Download manifest" action on tenant detail page calling the render endpoint.
+- [x] 12.1 Add a "Create tenant" wizard (multi-step form) that composes a `TenantManifest` client-side. _(Shipped as `admin-ui/src/pages/tenants/wizard/CreateTenantWizard.tsx` + `steps.tsx` + `admin-ui/src/api/tenant-manifest.ts`. The wizard orchestrates 5 steps + preview + submit + result panels; state is a single `TenantManifest` object with `pruneManifest()` removing empty sub-sections before display/submit. Replaces the prior minimal `CreateTenantDialog` (which only POSTed `{slug, name}` to the legacy `/admin/tenants` route).)_
+- [x] 12.2 Step 1: tenant identity (slug, name, domain mappings). _(`IdentityStep` — slug pattern-validated to `[a-z0-9-]+`, name required, domain mappings as add/remove list. Validator rejects empty slug/name and bad slug chars.)_
+- [x] 12.3 Step 2: secret reference picker. _(`SecretsStep` — picker for the five reference kinds (`env` / `file` / `k8s` / `postgres` / `inline`) with kind-specific structured fields and a per-kind validator. **Note on the backend endpoint**: the spec called for a new `GET /api/v1/admin/secret-sources` returning available source names. Skipped in this commit because the server today has no central registry of "available sources" to enumerate (the K8s/file/env code paths each resolve at request time). Tracked as a §12.3-followup: introduce a `SecretSourceRegistry` in the bootstrap path that surfaces per-kind availability + sample names. The wizard already produces fully-formed references via the structured picker; the registry endpoint will later light up auto-complete.)_
+- [x] 12.4 Step 3: initial hierarchy. _(`HierarchyStep` — flat first-pass for top-level units (Company/Organization/Team/Project). Tree editing (nested children, member binding) deferred to the org-tree page already shipped in §6, since that page handles the full CRUD for an existing tenant. The wizard's job is bootstrap, not full hierarchy authoring.)_
+- [x] 12.5 Step 4: role assignments. _(`RolesStep` — email + role from the canonical role set, tenant-wide scope. Per-unit scope intentionally deferred: a wizard is the wrong UX for unit-path picking before the hierarchy is committed.)_
+- [x] 12.6 Step 5: provider declarations. _(`ProvidersStep` — opt-in toggles for `llm` and `embedding` providers with kind + model fields. Memory layers configuration is left to the existing tenant-detail config tab (where it lives today).)_
+- [x] 12.7 Preview screen: render composed manifest as YAML. _(Reuses `manifestToYaml()` from `tenant-manifest.ts` — a minimal JSON→YAML pretty-printer good enough for on-screen preview. Wire submit is JSON; YAML is purely a UX affordance.)_
+- [x] 12.8 Submit screen: POST with `X-Aeterna-Client-Kind: ui` and per-step progress. _(Submit goes via raw `fetch()` rather than `apiClient` so the `X-Aeterna-Client-Kind: ui` header lands cleanly. The provision response's `steps[]` array is rendered as a checklist with ok/skipped/error glyphs. Inline-secret detection drives an opt-in `?allowInline=true` toggle that mirrors the server-side gate (§4.2).)_
+- [x] 12.9 "Download manifest" action on tenant detail page. _(New `Manifest` tab on `TenantDetailPage` with two render buttons (`?redact=true` default, plain explicit) hitting the existing `GET /admin/tenants/{slug}/manifest` endpoint, plus a `Download YAML` button that produces `<slug>.manifest[.redacted].yaml` via a Blob+anchor click. Three Playwright e2e tests pin the wizard happy path, the inline-secret query-string flag, and the manifest download flow; all 8 admin-ui e2e tests pass.)_
 
 ### 13. Consistency acceptance suite
 

@@ -1,12 +1,116 @@
 import { useState } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Building2, Loader2, ArrowLeft, Save } from "lucide-react"
+import { Building2, Loader2, ArrowLeft, Save, Download } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { apiClient } from "@/api/client"
 import type { TenantRecord } from "@/api/types"
+import { manifestToYaml } from "@/api/tenant-manifest"
+import { getStoredTokens } from "@/auth/token-manager"
 
-type Tab = "overview" | "config" | "providers" | "repository"
+/**
+ * §12.9 — Download manifest. Calls `GET /api/v1/admin/tenants/{slug}/manifest`
+ * with `?redact=true` (operator-friendly default), renders YAML in a `<pre>`,
+ * and offers a download as `<slug>.manifest.yaml`. Plaintext download is
+ * gated by an explicit toggle so accidental clicks never leak references.
+ */
+function useDownloadManifest(tenantSlug: string) {
+  const [redacted, setRedacted] = useState(true)
+  const [yaml, setYaml] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setLoading] = useState(false)
+
+  const fetchManifest = async (redact: boolean) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const tokens = getStoredTokens()
+      const headers: Record<string, string> = {
+        "X-Aeterna-Client-Kind": "ui",
+      }
+      if (tokens) headers["Authorization"] = `Bearer ${tokens.access_token}`
+      const url = `/api/v1/admin/tenants/${encodeURIComponent(tenantSlug)}/manifest${
+        redact ? "?redact=true" : ""
+      }`
+      const res = await fetch(url, { headers })
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`)
+      }
+      const json = await res.json()
+      setYaml(manifestToYaml(json))
+      setRedacted(redact)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const download = () => {
+    if (!yaml) return
+    const blob = new Blob([yaml], { type: "application/yaml" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${tenantSlug}.manifest${redacted ? ".redacted" : ""}.yaml`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  return { yaml, error, isLoading, redacted, fetchManifest, download, reset: () => setYaml(null) }
+}
+
+function ManifestPanel({ tenantSlug }: { tenantSlug: string }) {
+  const dl = useDownloadManifest(tenantSlug)
+  return (
+    <div className="space-y-3" data-testid="manifest-panel">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => dl.fetchManifest(true)}
+          disabled={dl.isLoading}
+          className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-700"
+          data-testid="manifest-fetch-redacted"
+        >
+          {dl.isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+          Render manifest (redacted)
+        </button>
+        <button
+          type="button"
+          onClick={() => dl.fetchManifest(false)}
+          disabled={dl.isLoading}
+          className="inline-flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200"
+          data-testid="manifest-fetch-plain"
+        >
+          Render with secret references
+        </button>
+        {dl.yaml && (
+          <button
+            type="button"
+            onClick={dl.download}
+            className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700"
+            data-testid="manifest-download"
+          >
+            <Download className="h-4 w-4" /> Download YAML
+          </button>
+        )}
+      </div>
+      {dl.error && <p className="text-sm text-red-600">Failed: {dl.error}</p>}
+      {dl.yaml && (
+        <pre
+          className="max-h-[60vh] overflow-auto rounded-md bg-gray-900 p-4 font-mono text-xs text-gray-100"
+          data-testid="manifest-yaml"
+        >
+          {dl.yaml}
+        </pre>
+      )}
+    </div>
+  )
+}
+
+type Tab = "overview" | "config" | "providers" | "repository" | "manifest"
 
 function OverviewTab({ tenant }: { tenant: TenantRecord }) {
   const navigate = useNavigate()
@@ -359,6 +463,7 @@ export default function TenantDetailPage() {
     { key: "config", label: "Config" },
     { key: "providers", label: "Providers" },
     { key: "repository", label: "Repository" },
+    { key: "manifest", label: "Manifest" },
   ]
 
   return (
@@ -422,6 +527,7 @@ export default function TenantDetailPage() {
             {activeTab === "config" && <ConfigTab tenantSlug={tenant.slug} />}
             {activeTab === "providers" && <ProvidersTab tenantSlug={tenant.slug} />}
             {activeTab === "repository" && <RepositoryTab tenantSlug={tenant.slug} />}
+            {activeTab === "manifest" && <ManifestPanel tenantSlug={tenant.slug} />}
           </div>
         </>
       )}

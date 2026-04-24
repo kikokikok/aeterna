@@ -1,106 +1,11 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Building2, Plus, Search, Loader2, X } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
+import { Building2, Plus, Search, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { apiClient } from "@/api/client"
 import type { TenantRecord } from "@/api/types"
-
-function CreateTenantDialog({
-  open,
-  onClose,
-}: {
-  open: boolean
-  onClose: () => void
-}) {
-  const queryClient = useQueryClient()
-  const [slug, setSlug] = useState("")
-  const [name, setName] = useState("")
-
-  const createTenant = useMutation({
-    mutationFn: (data: { slug: string; name: string }) =>
-      apiClient.post("/api/v1/admin/tenants", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tenants"] })
-      setSlug("")
-      setName("")
-      onClose()
-    },
-  })
-
-  if (!open) return null
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Create Tenant</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            createTenant.mutate({ slug, name })
-          }}
-        >
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Slug
-              </label>
-              <input
-                type="text"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                required
-                pattern="[a-z0-9-]+"
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-                placeholder="my-tenant"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Name
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-                placeholder="My Tenant"
-              />
-            </div>
-          </div>
-          {createTenant.isError && (
-            <p className="mt-2 text-sm text-red-600">
-              Failed to create tenant. Please try again.
-            </p>
-          )}
-          <div className="mt-6 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={createTenant.isPending}
-              className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {createTenant.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Create
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
+import { CreateTenantWizard } from "./wizard/CreateTenantWizard"
 
 function TenantListPageContent() {
   const navigate = useNavigate()
@@ -220,7 +125,7 @@ function TenantListPageContent() {
         </table>
       </div>
 
-      <CreateTenantDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
+      <CreateTenantWizard open={dialogOpen} onClose={() => setDialogOpen(false)} />
     </>
   )
 }
