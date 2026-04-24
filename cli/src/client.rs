@@ -687,6 +687,57 @@ impl AeternaClient {
         parse_json_response(self.post("/api/v1/admin/tenants/provision", body).await?).await
     }
 
+    /// POST `/api/v1/admin/tenants/provision` — B2 §7.1 `tenant apply`.
+    ///
+    /// Real-apply variant with structured-error tolerance. Unlike
+    /// the bare [`Self::tenant_provision`], this helper returns the
+    /// body on:
+    ///
+    /// - **200 OK** — all steps succeeded (`success: true`,
+    ///   `status: "applied"` | `"unchanged"`).
+    /// - **207 Multi-Status** — partial failure (`success: false`,
+    ///   `status: "partial"`, `steps[].ok` mixed). The CLI renders
+    ///   per-step failures and exits non-zero.
+    /// - **409 Conflict** — `generation_conflict`. Surfaced as a
+    ///   body so the renderer can show `currentGeneration` vs
+    ///   `submittedGeneration` + hint.
+    /// - **422 Unprocessable** — `manifest_validation_failed` OR
+    ///   `inline_secret_not_allowed`. Rendered identically to the
+    ///   dry-run validation error path.
+    ///
+    /// Any other status (auth, 5xx, transport) still bails — those
+    /// are real infrastructure errors, not manifest problems.
+    ///
+    /// `allow_inline` appends `?allowInline=true` when the caller
+    /// opts into inline `secrets[].secretValue` plaintext on a
+    /// dev-mode server. Off by default.
+    pub async fn tenant_apply(
+        &self,
+        manifest: &serde_json::Value,
+        allow_inline: bool,
+    ) -> Result<serde_json::Value> {
+        let path = if allow_inline {
+            "/api/v1/admin/tenants/provision?allowInline=true"
+        } else {
+            "/api/v1/admin/tenants/provision"
+        };
+        let resp = self.post(path, manifest).await?;
+        let status = resp.status();
+        // 2xx (including 207) + the two structured-error states
+        // (409 generation conflict, 422 validation / inline-secret)
+        // all carry a JSON body the caller renders.
+        let is_structured_error = status == reqwest::StatusCode::CONFLICT
+            || status == reqwest::StatusCode::UNPROCESSABLE_ENTITY;
+        if status.is_success() || is_structured_error {
+            return resp
+                .json::<serde_json::Value>()
+                .await
+                .context("Invalid JSON response from tenant apply");
+        }
+        let text = resp.text().await.unwrap_or_default();
+        bail!("Tenant apply failed (HTTP {status}): {text}");
+    }
+
     /// Submit a manifest to the provision endpoint with `dryRun=true`.
     ///
     /// Unlike [`tenant_provision`], this helper treats `HTTP 422

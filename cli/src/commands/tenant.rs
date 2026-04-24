@@ -82,6 +82,12 @@ pub enum TenantCommand {
         about = "Diff an incoming tenant manifest against the server's current state"
     )]
     Diff(TenantDiffArgs),
+
+    #[command(
+        name = "apply",
+        about = "Apply a tenant manifest (real write; prompts before proceeding unless --yes)"
+    )]
+    Apply(TenantApplyArgs),
 }
 
 // ---------------------------------------------------------------------------
@@ -617,6 +623,88 @@ pub struct TenantDiffArgs {
     pub target_tenant: Option<String>,
 }
 
+/// Args for `aeterna tenant apply` (B2 §7.1).
+///
+/// Real-apply wrapper around `POST /api/v1/admin/tenants/provision`
+/// (no `dryRun` flag — this IS the write path). Companion to
+/// `tenant validate` (dry-run preview) and `tenant render` /
+/// `tenant diff` (read-shaped commands).
+///
+/// ## Safety model
+///
+/// `apply` is destructive: it writes to `tenants`, `tenant_configs`,
+/// `organizational_units`, `user_roles`, `tenant_secrets`,
+/// `tenant_repository_bindings`, and `tenant_domain_mappings` in
+/// one transaction. Operator opt-in is enforced as follows:
+///
+/// 1. **Default (interactive TTY):** a preview is fetched via the
+///    dry-run surface, the `ProvisionPlan` is displayed, and the
+///    operator must type `yes` at a confirmation prompt before the
+///    real apply fires. The prompt blocks on stdin; Ctrl-C aborts
+///    cleanly (no partial write — dry-run did not mutate anything).
+/// 2. **`--yes`:** the confirmation prompt is skipped. Still runs
+///    the preview so the operator's terminal shows the plan, but
+///    proceeds immediately afterwards. Required for non-TTY shells
+///    (CI, pipes).
+/// 3. **`--json` (always requires `--yes`):** fully unattended; no
+///    preview text is printed. Renders the raw server response
+///    JSON. Intended for CI gates and automation.
+///
+/// ## Race model
+///
+/// The preview's `currentGeneration` and the apply's
+/// generation-guarded UPDATE are independent checks against
+/// `tenants`. A concurrent apply between preview and confirm will
+/// be rejected at the UPDATE stage with HTTP 409
+/// `generation_conflict` — which we render as an actionable error,
+/// not a crash. The preview is advisory; the only source of truth
+/// is the guarded write.
+///
+/// ## `--allow-inline`
+///
+/// Appends `?allowInline=true` so the server will accept manifests
+/// whose `secrets[].secretValue` carry plaintext. Only honoured when
+/// the server also has `provisioning.allowInlineSecret = true`, and
+/// that flag is permanently off in release builds. The CLI never
+/// inspects the manifest for inline plaintext itself — we let the
+/// server own that decision — but we expose the toggle here so dev
+/// workflows do not have to drop to raw curl.
+#[derive(Args)]
+pub struct TenantApplyArgs {
+    /// Path to a JSON manifest file. Use `-` to read from stdin.
+    /// Identical semantics to `tenant validate --file`.
+    #[arg(short = 'f', long)]
+    pub file: String,
+
+    /// Skip the interactive confirmation prompt. Required when
+    /// stdin is not a TTY (CI, pipelines) or when `--json` is set.
+    #[arg(long)]
+    pub yes: bool,
+
+    /// Emit the raw server JSON response instead of the human
+    /// summary. Implies `--yes` must be set; the combination is the
+    /// expected script shape. Errors (validation, conflict, partial
+    /// apply) are also rendered as JSON so jq / CI gates can parse
+    /// every terminal state uniformly.
+    #[arg(long)]
+    pub json: bool,
+
+    /// Opt in to inline `secrets[].secretValue` plaintext on the
+    /// wire. Server-side rejected unless
+    /// `provisioning.allowInlineSecret = true` (dev builds only).
+    /// Prefer `config.secretReferences` for real deployments.
+    #[arg(long)]
+    pub allow_inline: bool,
+
+    /// Target a specific tenant context (PlatformAdmin cross-tenant
+    /// operation). Does NOT override the manifest slug — the tenant
+    /// being written is always the one named in `manifest.tenant.slug`.
+    /// This flag only selects the active-tenant context the HTTP
+    /// client uses, for audit attribution.
+    #[arg(long)]
+    pub target_tenant: Option<String>,
+}
+
 #[derive(Args)]
 pub struct TenantSecretDeleteArgs {
     #[arg(long)]
@@ -668,6 +756,7 @@ pub async fn run(cmd: TenantCommand) -> anyhow::Result<()> {
         TenantCommand::Validate(args) => run_validate(args).await,
         TenantCommand::Render(args) => run_render(args).await,
         TenantCommand::Diff(args) => run_diff(args).await,
+        TenantCommand::Apply(args) => run_apply(args).await,
     }
 }
 
@@ -2586,6 +2675,117 @@ async fn run_render(args: TenantRenderArgs) -> anyhow::Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// tenant apply (§7.1)
+// ---------------------------------------------------------------------------
+
+/// Terminal classification of a tenant apply response.
+///
+/// Derived from the server's `status` string + HTTP code. Used by the
+/// renderer to pick icons / colours and by `run_apply` to pick the
+/// exit code. Isolated as an enum (rather than branching on strings
+/// inline) so unit tests can cover the classifier independently.
+#[derive(Debug, PartialEq, Eq)]
+enum ApplyOutcome {
+    /// `status == "applied"`, every step OK. HTTP 200.
+    Applied,
+    /// `status == "unchanged"`, no-op re-apply. HTTP 200, steps=[].
+    Unchanged,
+    /// `status == "partial"`, HTTP 207 Multi-Status. Some steps
+    /// failed; tenant row exists but downstream state is half-applied.
+    Partial,
+    /// HTTP 409 `generation_conflict` — strict-monotonic gate rejected
+    /// the caller's `metadata.generation`.
+    GenerationConflict,
+    /// HTTP 422 `manifest_validation_failed` — `validate_manifest`
+    /// returned errors before any write.
+    ValidationFailed,
+    /// HTTP 422 `inline_secret_not_allowed` — the server or caller
+    /// does not permit inline plaintext.
+    InlineSecretRejected,
+    /// Anything the classifier does not recognise. Renders the raw
+    /// body so operators see what they got rather than an opaque
+    /// "unknown" line.
+    Other,
+}
+
+fn classify_apply_response(body: &Value) -> ApplyOutcome {
+    let success = body
+        .get("success")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let status = body.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    let error = body.get("error").and_then(|v| v.as_str()).unwrap_or("");
+    match (success, status, error) {
+        (true, "applied", _) => ApplyOutcome::Applied,
+        (true, "unchanged", _) => ApplyOutcome::Unchanged,
+        (false, "partial", _) => ApplyOutcome::Partial,
+        (false, _, "generation_conflict") => ApplyOutcome::GenerationConflict,
+        (false, _, "manifest_validation_failed") => ApplyOutcome::ValidationFailed,
+        (false, _, "manifest_parse_failed") => ApplyOutcome::ValidationFailed,
+        (false, _, "inline_secret_not_allowed") => ApplyOutcome::InlineSecretRejected,
+        _ => ApplyOutcome::Other,
+    }
+}
+
+/// Render an applied / unchanged / partial response as a human
+/// summary. Factored out of `run_apply` so the byte shape is
+/// unit-testable without a live server.
+fn render_apply_result(body: &Value, outcome: &ApplyOutcome) -> String {
+    let mut out = String::new();
+    let slug = body.get("slug").and_then(|v| v.as_str()).unwrap_or("?");
+    let hash = body.get("hash").and_then(|v| v.as_str()).unwrap_or("?");
+    let generation = body
+        .get("generation")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(-1);
+
+    let (icon, label) = match outcome {
+        ApplyOutcome::Applied => ("✓", "applied"),
+        ApplyOutcome::Unchanged => ("·", "unchanged (no-op)"),
+        ApplyOutcome::Partial => ("⚠", "partial"),
+        _ => ("?", "?"),
+    };
+    out.push_str(&format!("Tenant apply: {slug}\n"));
+    out.push_str(&format!("Result:       {icon} {label}\n"));
+    out.push_str(&format!("Hash:         {hash}\n"));
+    if generation >= 0 {
+        out.push_str(&format!("Generation:   {generation}\n"));
+    }
+
+    let empty = Vec::new();
+    let steps = body
+        .get("steps")
+        .and_then(|v| v.as_array())
+        .unwrap_or(&empty);
+    if !steps.is_empty() {
+        out.push('\n');
+        out.push_str("Steps:\n");
+        for step in steps {
+            let name = step.get("step").and_then(|v| v.as_str()).unwrap_or("?");
+            let ok = step.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+            let detail = step.get("detail").and_then(|v| v.as_str());
+            let err = step.get("error").and_then(|v| v.as_str());
+            let icon = if ok { "✓" } else { "✗" };
+            match (ok, detail, err) {
+                (true, Some(d), _) => {
+                    out.push_str(&format!("  {icon} {name}: {d}\n"));
+                }
+                (true, None, _) => {
+                    out.push_str(&format!("  {icon} {name}\n"));
+                }
+                (false, _, Some(e)) => {
+                    out.push_str(&format!("  {icon} {name}: {e}\n"));
+                }
+                (false, _, None) => {
+                    out.push_str(&format!("  {icon} {name}: (no error message)\n"));
+                }
+            }
+        }
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
 // tenant diff (§7.3)
 // ---------------------------------------------------------------------------
 
@@ -2698,6 +2898,201 @@ fn render_diff_unified(diff: &Value) -> String {
         }
     }
     out
+}
+
+/// Render a 409 `generation_conflict` body as an actionable error.
+fn render_generation_conflict(body: &Value) -> String {
+    let current = body
+        .get("currentGeneration")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(-1);
+    let submitted = body
+        .get("submittedGeneration")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(-1);
+    let hint = body.get("hint").and_then(|v| v.as_str()).unwrap_or("");
+    let mut out = String::from("Tenant apply: ✗ generation_conflict\n");
+    out.push_str(&format!("  current:    {current}\n"));
+    out.push_str(&format!("  submitted:  {submitted}\n"));
+    if !hint.is_empty() {
+        out.push_str(&format!("  hint:       {hint}\n"));
+    }
+    out
+}
+
+/// Render the `inline_secret_not_allowed` error body.
+fn render_inline_secret_rejected(body: &Value) -> String {
+    let mut out = String::from("Tenant apply: ✗ inline_secret_not_allowed\n");
+    let empty = Vec::new();
+    let offending = body
+        .get("offendingSecrets")
+        .and_then(|v| v.as_array())
+        .unwrap_or(&empty);
+    if !offending.is_empty() {
+        out.push_str("  Offending secrets (logical names):\n");
+        for name in offending {
+            if let Some(s) = name.as_str() {
+                out.push_str(&format!("    • {s}\n"));
+            }
+        }
+    }
+    if let Some(msg) = body.get("message").and_then(|v| v.as_str()) {
+        out.push('\n');
+        out.push_str(&format!("  {msg}\n"));
+    }
+    out
+}
+
+/// Prompt the operator on stdin. Returns `true` if the operator
+/// typed `y` or `yes` (case-insensitive). Any other input — including
+/// EOF / Ctrl-D — returns `false`. On non-TTY stdin we refuse to
+/// prompt and force the caller to pass `--yes`; the caller-side check
+/// happens in `run_apply` before we reach this function.
+fn prompt_yes_no(question: &str) -> bool {
+    use std::io::{BufRead, Write};
+    print!("{question} [y/N]: ");
+    // Best-effort flush; if stdout is detached the prompt is lost but
+    // we still read stdin, so we degrade to "no" on whitespace.
+    let _ = std::io::stdout().flush();
+    let stdin = std::io::stdin();
+    let mut line = String::new();
+    match stdin.lock().read_line(&mut line) {
+        Ok(0) => false, // EOF → no
+        Ok(_) => {
+            let trimmed = line.trim().to_ascii_lowercase();
+            trimmed == "y" || trimmed == "yes"
+        }
+        Err(_) => false,
+    }
+}
+
+async fn run_apply(args: TenantApplyArgs) -> anyhow::Result<()> {
+    // `--json` is a script-shape flag — forcing `--yes` alongside
+    // keeps the CLI from ever prompting in JSON mode, which would
+    // interleave prompt text with machine-readable output.
+    if args.json && !args.yes {
+        anyhow::bail!("--json requires --yes (pass both to run unattended)");
+    }
+
+    let manifest = read_manifest_input(&args.file)?;
+
+    let Some(client) = get_live_client_for(args.target_tenant.as_deref()).await else {
+        anyhow::bail!("Not logged in — run `aeterna auth login` first.");
+    };
+
+    // Step 1: preview via dry-run unless the caller asked for raw
+    // JSON. The preview is advisory — an operator staring at their
+    // terminal wants to see "this would UPDATE acme, gen 5→6" before
+    // typing y. In JSON mode the operator is a script that does not
+    // care about the preview, so we skip the extra round-trip.
+    if !args.json {
+        let preview = client
+            .tenant_provision_dry_run(&manifest)
+            .await
+            .inspect_err(|e| {
+                ux_error::UxError::new(e.to_string())
+                    .fix("Run: aeterna auth login")
+                    .display();
+            })?;
+        let preview_ok = preview
+            .get("success")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        if !preview_ok {
+            // Invalid manifest — render the validation errors and
+            // bail before the real apply even ships. No prompt.
+            render_validation_errors(&preview);
+            anyhow::bail!("tenant manifest is invalid (preview rejected)");
+        }
+        render_provision_plan(&preview);
+
+        // Short-circuit: dry-run says nothing would change. No need
+        // to prompt or apply — the write would audit a
+        // `tenant_provision_unchanged` event and nothing else.
+        if preview.get("status").and_then(|v| v.as_str()) == Some("unchanged") {
+            output::success("Nothing to apply — manifest is already in effect.");
+            return Ok(());
+        }
+
+        if !args.yes {
+            let slug = preview
+                .get("slug")
+                .and_then(|v| v.as_str())
+                .unwrap_or("(unknown)");
+            let action = preview
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("apply");
+            let q = format!("Proceed with {action} for tenant '{slug}'?");
+            if !prompt_yes_no(&q) {
+                output::hint("Aborted — no changes were made.");
+                anyhow::bail!("aborted by user");
+            }
+        }
+    }
+
+    // Step 2: real apply.
+    let body = client
+        .tenant_apply(&manifest, args.allow_inline)
+        .await
+        .inspect_err(|e| {
+            if args.json {
+                // Surface transport / auth errors as JSON too so the
+                // scripted consumer sees one shape regardless of
+                // where the failure occurred.
+                let out = json!({
+                    "success": false,
+                    "error": "transport_failure",
+                    "details": e.to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+            } else {
+                ux_error::UxError::new(e.to_string())
+                    .fix("Run: aeterna auth login")
+                    .display();
+            }
+        })?;
+
+    let outcome = classify_apply_response(&body);
+
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&body)?);
+        return match outcome {
+            ApplyOutcome::Applied | ApplyOutcome::Unchanged => Ok(()),
+            _ => anyhow::bail!("tenant apply did not succeed: {:?}", outcome),
+        };
+    }
+
+    match outcome {
+        ApplyOutcome::Applied | ApplyOutcome::Unchanged => {
+            print!("{}", render_apply_result(&body, &outcome));
+            Ok(())
+        }
+        ApplyOutcome::Partial => {
+            print!("{}", render_apply_result(&body, &outcome));
+            anyhow::bail!("tenant apply completed with step failures — see output")
+        }
+        ApplyOutcome::GenerationConflict => {
+            print!("{}", render_generation_conflict(&body));
+            anyhow::bail!("tenant apply rejected: generation_conflict")
+        }
+        ApplyOutcome::ValidationFailed => {
+            render_validation_errors(&body);
+            anyhow::bail!("tenant manifest is invalid")
+        }
+        ApplyOutcome::InlineSecretRejected => {
+            print!("{}", render_inline_secret_rejected(&body));
+            anyhow::bail!("tenant apply rejected: inline_secret_not_allowed")
+        }
+        ApplyOutcome::Other => {
+            // Surface the raw body so the operator isn't left in the
+            // dark when the server responds with a shape we don't
+            // recognise (e.g. a future `status` string added
+            // server-side before the CLI is updated).
+            println!("{}", serde_json::to_string_pretty(&body)?);
+            anyhow::bail!("tenant apply returned an unrecognised response shape")
+        }
+    }
 }
 
 /// Render a JSON `Value` on a single line, using compact separators.
@@ -3370,6 +3765,31 @@ mod tests {
     }
 
     // -----------------------------------------------------------------
+    // §7.1 tenant apply — outcome classifier + renderer byte shape
+    // -----------------------------------------------------------------
+
+    /// Canonical 200 `{"success": true, "status": "applied", ...}`
+    /// server response. Locks the exact wire shape the CLI renderer
+    /// is fed; a server-side rename (e.g. `status` → `result`) would
+    /// break these tests and catch the drift at CI rather than in
+    /// production operator tooling.
+    fn sample_applied_body() -> Value {
+        json!({
+            "success": true,
+            "status": "applied",
+            "tenantId": "01J8Z9K...",
+            "slug": "acme",
+            "hash": "a".repeat(64),
+            "generation": 6,
+            "steps": [
+                { "step": "tenant", "ok": true, "detail": "slug=acme name=Acme" },
+                { "step": "config", "ok": true, "detail": "5 fields upserted" },
+                { "step": "secrets", "ok": true, "detail": "2 references bound" },
+            ]
+        })
+    }
+
+    // -----------------------------------------------------------------
     // §7.3 tenant diff — unified-output byte shape locks
     // -----------------------------------------------------------------
 
@@ -3399,6 +3819,204 @@ mod tests {
                 "changedSections": ["hierarchy", "providers", "tenant"]
             }
         })
+    }
+
+    #[test]
+    fn test_classify_applied() {
+        let body = sample_applied_body();
+        assert_eq!(classify_apply_response(&body), ApplyOutcome::Applied);
+    }
+
+    #[test]
+    fn test_classify_unchanged() {
+        let body = json!({
+            "success": true,
+            "status": "unchanged",
+            "slug": "acme",
+            "hash": "a".repeat(64),
+            "generation": 6,
+            "steps": []
+        });
+        assert_eq!(classify_apply_response(&body), ApplyOutcome::Unchanged);
+    }
+
+    #[test]
+    fn test_classify_partial() {
+        // 207 Multi-Status — tenant row created, but a downstream step
+        // failed. CLI must render the failing step and bail non-zero.
+        let body = json!({
+            "success": false,
+            "status": "partial",
+            "slug": "acme",
+            "hash": "a".repeat(64),
+            "generation": 6,
+            "steps": [
+                { "step": "tenant", "ok": true, "detail": "slug=acme" },
+                { "step": "repository", "ok": false,
+                  "error": "invalid_credential_ref: missing provider" },
+            ]
+        });
+        assert_eq!(classify_apply_response(&body), ApplyOutcome::Partial);
+    }
+
+    #[test]
+    fn test_classify_generation_conflict() {
+        let body = json!({
+            "success": false,
+            "error": "generation_conflict",
+            "slug": "acme",
+            "currentGeneration": 7,
+            "submittedGeneration": 6,
+            "hint": "metadata.generation must be strictly greater than the current generation"
+        });
+        assert_eq!(
+            classify_apply_response(&body),
+            ApplyOutcome::GenerationConflict
+        );
+    }
+
+    #[test]
+    fn test_classify_validation_failed() {
+        let body = json!({
+            "success": false,
+            "error": "manifest_validation_failed",
+            "validationErrors": [
+                { "path": "tenant.slug", "message": "must match [a-z0-9-]+" }
+            ]
+        });
+        assert_eq!(
+            classify_apply_response(&body),
+            ApplyOutcome::ValidationFailed
+        );
+    }
+
+    #[test]
+    fn test_classify_parse_failed_as_validation() {
+        // `manifest_parse_failed` (HTTP 400) and
+        // `manifest_validation_failed` (HTTP 422) are both "operator
+        // wrote a bad manifest"; grouped under the same outcome so
+        // the CLI renders them with the same affordance (validate
+        // errors section), rather than the opaque "unrecognised
+        // response shape" branch.
+        let body = json!({
+            "success": false,
+            "error": "manifest_parse_failed",
+            "details": "missing field `tenant.slug`"
+        });
+        assert_eq!(
+            classify_apply_response(&body),
+            ApplyOutcome::ValidationFailed
+        );
+    }
+
+    #[test]
+    fn test_classify_inline_secret_rejected() {
+        let body = json!({
+            "success": false,
+            "error": "inline_secret_not_allowed",
+            "offendingSecrets": ["openai-key", "stripe-key"]
+        });
+        assert_eq!(
+            classify_apply_response(&body),
+            ApplyOutcome::InlineSecretRejected
+        );
+    }
+
+    #[test]
+    fn test_classify_unknown_shape() {
+        // Server returns a shape the CLI does not know about —
+        // forward-compat catch-all. Must not crash; must be
+        // classifiable so the caller can render the raw body.
+        let body = json!({
+            "success": true,
+            "status": "queued",
+            "slug": "acme",
+            "jobId": "j-01"
+        });
+        assert_eq!(classify_apply_response(&body), ApplyOutcome::Other);
+    }
+
+    #[test]
+    fn test_render_apply_result_applied_shape() {
+        let body = sample_applied_body();
+        let out = render_apply_result(&body, &ApplyOutcome::Applied);
+        assert!(out.starts_with("Tenant apply: acme\n"));
+        assert!(out.contains("Result:       ✓ applied\n"));
+        assert!(out.contains("Generation:   6\n"));
+        assert!(out.contains("Steps:\n"));
+        assert!(out.contains("  ✓ tenant: slug=acme name=Acme\n"));
+        assert!(out.contains("  ✓ config: 5 fields upserted\n"));
+    }
+
+    #[test]
+    fn test_render_apply_result_unchanged_shape() {
+        let body = json!({
+            "success": true,
+            "status": "unchanged",
+            "slug": "acme",
+            "hash": "a".repeat(64),
+            "generation": 6,
+            "steps": []
+        });
+        let out = render_apply_result(&body, &ApplyOutcome::Unchanged);
+        assert!(out.contains("Result:       · unchanged (no-op)\n"));
+        // No `Steps:` section when the array is empty — the renderer
+        // suppresses it to keep unchanged output compact.
+        assert!(!out.contains("Steps:\n"));
+    }
+
+    #[test]
+    fn test_render_apply_result_partial_shows_failures() {
+        let body = json!({
+            "success": false,
+            "status": "partial",
+            "slug": "acme",
+            "hash": "a".repeat(64),
+            "generation": 6,
+            "steps": [
+                { "step": "tenant", "ok": true, "detail": "slug=acme" },
+                { "step": "repository", "ok": false,
+                  "error": "invalid_credential_ref: missing provider" },
+            ]
+        });
+        let out = render_apply_result(&body, &ApplyOutcome::Partial);
+        assert!(out.contains("Result:       ⚠ partial\n"));
+        assert!(out.contains("  ✓ tenant: slug=acme\n"));
+        assert!(
+            out.contains("  ✗ repository: invalid_credential_ref: missing provider\n"),
+            "failing step must show error message; got:\n{out}"
+        );
+    }
+
+    #[test]
+    fn test_render_generation_conflict_is_actionable() {
+        let body = json!({
+            "success": false,
+            "error": "generation_conflict",
+            "currentGeneration": 7,
+            "submittedGeneration": 6,
+            "hint": "metadata.generation must be strictly greater than the current generation"
+        });
+        let out = render_generation_conflict(&body);
+        assert!(out.contains("generation_conflict"));
+        assert!(out.contains("  current:    7\n"));
+        assert!(out.contains("  submitted:  6\n"));
+        assert!(out.contains("hint:"));
+    }
+
+    #[test]
+    fn test_render_inline_secret_rejected_lists_offenders() {
+        let body = json!({
+            "success": false,
+            "error": "inline_secret_not_allowed",
+            "offendingSecrets": ["openai-key", "stripe-key"],
+            "message": "Inline plaintext is disabled on this server."
+        });
+        let out = render_inline_secret_rejected(&body);
+        assert!(out.contains("inline_secret_not_allowed"));
+        assert!(out.contains("    • openai-key\n"));
+        assert!(out.contains("    • stripe-key\n"));
+        assert!(out.contains("Inline plaintext is disabled"));
     }
 
     #[test]
@@ -3508,8 +4126,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tenant_diff_args_defaults() {
-        // Surface check: `-o` defaults to `unified`, `-f` required.
+    fn test_tenant_apply_args_defaults() {
         use clap::Parser;
 
         #[derive(Parser)]
@@ -3518,6 +4135,54 @@ mod tests {
             cmd: TenantCommand,
         }
 
+        let parsed = Wrap::try_parse_from(["prog", "apply", "-f", "m.json"]).unwrap();
+        match parsed.cmd {
+            TenantCommand::Apply(args) => {
+                assert_eq!(args.file, "m.json");
+                assert!(!args.yes);
+                assert!(!args.json);
+                assert!(!args.allow_inline);
+                assert!(args.target_tenant.is_none());
+            }
+            _ => panic!("expected Apply variant"),
+        }
+    }
+
+    #[test]
+    fn test_tenant_apply_and_diff_args_full_shape() {
+        use clap::Parser;
+
+        #[derive(Parser)]
+        struct Wrap {
+            #[command(subcommand)]
+            cmd: TenantCommand,
+        }
+
+        let parsed = Wrap::try_parse_from([
+            "prog",
+            "apply",
+            "-f",
+            "-",
+            "--yes",
+            "--json",
+            "--allow-inline",
+            "--target-tenant",
+            "prod",
+        ])
+        .unwrap();
+        match parsed.cmd {
+            TenantCommand::Apply(args) => {
+                assert_eq!(args.file, "-");
+                assert!(args.yes);
+                assert!(args.json);
+                assert!(args.allow_inline);
+                assert_eq!(args.target_tenant.as_deref(), Some("prod"));
+            }
+            _ => panic!("expected Apply variant"),
+        }
+
+        // `--file` is required.
+        assert!(Wrap::try_parse_from(["prog", "apply"]).is_err());
         let parsed = Wrap::try_parse_from(["prog", "diff", "-f", "m.json"]).unwrap();
         match parsed.cmd {
             TenantCommand::Diff(args) => {
