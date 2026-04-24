@@ -11,7 +11,7 @@ pub struct TimeBudgetConfig {
 impl Default for TimeBudgetConfig {
     fn default() -> Self {
         Self {
-            total_duration: Duration::from_secs(300),
+            total_duration: Duration::from_mins(5),
             warning_threshold_percent: 75.0,
         }
     }
@@ -188,7 +188,7 @@ mod tests {
     #[test]
     fn test_time_budget_config_default() {
         let config = TimeBudgetConfig::default();
-        assert_eq!(config.total_duration, Duration::from_secs(300));
+        assert_eq!(config.total_duration, Duration::from_mins(5));
         assert_eq!(config.warning_threshold_percent, 75.0);
     }
 
@@ -197,7 +197,7 @@ mod tests {
         let config = TimeBudgetConfig::default()
             .with_duration_secs(60)
             .with_warning_threshold(80.0);
-        assert_eq!(config.total_duration, Duration::from_secs(60));
+        assert_eq!(config.total_duration, Duration::from_mins(1));
         assert_eq!(config.warning_threshold_percent, 80.0);
     }
 
@@ -258,7 +258,7 @@ mod tests {
 
         let exhausted = BudgetCheck {
             status: BudgetStatus::Exhausted,
-            elapsed: Duration::from_secs(60),
+            elapsed: Duration::from_mins(1),
             remaining: Duration::ZERO,
             percent_used: 100.0,
         };
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn test_time_budget_exhausted_result() {
-        let result = TimeBudgetExhaustedResult::new(Duration::from_secs(120), 2);
+        let result = TimeBudgetExhaustedResult::new(Duration::from_mins(2), 2);
         assert_eq!(result.iterations_completed, 2);
         assert!(result.partial_results.is_none());
 
@@ -308,7 +308,7 @@ mod tests {
 
     #[test]
     fn test_time_budget_exhausted_result_with_partial() {
-        let result = TimeBudgetExhaustedResult::new(Duration::from_secs(60), 1)
+        let result = TimeBudgetExhaustedResult::new(Duration::from_mins(1), 1)
             .with_partial_results("partial build output");
 
         let msg = result.format_message();

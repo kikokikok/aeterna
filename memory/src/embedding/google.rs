@@ -86,7 +86,7 @@ impl GoogleEmbeddingService {
     fn with_cached_access_token(mut self, token: impl Into<String>) -> Self {
         self.access_token = Arc::new(RwLock::new(Some(CachedToken {
             token: token.into(),
-            expires_at: std::time::Instant::now() + std::time::Duration::from_secs(3600),
+            expires_at: std::time::Instant::now() + std::time::Duration::from_hours(1),
         })));
         self
     }

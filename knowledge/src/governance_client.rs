@@ -137,8 +137,8 @@ impl HybridGovernanceClient {
             local_engine,
             cache: Arc::new(RwLock::new(HybridCache::default())),
             sync_state: Arc::new(RwLock::new(SyncState::default())),
-            cache_ttl: Duration::from_secs(300),
-            sync_interval: Duration::from_secs(60),
+            cache_ttl: Duration::from_mins(5),
+            sync_interval: Duration::from_mins(1),
         }
     }
 
@@ -671,7 +671,7 @@ mod tests {
 
     #[test]
     fn test_cache_entry_not_expired() {
-        let entry = CacheEntry::new(42i32, Duration::from_secs(60));
+        let entry = CacheEntry::new(42i32, Duration::from_mins(1));
         assert!(!entry.is_expired());
     }
 
@@ -701,17 +701,17 @@ mod tests {
         let client =
             HybridGovernanceClient::new("http://localhost:8080".to_string(), engine.clone());
 
-        assert_eq!(client.cache_ttl, Duration::from_secs(300));
-        assert_eq!(client.sync_interval, Duration::from_secs(60));
+        assert_eq!(client.cache_ttl, Duration::from_mins(5));
+        assert_eq!(client.sync_interval, Duration::from_mins(1));
     }
 
     #[tokio::test]
     async fn test_hybrid_client_with_custom_ttl() {
         let engine = Arc::new(crate::governance::GovernanceEngine::new());
         let client = HybridGovernanceClient::new("http://localhost:8080".to_string(), engine)
-            .with_cache_ttl(Duration::from_secs(120));
+            .with_cache_ttl(Duration::from_mins(2));
 
-        assert_eq!(client.cache_ttl, Duration::from_secs(120));
+        assert_eq!(client.cache_ttl, Duration::from_mins(2));
     }
 
     #[tokio::test]
@@ -900,11 +900,11 @@ mod tests {
     async fn test_hybrid_client_builder_chain() {
         let engine = Arc::new(crate::governance::GovernanceEngine::new());
         let client = HybridGovernanceClient::new("http://localhost:8080".to_string(), engine)
-            .with_cache_ttl(Duration::from_secs(600))
-            .with_sync_interval(Duration::from_secs(120));
+            .with_cache_ttl(Duration::from_mins(10))
+            .with_sync_interval(Duration::from_mins(2));
 
-        assert_eq!(client.cache_ttl, Duration::from_secs(600));
-        assert_eq!(client.sync_interval, Duration::from_secs(120));
+        assert_eq!(client.cache_ttl, Duration::from_mins(10));
+        assert_eq!(client.sync_interval, Duration::from_mins(2));
     }
 
     #[tokio::test]

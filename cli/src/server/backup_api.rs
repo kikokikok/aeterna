@@ -164,15 +164,13 @@ impl ExportJobStore {
             if let Some(path_str) = &job.archive_path {
                 let path = std::path::PathBuf::from(path_str);
                 // Only remove local files, not S3 keys
-                if path.exists() {
-                    if tokio::fs::remove_file(&path).await.is_ok() {
-                        tracing::info!(
-                            job_id = %job.job_id,
-                            path = %path_str,
-                            "Cleaned up local archive file"
-                        );
-                        cleaned += 1;
-                    }
+                if path.exists() && tokio::fs::remove_file(&path).await.is_ok() {
+                    tracing::info!(
+                        job_id = %job.job_id,
+                        path = %path_str,
+                        "Cleaned up local archive file"
+                    );
+                    cleaned += 1;
                 }
             }
         }
@@ -225,10 +223,10 @@ impl ExportJobStore {
     /// Mark a completed job for cleanup by setting `completed_at` to now if
     /// it was not already set.
     async fn mark_for_cleanup(&self, job_id: &str) {
-        if let Some(job) = self.jobs.write().await.get_mut(job_id) {
-            if job.completed_at.is_none() {
-                job.completed_at = Some(chrono::Utc::now().to_rfc3339());
-            }
+        if let Some(job) = self.jobs.write().await.get_mut(job_id)
+            && job.completed_at.is_none()
+        {
+            job.completed_at = Some(chrono::Utc::now().to_rfc3339());
         }
     }
 }
@@ -340,15 +338,13 @@ impl RedisExportJobStore {
             }
             if let Some(path_str) = &job.archive_path {
                 let path = std::path::PathBuf::from(path_str);
-                if path.exists() {
-                    if tokio::fs::remove_file(&path).await.is_ok() {
-                        tracing::info!(
-                            job_id = %job.job_id,
-                            path = %path_str,
-                            "Cleaned up local archive file"
-                        );
-                        cleaned += 1;
-                    }
+                if path.exists() && tokio::fs::remove_file(&path).await.is_ok() {
+                    tracing::info!(
+                        job_id = %job.job_id,
+                        path = %path_str,
+                        "Cleaned up local archive file"
+                    );
+                    cleaned += 1;
                 }
             }
         }
@@ -861,8 +857,8 @@ pub fn init_job_stores(redis_conn: Option<&std::sync::Arc<redis::aio::Connection
 /// Clean up expired export jobs: remove archive files > 1 hour old,
 /// remove job records > 24 hours old, remove cancelled jobs immediately.
 pub async fn cleanup_expired_export_jobs() {
-    let archive_max_age = std::time::Duration::from_secs(3600); // 1 hour
-    let record_max_age = std::time::Duration::from_secs(86_400); // 24 hours
+    let archive_max_age = std::time::Duration::from_hours(1); // 1 hour
+    let record_max_age = std::time::Duration::from_hours(24); // 24 hours
 
     let files_cleaned = export_store().cleanup_archive_files(archive_max_age).await;
     let records_cleaned = export_store().cleanup_job_records(record_max_age).await;
@@ -879,7 +875,7 @@ pub async fn cleanup_expired_export_jobs() {
 /// Clean up expired import jobs: remove job records > 24 hours old,
 /// remove cancelled jobs immediately.
 pub async fn cleanup_expired_import_jobs() {
-    let record_max_age = std::time::Duration::from_secs(86_400); // 24 hours
+    let record_max_age = std::time::Duration::from_hours(24); // 24 hours
     let records_cleaned = import_store().cleanup_job_records(record_max_age).await;
 
     if records_cleaned > 0 {
@@ -923,14 +919,14 @@ pub async fn cleanup_temp_files() {
             continue;
         }
         // Check file age: only clean up files older than 2 hours
-        if let Ok(metadata) = tokio::fs::metadata(&path).await {
-            if let Ok(modified) = metadata.modified() {
-                let age = std::time::SystemTime::now()
-                    .duration_since(modified)
-                    .unwrap_or_default();
-                if age < std::time::Duration::from_secs(TEMP_FILE_MAX_AGE_SECS) {
-                    continue;
-                }
+        if let Ok(metadata) = tokio::fs::metadata(&path).await
+            && let Ok(modified) = metadata.modified()
+        {
+            let age = std::time::SystemTime::now()
+                .duration_since(modified)
+                .unwrap_or_default();
+            if age < std::time::Duration::from_secs(TEMP_FILE_MAX_AGE_SECS) {
+                continue;
             }
         }
         if tokio::fs::remove_file(&path).await.is_ok() {
@@ -3058,7 +3054,7 @@ mod tests {
         store.insert(job).await;
 
         let removed = store
-            .cleanup_job_records(std::time::Duration::from_secs(86_400))
+            .cleanup_job_records(std::time::Duration::from_hours(24))
             .await;
         assert_eq!(removed, 1);
         assert!(store.get("cancelled-1").await.is_none());
@@ -3083,7 +3079,7 @@ mod tests {
 
         // Use a 24-hour max age; the job was just completed so it should be retained
         let removed = store
-            .cleanup_job_records(std::time::Duration::from_secs(86_400))
+            .cleanup_job_records(std::time::Duration::from_hours(24))
             .await;
         assert_eq!(removed, 0);
         assert!(store.get("recent-1").await.is_some());
@@ -3109,7 +3105,7 @@ mod tests {
         store.insert(job).await;
 
         let removed = store
-            .cleanup_job_records(std::time::Duration::from_secs(86_400))
+            .cleanup_job_records(std::time::Duration::from_hours(24))
             .await;
         assert_eq!(removed, 1);
         assert!(store.get("old-1").await.is_none());
@@ -3156,7 +3152,7 @@ mod tests {
         store.insert(job).await;
 
         let removed = store
-            .cleanup_job_records(std::time::Duration::from_secs(86_400))
+            .cleanup_job_records(std::time::Duration::from_hours(24))
             .await;
         assert_eq!(removed, 1);
         assert!(store.get("imp-old-1").await.is_none());

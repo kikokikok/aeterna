@@ -163,10 +163,7 @@ pub fn validate_capabilities(caps: &[String]) -> Result<(), (StatusCode, &'stati
                 format!("capability exceeds 128 chars: {cap}"),
             ));
         }
-        if !KNOWN_CAPABILITIES
-            .iter()
-            .any(|known| *known == cap.as_str())
-        {
+        if !KNOWN_CAPABILITIES.contains(&cap.as_str()) {
             return Err((
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "invalid_capability",

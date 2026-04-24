@@ -326,31 +326,29 @@ fn run_validate(args: ValidateArgs) -> anyhow::Result<()> {
         &[(&user_path, "user"), (&project_path, "project")];
 
     for (path_opt, source) in sources {
-        if let Some(path) = path_opt {
-            if path.exists() {
-                match profile::load_config_file(path) {
-                    Ok(cfg) => {
-                        for (name, p) in &cfg.profiles {
-                            if p.server_url.is_empty() {
-                                issues.push(format!(
-                                    "[{source}] Profile '{name}': missing server_url"
-                                ));
-                            } else if !p.server_url.starts_with("http://")
-                                && !p.server_url.starts_with("https://")
-                            {
-                                issues.push(format!(
+        if let Some(path) = path_opt
+            && path.exists()
+        {
+            match profile::load_config_file(path) {
+                Ok(cfg) => {
+                    for (name, p) in &cfg.profiles {
+                        if p.server_url.is_empty() {
+                            issues.push(format!("[{source}] Profile '{name}': missing server_url"));
+                        } else if !p.server_url.starts_with("http://")
+                            && !p.server_url.starts_with("https://")
+                        {
+                            issues.push(format!(
                                     "[{source}] Profile '{name}': server_url must start with http:// or https://"
                                 ));
-                            }
-                            // Filter by --profile if provided
-                            if args.profile.as_deref().is_none_or(|n| n == name) {
-                                all_profiles.push((name.clone(), p.clone()));
-                            }
+                        }
+                        // Filter by --profile if provided
+                        if args.profile.as_deref().is_none_or(|n| n == name) {
+                            all_profiles.push((name.clone(), p.clone()));
                         }
                     }
-                    Err(e) => {
-                        issues.push(format!("[{source}] Cannot parse {}: {e}", path.display()));
-                    }
+                }
+                Err(e) => {
+                    issues.push(format!("[{source}] Cannot parse {}: {e}", path.display()));
                 }
             }
         }

@@ -497,10 +497,9 @@ mod tests {
                 kind,
                 reason: reason.clone(),
             },
-            ResolveError::WrongKind { expected, actual } => ResolveError::WrongKind {
-                expected: *expected,
-                actual: *actual,
-            },
+            ResolveError::WrongKind { expected, actual } => {
+                ResolveError::WrongKind { expected, actual }
+            }
         }
     }
 

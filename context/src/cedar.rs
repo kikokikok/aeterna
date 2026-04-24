@@ -151,10 +151,10 @@ impl CedarConfig {
             config.base_url = url;
         }
 
-        if let Ok(timeout) = std::env::var("CEDAR_AGENT_TIMEOUT") {
-            if let Ok(secs) = timeout.parse() {
-                config.timeout_secs = secs;
-            }
+        if let Ok(timeout) = std::env::var("CEDAR_AGENT_TIMEOUT")
+            && let Ok(secs) = timeout.parse()
+        {
+            config.timeout_secs = secs;
         }
 
         if let Ok(cache) = std::env::var("CEDAR_AGENT_CACHE_ENABLED") {
@@ -630,13 +630,12 @@ impl CedarClient {
         if self.config.cache_enabled {
             let cache = self.cache.read().await;
             for (uid, (entity, _)) in &cache.entities {
-                if uid.entity_type == "Aeterna::User" {
-                    if let Some(e) = entity.get_attr_str("email") {
-                        if e == email {
-                            trace!("User found in cache: {}", uid);
-                            return Ok(entity.clone());
-                        }
-                    }
+                if uid.entity_type == "Aeterna::User"
+                    && let Some(e) = entity.get_attr_str("email")
+                    && e == email
+                {
+                    trace!("User found in cache: {}", uid);
+                    return Ok(entity.clone());
                 }
             }
         }
@@ -665,13 +664,12 @@ impl CedarClient {
         if self.config.cache_enabled {
             let cache = self.cache.read().await;
             for (uid, (entity, _)) in &cache.entities {
-                if uid.entity_type == "Aeterna::Project" {
-                    if let Some(remote) = entity.get_attr_str("git_remote") {
-                        if remote == git_remote {
-                            trace!("Project found in cache: {}", uid);
-                            return Ok(entity.clone());
-                        }
-                    }
+                if uid.entity_type == "Aeterna::Project"
+                    && let Some(remote) = entity.get_attr_str("git_remote")
+                    && remote == git_remote
+                {
+                    trace!("Project found in cache: {}", uid);
+                    return Ok(entity.clone());
                 }
             }
         }
@@ -841,10 +839,10 @@ impl CedarClient {
                             // Find the org to get its company
                             if let Some(org) = all_entities.iter().find(|e| e.uid == *team_parent) {
                                 for org_parent in &org.parents {
-                                    if org_parent.entity_type == "Aeterna::Company" {
-                                        if !layers.company_ids.contains(&org_parent.id) {
-                                            layers.company_ids.push(org_parent.id.clone());
-                                        }
+                                    if org_parent.entity_type == "Aeterna::Company"
+                                        && !layers.company_ids.contains(&org_parent.id)
+                                    {
+                                        layers.company_ids.push(org_parent.id.clone());
                                     }
                                 }
                             }

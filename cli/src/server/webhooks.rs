@@ -309,13 +309,13 @@ async fn trigger_incremental_sync(state: &Arc<AppState>, org_name: &str) {
 /// and a warning is emitted so operators know the deployment needs configuration.
 fn webhook_tenant_context(state: &Arc<AppState>) -> TenantContext {
     let cfg = &state.plugin_auth_state.config;
-    if let Some(tenant_id) = resolve_tenant_for_github_user("", cfg) {
-        if let (Some(tid), Some(uid)) = (
+    if let Some(tenant_id) = resolve_tenant_for_github_user("", cfg)
+        && let (Some(tid), Some(uid)) = (
             mk_core::types::TenantId::new(tenant_id.clone()),
             mk_core::types::UserId::new("github-webhook".to_string()),
-        ) {
-            return TenantContext::new(tid, uid);
-        }
+        )
+    {
+        return TenantContext::new(tid, uid);
     }
     tracing::warn!(
         "No tenant configured for webhook events; using default tenant.          Set AETERNA_DEFAULT_TENANT_ID or configure plugin_auth.default_tenant_id."

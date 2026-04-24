@@ -221,7 +221,7 @@ impl GitHubProvider {
             .map_err(|e| GitProviderError::Auth(e.to_string()))?;
         let token_cache = Arc::new(Mutex::new(Some(CachedToken {
             token: token.to_string(),
-            expires_at: std::time::Instant::now() + std::time::Duration::from_secs(86400 * 365),
+            expires_at: std::time::Instant::now() + std::time::Duration::from_hours(8760),
         })));
         Ok(Self {
             client: Arc::new(Mutex::new(client)),
@@ -263,7 +263,7 @@ impl GitHubProvider {
 
         let token_cache = Arc::new(Mutex::new(Some(CachedToken {
             token,
-            expires_at: std::time::Instant::now() + std::time::Duration::from_secs(55 * 60),
+            expires_at: std::time::Instant::now() + std::time::Duration::from_mins(55),
         })));
 
         Ok(Self {
@@ -338,7 +338,7 @@ impl GitHubProvider {
         *self.client.lock().await = new_client;
         *self.token_cache.lock().await = Some(CachedToken {
             token,
-            expires_at: std::time::Instant::now() + std::time::Duration::from_secs(55 * 60),
+            expires_at: std::time::Instant::now() + std::time::Duration::from_mins(55),
         });
 
         Ok(())

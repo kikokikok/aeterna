@@ -271,12 +271,11 @@ fn run_non_interactive(args: &SetupArgs) -> Result<SetupConfig> {
         .mode
         .ok_or_else(|| anyhow::anyhow!("--mode is required in non-interactive mode"))?;
 
-    if matches!(mode, DeploymentMode::Hybrid | DeploymentMode::Remote) {
-        if args.central_url.is_none() {
-            return Err(anyhow::anyhow!(
-                "--central-url is required for hybrid/remote modes"
-            ));
-        }
+    if matches!(mode, DeploymentMode::Hybrid | DeploymentMode::Remote) && args.central_url.is_none()
+    {
+        return Err(anyhow::anyhow!(
+            "--central-url is required for hybrid/remote modes"
+        ));
     }
 
     let vector_backend = args.vector_backend.unwrap_or(VectorBackend::Qdrant);

@@ -18,8 +18,8 @@ use super::auth_middleware::AuthenticationLayer;
 use super::{
     AppState, admin_sync, backup_api, bootstrap_api, govern_api, health, knowledge_api,
     lifecycle_api, manifest_api, mcp_transport, memory_api, org_api, plugin_auth, project_api,
-    role_grants, service_tokens, sessions, sync, team_api, tenant_api, tenant_wiring_api, user_api,
-    webhooks,
+    role_grants, service_tokens, sessions, sync, team_api, tenant_api, tenant_events_api,
+    tenant_wiring_api, user_api, webhooks,
 };
 
 pub fn build_router(state: Arc<AppState>) -> Router {
@@ -47,6 +47,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         // alongside admin_sync so the /admin/tenants/... namespace
         // stays contiguous in the router.
         .merge(tenant_wiring_api::router(state.clone()))
+        .merge(tenant_events_api::router(state.clone()))
         // B3 task 2.2/2.3: reverse-render and redact the current
         // tenant state as a manifest. Mounted alongside the other
         // PA-only /admin/tenants/... endpoints.

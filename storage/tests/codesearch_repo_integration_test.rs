@@ -319,7 +319,7 @@ async fn test_mock_policy_evaluator_approval_deny() {
 #[tokio::test]
 async fn test_cached_evaluator_caches_results() {
     let inner = Arc::new(CountingPolicyEvaluator::new(true));
-    let cached = CachedPolicyEvaluator::new(inner.clone(), Duration::from_secs(60));
+    let cached = CachedPolicyEvaluator::new(inner.clone(), Duration::from_mins(1));
 
     let ctx = make_policy_context("alice", vec!["developer"]);
     let repo = make_test_repo("r1", RepositoryType::Remote, RepositoryStatus::Ready);
@@ -342,7 +342,7 @@ async fn test_cached_evaluator_caches_results() {
 #[tokio::test]
 async fn test_cached_evaluator_different_actions_not_shared() {
     let inner = Arc::new(CountingPolicyEvaluator::new(true));
-    let cached = CachedPolicyEvaluator::new(inner.clone(), Duration::from_secs(60));
+    let cached = CachedPolicyEvaluator::new(inner.clone(), Duration::from_mins(1));
 
     let ctx = make_policy_context("alice", vec!["developer"]);
     let repo = make_test_repo("r1", RepositoryType::Remote, RepositoryStatus::Ready);
@@ -362,7 +362,7 @@ async fn test_cached_evaluator_different_actions_not_shared() {
 #[tokio::test]
 async fn test_cached_evaluator_invalidate_clears_cache() {
     let inner = Arc::new(CountingPolicyEvaluator::new(true));
-    let cached = CachedPolicyEvaluator::new(inner.clone(), Duration::from_secs(60));
+    let cached = CachedPolicyEvaluator::new(inner.clone(), Duration::from_mins(1));
 
     let ctx = make_policy_context("alice", vec!["developer"]);
     let repo = make_test_repo("r1", RepositoryType::Remote, RepositoryStatus::Ready);
@@ -432,7 +432,7 @@ async fn test_cached_evaluator_evict_expired() {
 #[tokio::test]
 async fn test_cached_evaluator_approval_caching() {
     let inner = Arc::new(CountingPolicyEvaluator::new(true));
-    let cached = CachedPolicyEvaluator::new(inner.clone(), Duration::from_secs(60));
+    let cached = CachedPolicyEvaluator::new(inner.clone(), Duration::from_mins(1));
 
     let ctx = make_policy_context("admin", vec!["lead"]);
     let repo = make_test_repo("r1", RepositoryType::Remote, RepositoryStatus::Requested);

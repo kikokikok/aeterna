@@ -249,15 +249,15 @@ fn find_profile(
     user: Option<(&AeternaConfig, &Path)>,
 ) -> Result<(Profile, ConfigSource)> {
     // Project config takes precedence over user config
-    if let Some((cfg, path)) = project {
-        if let Some(p) = cfg.profiles.get(name) {
-            return Ok((p.clone(), ConfigSource::ProjectConfig(path.to_path_buf())));
-        }
+    if let Some((cfg, path)) = project
+        && let Some(p) = cfg.profiles.get(name)
+    {
+        return Ok((p.clone(), ConfigSource::ProjectConfig(path.to_path_buf())));
     }
-    if let Some((cfg, path)) = user {
-        if let Some(p) = cfg.profiles.get(name) {
-            return Ok((p.clone(), ConfigSource::UserConfig(path.to_path_buf())));
-        }
+    if let Some((cfg, path)) = user
+        && let Some(p) = cfg.profiles.get(name)
+    {
+        return Ok((p.clone(), ConfigSource::UserConfig(path.to_path_buf())));
     }
     // Return a skeleton if the profile is missing (lets callers give useful errors)
     Ok((
