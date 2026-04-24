@@ -40,20 +40,30 @@ tests/tenant_provisioning/
 |--------|-------------------------------------------------------|--------|
 | §13.1  | Scenario fixtures (5, covering bootstrap → prune)     | ✅     |
 | §13.2  | API runner (in-process router via `cargo test`)       | ✅     |
-| §13.3  | `runner_cli.rs` (spawns `aeterna tenant apply`)       | ⏳     |
+| §13.3  | `runner_cli.rs` (spawns `aeterna tenant apply`)       | ✅     |
 | §13.4  | `runner_ui.rs` (Playwright against `/admin/*`)        | ⏳     |
 | §13.5  | Render-diff assertions with allowlist                 | ✅     |
-| §13.6  | CI job `consistency-matrix` (matrix-shaped, api only) | ✅     |
+| §13.6  | CI job `consistency-matrix` (matrix-shaped, api+cli)  | ✅     |
 | §13.7  | CI job running structural pre-check (jq)              | ✅     |
 
 The API runner lives at
 [`cli/tests/tenant_provisioning_consistency_test.rs`](../../cli/tests/tenant_provisioning_consistency_test.rs).
 It runs every fixture sequentially through the in-process axum router
 against a testcontainer Postgres and structurally diffs each rendered
-tenant against the input manifest. The CLI and UI runners (§13.3 /
-§13.4) will reuse the same fixture set and the same `redact_volatile`
-allowlist; their absence today is a harness-shape gap, not a
-correctness gap.
+tenant against the input manifest.
+
+The CLI runner lives at
+[`cli/tests/tenant_provisioning_consistency_cli_test.rs`](../../cli/tests/tenant_provisioning_consistency_cli_test.rs).
+It binds the same axum router on a random `127.0.0.1:0` port, then
+spawns the real `aeterna` binary (`tenant apply` + `tenant render`)
+against that URL, with a seeded PlatformAdmin user and an HS256-minted
+JWT exported as `AETERNA_API_TOKEN`. Same fixture set, same
+`redact_volatile` allowlist, same `assert_round_trip` invariant — but
+exercising the binary's wire shape (including the
+`X-Aeterna-Client-Kind: cli` header that the API runner cannot reach).
+
+The UI runner (§13.4) is still ⏳; it will reuse the same fixtures and
+allowlist.
 
 ## Scenario Design Notes
 
