@@ -1,0 +1,15 @@
+{
+  "apiVersion": "aeterna.io/v1",
+  "kind": "TenantManifest",
+  "metadata": {
+    "generation": 1,
+    "labels": {
+      "scenario": "bootstrap",
+      "suite": "consistency"
+    }
+  },
+  "tenant": {
+    "slug": "acme-bootstrap",
+    "name": "Acme Bootstrap"
+  }
+}

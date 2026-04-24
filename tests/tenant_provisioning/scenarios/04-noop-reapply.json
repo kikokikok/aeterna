@@ -1,0 +1,33 @@
+{
+  "apiVersion": "aeterna.io/v1",
+  "kind": "TenantManifest",
+  "metadata": {
+    "generation": 3,
+    "labels": {
+      "scenario": "rotate-reference",
+      "suite": "consistency"
+    }
+  },
+  "tenant": {
+    "slug": "acme-bootstrap",
+    "name": "Acme Bootstrap"
+  },
+  "config": {
+    "fields": {
+      "default_embedding_model": {
+        "value": "text-embedding-3-small",
+        "ownership": "tenant"
+      }
+    },
+    "secretReferences": {
+      "webhook-signing-key": {
+        "logicalName": "webhook-signing-key",
+        "ownership": "tenant",
+        "kind": "k8s",
+        "name": "acme-webhook-secrets",
+        "key": "signing-key",
+        "namespace": "aeterna-tenants"
+      }
+    }
+  }
+}

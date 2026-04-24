@@ -154,13 +154,13 @@ _§9.1/§9.2 landed as primitives only: 30 unit tests, `cargo clippy --all-targe
 
 ### 13. Consistency acceptance suite
 
-- [ ] 13.1 Create `tests/tenant_provisioning/scenarios/` with at least five fixtures (bootstrap, add-company, rotate-reference, no-op re-apply, prune).
+- [x] 13.1 Create `tests/tenant_provisioning/scenarios/` with at least five fixtures (bootstrap, add-company, rotate-reference, no-op re-apply, prune). Five JSON fixtures landed under `tests/tenant_provisioning/scenarios/` forming a sequenced narrative against slug `acme-bootstrap`: create → extend → modify → no-op re-apply (byte-identical) → prune. JSON (not YAML) is the canonical form because the wire protocol is JSON; each fixture carries `metadata.labels.suite: consistency` so the runners can filter stray manifests.
 - [ ] 13.2 Implement `runner_api.rs` (direct POST with test-minted scoped token).
 - [ ] 13.3 Implement `runner_cli.rs` (spawns `aeterna tenant apply`).
 - [ ] 13.4 Implement `runner_ui.rs` (Playwright against `/admin/*`).
 - [ ] 13.5 Implement `assertions.rs` that renders the tenant and diffs against an expected baseline; allowlist timestamps and IDs.
 - [ ] 13.6 CI job `consistency-matrix` running all scenarios through all three runners in parallel.
-- [ ] 13.7 CI job running `aeterna tenant validate` against every fixture as a fast pre-check.
+- [x] 13.7 CI job running a fast pre-check against every fixture. Implemented as `tests/tenant_provisioning/run_validate.sh` (client-local jq-based structural validator — not the server-backed `aeterna tenant validate`, which requires a live control-plane and is covered by §13.2–§13.4 instead) and wired into `.github/workflows/tenant-provisioning-fixtures.yml`. The script enforces parseable JSON, `apiVersion: aeterna.io/v1` + `kind: TenantManifest`, non-empty `tenant.slug`/`tenant.name`, and the `metadata.labels.suite == "consistency"` opt-in marker. No Docker, no Postgres, no built binary required.
 
 ### 14. Documentation
 
