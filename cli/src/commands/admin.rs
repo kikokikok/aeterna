@@ -956,7 +956,9 @@ async fn run_export(args: AdminExportArgs) -> anyhow::Result<()> {
 
     if let Some(url) = &server_url {
         // Server-based export: call the admin export API.
-        let client = reqwest::Client::new();
+        // B2 §7.7 — route through `tagged_http_client()` so the audit
+        // row for the export POST records `via=cli`.
+        let client = crate::client::tagged_http_client();
         let api_url = format!("{url}/api/v1/admin/export");
 
         if !args.json {
@@ -1207,7 +1209,9 @@ async fn run_import(args: AdminImportArgs) -> anyhow::Result<()> {
         // Actual import requires a server connection.
         let server_url = std::env::var("AETERNA_SERVER_URL").ok();
         if let Some(url) = server_url {
-            let client = reqwest::Client::new();
+            // B2 §7.7 — import POST also carries the CLI identity
+            // headers via the shared tagged client builder.
+            let client = crate::client::tagged_http_client();
             let archive_bytes = std::fs::read(&args.input)?;
             let mode_str = format!("{:?}", args.mode).to_lowercase();
             let api_url = format!("{url}/api/v1/admin/import?mode={mode_str}");

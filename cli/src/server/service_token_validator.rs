@@ -402,10 +402,7 @@ pub async fn validate_service_token_from_headers(
 /// - `None` (user caller) → `Ok(())` \[B2 §10.5: "fall back to role
 ///   check for user callers" — the role check is the existing Cedar
 ///   enforcement inside each handler, not this function's job\]
-pub fn require_capability(
-    principal: Option<&ServicePrincipal>,
-    cap: &str,
-) -> Result<(), Response> {
+pub fn require_capability(principal: Option<&ServicePrincipal>, cap: &str) -> Result<(), Response> {
     let Some(principal) = principal else {
         return Ok(());
     };
@@ -549,10 +546,7 @@ mod tests {
         let cache = RevocationCache::new(None);
         assert!(!cache.is_distributed());
         let id = Uuid::new_v4();
-        assert!(
-            cache.get(id).await.is_none(),
-            "cold cache must miss"
-        );
+        assert!(cache.get(id).await.is_none(), "cold cache must miss");
         cache.warm(id, make_entry(AgentStatus::Active)).await;
         let got = cache.get(id).await.expect("warm entry must be visible");
         assert_eq!(got.status, AgentStatus::Active);
@@ -597,7 +591,10 @@ mod tests {
         let cache = RevocationCache::new(None);
         let id = Uuid::new_v4();
         cache.warm(id, make_entry(AgentStatus::Revoked)).await;
-        let got = cache.get(id).await.expect("revoked entry must be retrievable");
+        let got = cache
+            .get(id)
+            .await
+            .expect("revoked entry must be retrievable");
         assert_eq!(got.status, AgentStatus::Revoked);
     }
 
@@ -655,8 +652,8 @@ mod tests {
     #[test]
     fn require_capability_rejects_missing_scope() {
         let p = make_principal(vec!["memory:read"]);
-        let err = require_capability(Some(&p), "memory:write")
-            .expect_err("missing scope must deny");
+        let err =
+            require_capability(Some(&p), "memory:write").expect_err("missing scope must deny");
         assert_eq!(err.status(), StatusCode::FORBIDDEN);
     }
 

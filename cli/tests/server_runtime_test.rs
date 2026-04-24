@@ -310,6 +310,7 @@ async fn test_app_state_with_plugin_auth(
     Some((
         Arc::new(AppState {
             config: Arc::new(config::Config::default()),
+            revocation_cache: Default::default(),
             postgres: postgres.clone(),
             memory_manager,
             knowledge_manager,

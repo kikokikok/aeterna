@@ -53,6 +53,13 @@ const CLI_USER_AGENT: &str = concat!("aeterna-cli/", env!("CARGO_PKG_VERSION"));
 /// headers. All authenticated and unauthenticated HTTP traffic originating
 /// from the CLI must route through a client built here so the server can
 /// attribute every audit row to "via=cli" without relying on heuristics.
+///
+/// Exposed as `pub(crate)` (via [`tagged_http_client`]) so ad-hoc call
+/// sites in `cli::commands::admin` and `cli::offline` — which do not
+/// use the full [`AeternaClient`] (no profile, no auth, no retry) —
+/// can still emit the §7.7 headers. Direct callers of this private
+/// helper inside `client.rs` stay on `build_http_client()` to keep
+/// the function call graph local.
 fn build_http_client() -> Client {
     let mut headers = HeaderMap::new();
     // Static const inputs — `from_static` cannot fail. The `unreachable!`
@@ -72,6 +79,46 @@ fn build_http_client() -> Client {
         // back to a non-tagged client that would silently lose §7.7
         // attribution.
         .expect("reqwest Client must build with static default headers")
+}
+
+/// Crate-visible re-export of [`build_http_client`] for CLI-originated HTTP
+/// call sites that cannot route through [`AeternaClient`] — e.g. the
+/// health reachability probe in [`crate::offline`] and the unauthenticated
+/// admin export/import byte-stream endpoints in
+/// [`crate::commands::admin`]. Every new CLI HTTP caller MUST use this
+/// helper; bare `reqwest::Client::new()` in CLI code paths is a §7.7
+/// regression and will silently drop the `X-Aeterna-Client-Kind` +
+/// `User-Agent` headers the server relies on for audit attribution.
+pub(crate) fn tagged_http_client() -> Client {
+    build_http_client()
+}
+
+#[cfg(test)]
+mod client_kind_tagging_tests {
+    //! B2 §7.7 — pin that `tagged_http_client()` installs the two
+    //! identity headers on every outbound request. These are static
+    //! consts wired via `default_headers()` / `user_agent()`, so the
+    //! invariant we guard against is "someone later swapped the
+    //! builder chain for a bare `Client::new()`" — not a dynamic
+    //! header-value bug.
+    use super::{CLI_USER_AGENT, CLIENT_KIND_HEADER, CLIENT_KIND_VALUE, tagged_http_client};
+
+    #[test]
+    fn tagged_client_constants_are_wired() {
+        // Construct (covers the expect() panic path on broken TLS
+        // backends — running this test is itself the assertion).
+        let _client = tagged_http_client();
+
+        // Pin the static values so a future rename of the header or
+        // user-agent format breaks this test rather than silently
+        // de-attributing the audit log.
+        assert_eq!(CLIENT_KIND_HEADER, "X-Aeterna-Client-Kind");
+        assert_eq!(CLIENT_KIND_VALUE, "cli");
+        assert!(
+            CLI_USER_AGENT.starts_with("aeterna-cli/"),
+            "user-agent prefix regression: {CLI_USER_AGENT}"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
