@@ -596,6 +596,11 @@ impl MockGovernanceStorage {
             old_values: None,
             new_values: None,
             acting_as_tenant_id: None,
+            via: None,
+            client_version: None,
+            manifest_hash: None,
+            generation: None,
+            dry_run: None,
             created_at: Utc::now(),
         };
 
@@ -1234,6 +1239,11 @@ async fn test_e2e_audit_export_for_compliance() {
         since: Utc::now() - Duration::days(30),
         limit: Some(100),
         acting_as_tenant_id: None,
+        via: None,
+        client_version: None,
+        manifest_hash: None,
+        generation: None,
+        dry_run: None,
     };
 
     let audit_logs = governance_storage.list_audit_logs(&filters).await.unwrap();
@@ -1246,6 +1256,11 @@ async fn test_e2e_audit_export_for_compliance() {
         since: Utc::now() - Duration::days(30),
         limit: Some(50),
         acting_as_tenant_id: None,
+        via: None,
+        client_version: None,
+        manifest_hash: None,
+        generation: None,
+        dry_run: None,
     };
 
     let config_logs = governance_storage
@@ -1262,6 +1277,11 @@ async fn test_e2e_audit_export_for_compliance() {
         since: Utc::now() - Duration::days(30),
         limit: Some(50),
         acting_as_tenant_id: None,
+        via: None,
+        client_version: None,
+        manifest_hash: None,
+        generation: None,
+        dry_run: None,
     };
 
     let admin_logs = governance_storage

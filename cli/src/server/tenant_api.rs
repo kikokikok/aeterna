@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use storage::PrincipalType;
 use storage::git_provider_connection_store::GitProviderConnectionError;
+use storage::governance::AuditExtensions;
 use storage::tenant_config_provider::TenantConfigProviderError;
 use storage::tenant_store::UpsertTenantRepositoryBinding;
 use uuid::Uuid;
@@ -2323,6 +2324,74 @@ async fn audit_tenant_action(
         .await;
 }
 
+/// Provision-path variant of [`audit_tenant_action`] that records the B2
+/// §11.1 request-context columns (`via`, `client_version`, `manifest_hash`,
+/// `generation`, `dry_run`) alongside the primary audit payload. Used only
+/// by the provisioning handlers; every other call site keeps using the
+/// zero-ceremony [`audit_tenant_action`] helper.
+async fn audit_tenant_action_ext(
+    state: &AppState,
+    ctx: &TenantContext,
+    action: &str,
+    target_id: Option<&str>,
+    details: serde_json::Value,
+    ext: AuditExtensions,
+) {
+    let Some(storage) = &state.governance_storage else {
+        return;
+    };
+
+    let actor_id = uuid::Uuid::parse_str(ctx.user_id.as_str()).ok();
+    let acting_as = uuid::Uuid::parse_str(
+        ctx.target_tenant_id
+            .as_ref()
+            .map_or(ctx.tenant_id.as_str(), mk_core::TenantId::as_str),
+    )
+    .ok();
+    let _ = storage
+        .log_audit_with_extensions(
+            action,
+            None,
+            Some("tenant"),
+            target_id,
+            PrincipalType::User,
+            actor_id,
+            None,
+            serde_json::json!({
+                "actorTenantId": ctx.tenant_id.as_str(),
+                "selectedTargetTenantId": ctx.target_tenant_id.as_ref().map(mk_core::TenantId::as_str),
+                "details": details,
+            }),
+            acting_as,
+            ext,
+        )
+        .await;
+}
+
+/// Build the base [`AuditExtensions`] for a provision call from the request
+/// headers. `via` is taken from the middleware-injected
+/// [`crate::server::request_context::RequestContext`] (present as a request
+/// extension) — but since this helper receives the raw `HeaderMap`, we
+/// re-parse it here. Cheap: header lookup + a handful of string compares.
+/// `client_version` is extracted from the standard `User-Agent` header,
+/// trimmed and capped at 256 chars to keep audit rows bounded.
+fn provision_audit_ext_base(headers: &HeaderMap) -> AuditExtensions {
+    let rc = super::request_context::RequestContext::from_headers(headers);
+    let client_version = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.chars().take(256).collect::<String>());
+    AuditExtensions {
+        via: Some(rc.client_kind.to_string()),
+        client_version,
+        manifest_hash: None,
+        generation: None,
+        dry_run: None,
+    }
+}
+
 async fn audit_hierarchy_action(
     state: &AppState,
     ctx: &TenantContext,
@@ -4178,6 +4247,11 @@ async fn provision_tenant(
         Err(response) => return response,
     };
 
+    // B2 §11.4 — base request-context extensions for every audit row this
+    // handler writes. Cloned + amended at each call site with the values
+    // that are only in scope later (manifest_hash, generation, dry_run).
+    let audit_ext_base = provision_audit_ext_base(&headers);
+
     // ── Typed deserialization ────────────────────────────────────────────
     // We keep `raw` alive alongside `manifest` so the canonical hash can be
     // computed directly from the wire shape, not the typed re-serialization
@@ -4324,7 +4398,7 @@ async fn provision_tenant(
             // Dry-run on an unchanged manifest audits a preview event,
             // not a real unchanged-apply. Callers treat these separately
             // (a preview does not imply the operator decided to proceed).
-            audit_tenant_action(
+            audit_tenant_action_ext(
                 state.as_ref(),
                 &ctx,
                 if is_dry_run {
@@ -4339,6 +4413,12 @@ async fn provision_tenant(
                     "generation": current_generation,
                     "dryRun": is_dry_run,
                 }),
+                AuditExtensions {
+                    manifest_hash: Some(incoming_hash.clone()),
+                    generation: Some(current_generation),
+                    dry_run: Some(is_dry_run),
+                    ..audit_ext_base.clone()
+                },
             )
             .await;
             return (
@@ -4400,7 +4480,7 @@ async fn provision_tenant(
         } else {
             "update"
         };
-        audit_tenant_action(
+        audit_tenant_action_ext(
             state.as_ref(),
             &ctx,
             "tenant_provision_dry_run",
@@ -4412,6 +4492,12 @@ async fn provision_tenant(
                 "currentGeneration": current_generation,
                 "nextGeneration": new_generation,
             }),
+            AuditExtensions {
+                manifest_hash: Some(incoming_hash.clone()),
+                generation: Some(new_generation),
+                dry_run: Some(true),
+                ..audit_ext_base.clone()
+            },
         )
         .await;
         let plan = ProvisionPlan {
@@ -4472,12 +4558,18 @@ async fn provision_tenant(
                 )
                 .await;
             }
-            audit_tenant_action(
+            audit_tenant_action_ext(
                 state.as_ref(),
                 &ctx,
                 "tenant_provision_tenant",
                 Some(record.id.as_str()),
                 json!({ "slug": record.slug, "name": record.name }),
+                AuditExtensions {
+                    manifest_hash: Some(incoming_hash.clone()),
+                    generation: Some(new_generation),
+                    dry_run: Some(false),
+                    ..audit_ext_base.clone()
+                },
             )
             .await;
             steps.push(ProvisionStep::ok(
@@ -4554,7 +4646,7 @@ async fn provision_tenant(
         if !doc.fields.is_empty() || !doc.secret_references.is_empty() {
             match state.tenant_config_provider.upsert_config(doc).await {
                 Ok(config) => {
-                    audit_tenant_action(
+                    audit_tenant_action_ext(
                         state.as_ref(),
                         &ctx,
                         "tenant_provision_config",
@@ -4563,6 +4655,12 @@ async fn provision_tenant(
                             "tenantId": tenant_id.as_str(),
                             "fieldCount": config.fields.len(),
                         }),
+                        AuditExtensions {
+                            manifest_hash: Some(incoming_hash.clone()),
+                            generation: Some(new_generation),
+                            dry_run: Some(false),
+                            ..audit_ext_base.clone()
+                        },
                     )
                     .await;
                     steps.push(ProvisionStep::ok(
@@ -4689,7 +4787,7 @@ async fn provision_tenant(
                         )
                         .await;
                         state.tenant_repo_resolver.invalidate(&tenant_id);
-                        audit_tenant_action(
+                        audit_tenant_action_ext(
                             state.as_ref(),
                             &ctx,
                             "tenant_provision_repository",
@@ -4699,6 +4797,12 @@ async fn provision_tenant(
                                 "kind": binding.kind,
                                 "branch": binding.branch,
                             }),
+                            AuditExtensions {
+                                manifest_hash: Some(incoming_hash.clone()),
+                                generation: Some(new_generation),
+                                dry_run: Some(false),
+                                ..audit_ext_base.clone()
+                            },
                         )
                         .await;
                         ProvisionStep::ok("repository", format!("binding id={}", binding.id))

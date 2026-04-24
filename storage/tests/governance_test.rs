@@ -512,6 +512,11 @@ async fn test_audit_logging_and_role_assignment_lifecycle() {
             since: Utc::now() - chrono::Duration::hours(1),
             limit: Some(10),
             acting_as_tenant_id: None,
+            via: None,
+            client_version: None,
+            manifest_hash: None,
+            generation: None,
+            dry_run: None,
         })
         .await
         .unwrap();
@@ -723,6 +728,11 @@ async fn test_governance_audit_entry_struct() {
         old_values: None,
         new_values: Some(json!({"status": "active"})),
         acting_as_tenant_id: None,
+        via: None,
+        client_version: None,
+        manifest_hash: None,
+        generation: None,
+        dry_run: None,
         created_at: Utc::now(),
     };
 

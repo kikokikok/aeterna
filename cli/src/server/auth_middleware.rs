@@ -43,6 +43,7 @@ use tower::{Layer, Service};
 use super::PluginAuthState;
 use super::lookup_roles_for_idp;
 use super::plugin_auth::{PluginIdentity, validate_plugin_bearer};
+use super::request_context::RequestContext;
 
 // ---------------------------------------------------------------------------
 // Layer
@@ -114,6 +115,15 @@ where
         let auth_state = self.auth_state.clone();
 
         Box::pin(async move {
+            // B2 §11.2 / §11.3 — extract the client-kind header ONCE here,
+            // normalize it, and stash the result as a request extension so
+            // every downstream handler (audit-writing or not) sees the same
+            // value. Runs *before* auth branching so even 401-path requests
+            // still carry a `via` in their logs. Cheap: header lookup + a
+            // handful of string comparisons.
+            let request_ctx = RequestContext::from_headers(req.headers());
+            req.extensions_mut().insert(request_ctx);
+
             // ── Pass-through when auth is disabled ──────────────────────
             if !auth_state.config.enabled {
                 // Development / service-to-service mode: inject synthetic context

@@ -20,6 +20,7 @@ pub mod metrics;
 pub mod org_api;
 pub mod plugin_auth;
 pub mod project_api;
+pub mod request_context;
 pub mod role_grants;
 pub mod router;
 pub mod sessions;
