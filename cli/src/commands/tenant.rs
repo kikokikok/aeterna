@@ -88,6 +88,12 @@ pub enum TenantCommand {
         about = "Apply a tenant manifest (real write; prompts before proceeding unless --yes)"
     )]
     Apply(TenantApplyArgs),
+
+    #[command(
+        name = "watch",
+        about = "Stream live tenant lifecycle events (SSE; per-step provisioning progress) (B2 §7.5)"
+    )]
+    Watch(TenantWatchArgs),
 }
 
 // ---------------------------------------------------------------------------
@@ -719,6 +725,32 @@ pub struct TenantSecretDeleteArgs {
     pub json: bool,
 }
 
+/// Args for `aeterna tenant watch <slug>` (B2 §7.5).
+///
+/// Thin client over the `/api/v1/admin/tenants/{slug}/events` SSE
+/// endpoint. Streams one line per event to stdout and exits 0 when
+/// the server closes the stream cleanly (shutdown) or the user sends
+/// SIGINT / closes stdout.
+#[derive(clap::Args, Debug)]
+pub struct TenantWatchArgs {
+    /// Slug of the tenant to watch.
+    #[arg(value_name = "SLUG")]
+    pub slug: String,
+
+    /// Emit raw event JSON (one line per event) instead of the
+    /// human-readable pretty form. Useful for piping into `jq`,
+    /// feeding a progress bar, or composing with `tenant apply`.
+    #[arg(long)]
+    pub json: bool,
+
+    /// Override the target-tenant header (matches the convention used
+    /// by every other tenant subcommand). Does NOT change which
+    /// tenant's events are streamed — that is always `<slug>` — but
+    /// some auth paths key off this header.
+    #[arg(long)]
+    pub target_tenant: Option<String>,
+}
+
 // ---------------------------------------------------------------------------
 // Dispatch
 // ---------------------------------------------------------------------------
@@ -757,6 +789,7 @@ pub async fn run(cmd: TenantCommand) -> anyhow::Result<()> {
         TenantCommand::Render(args) => run_render(args).await,
         TenantCommand::Diff(args) => run_diff(args).await,
         TenantCommand::Apply(args) => run_apply(args).await,
+        TenantCommand::Watch(args) => run_watch(args).await,
     }
 }
 
@@ -3160,6 +3193,278 @@ async fn run_diff(args: TenantDiffArgs) -> anyhow::Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// `tenant watch` — SSE consumer (B2 §7.5)
+// ---------------------------------------------------------------------------
+
+/// One parsed SSE frame. We keep only the fields the endpoint emits;
+/// `id`/`retry` are parsed out of the wire stream into nothing
+/// because the server does not emit them (no replay semantics), but
+/// the parser tolerates them gracefully.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct SseFrame {
+    /// `event:` field. `None` → SSE spec default (`"message"`).
+    event: Option<String>,
+    /// Concatenated `data:` fields, joined by `\n` per the spec.
+    data: String,
+}
+
+impl SseFrame {
+    /// Event name with SSE default folded in — callers can match on a
+    /// single `&str` without threading `Option` logic.
+    fn event_name(&self) -> &str {
+        self.event.as_deref().unwrap_or("message")
+    }
+}
+
+/// Incremental SSE parser.
+///
+/// Fed arbitrary byte chunks (reqwest's `bytes_stream` does not
+/// guarantee frame alignment) and emits complete frames as lines
+/// cross the blank-line boundary. The SSE wire format is:
+///
+/// ```text
+/// event: provisioning_step\n
+/// data: {"slug":"acme",...}\n
+/// \n    ← empty line terminates frame
+/// ```
+///
+/// Multi-line `data:` fields concatenate with `\n`. Lines starting
+/// with `:` are comments (used by `KeepAlive::default()` on the
+/// server) — we ignore them. Malformed lines (no colon) are ignored
+/// per the SSE spec's robustness rule.
+struct SseParser {
+    /// Carry-over bytes that did not end with a newline in the
+    /// previous chunk. Owned so we can hand it back to the next
+    /// `feed` call cheaply.
+    buf: String,
+    /// Frame under construction — reset on terminator.
+    current: SseFrame,
+}
+
+impl SseParser {
+    fn new() -> Self {
+        Self {
+            buf: String::new(),
+            current: SseFrame::default(),
+        }
+    }
+
+    /// Append a chunk. Returns any frames completed by this chunk.
+    /// Allocates one `Vec` per call; events come in bursts of ≤ 10 so
+    /// this is not a hot path worth pooling.
+    fn feed(&mut self, chunk: &str) -> Vec<SseFrame> {
+        self.buf.push_str(chunk);
+        let mut out = Vec::new();
+
+        // Drain whole lines from `buf`. A "line" is everything up to
+        // (but not including) the next `\n`; `\r\n` is normalised by
+        // trimming trailing `\r`. Anything after the last `\n` stays
+        // in `buf` for the next call.
+        loop {
+            let Some(nl) = self.buf.find('\n') else {
+                break;
+            };
+            // `drain(..=nl)` removes the newline too; strip the `\r`
+            // before measuring length so CRLF survives untouched.
+            let line: String = {
+                let drained: String = self.buf.drain(..=nl).collect();
+                let trimmed = drained.trim_end_matches('\n').trim_end_matches('\r');
+                trimmed.to_string()
+            };
+
+            if line.is_empty() {
+                // Frame boundary — only emit if we accumulated
+                // something. A lone blank line (SSE heartbeat before
+                // any data) is a legal no-op.
+                if self.current.event.is_some() || !self.current.data.is_empty() {
+                    out.push(std::mem::take(&mut self.current));
+                }
+                continue;
+            }
+
+            if let Some(rest) = line.strip_prefix(':') {
+                // Comment line — servers use `:` as a keep-alive
+                // ping (`KeepAlive::default()` sends `:\n\n`). Drop
+                // it but don't log; it would spam stderr every 15 s.
+                let _ = rest;
+                continue;
+            }
+
+            // Field lines are `<name>: <value>` (space after colon is
+            // optional per spec). Missing colon → treat whole line as
+            // name with empty value (spec rule 9.2.6).
+            let (name, value) = match line.split_once(':') {
+                Some((n, v)) => (n, v.strip_prefix(' ').unwrap_or(v)),
+                None => (line.as_str(), ""),
+            };
+
+            match name {
+                "event" => self.current.event = Some(value.to_string()),
+                "data" => {
+                    if !self.current.data.is_empty() {
+                        self.current.data.push('\n');
+                    }
+                    self.current.data.push_str(value);
+                }
+                // `id` / `retry` are not emitted by our server; we
+                // tolerate them for forward-compat with a future
+                // version that adds replay support.
+                _ => {}
+            }
+        }
+        out
+    }
+}
+
+/// `aeterna tenant watch <slug>` entrypoint.
+///
+/// Opens a long-lived `GET /api/v1/admin/tenants/{slug}/events` and
+/// prints one line per event to stdout. Exits:
+/// * `0` when the stream closes (server shutdown or network close).
+/// * non-zero when auth fails or the URL cannot be reached.
+///
+/// The command is intentionally tolerant of any event kind — it
+/// renders `provisioning_step` and the three lifecycle kinds
+/// prettily, and falls back to a verbatim dump for `unknown` and
+/// future kinds so a newer server never produces blank output on an
+/// older CLI.
+async fn run_watch(args: TenantWatchArgs) -> anyhow::Result<()> {
+    use futures_util::StreamExt;
+
+    let Some(client) = get_live_client_for(args.target_tenant.as_deref()).await else {
+        anyhow::bail!("Not logged in — run `aeterna auth login` first.");
+    };
+
+    let path = format!("/api/v1/admin/tenants/{}/events", args.slug);
+    let resp = client.get(&path).await?;
+    let status = resp.status();
+    if !status.is_success() {
+        // Drain body for the error message; do NOT stream — this is
+        // not an SSE response, it's a short error JSON / text blob.
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!(
+            "Server rejected stream open ({}): {}",
+            status,
+            body.trim()
+        );
+    }
+
+    // Sanity: we *should* have text/event-stream. A reverse proxy
+    // misconfigured to buffer would return text/html — warn loudly
+    // rather than deadlock waiting for frames that will never arrive
+    // in real time.
+    if let Some(ct) = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+    {
+        if !ct.contains("text/event-stream") {
+            eprintln!(
+                "warning: server Content-Type is `{ct}` (expected text/event-stream) — \
+                 a buffering proxy may hold events back"
+            );
+        }
+    }
+
+    if !args.json {
+        eprintln!("Watching tenant '{}' — Ctrl-C to stop.", args.slug);
+    }
+
+    let mut stream = resp.bytes_stream();
+    let mut parser = SseParser::new();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| anyhow::anyhow!("stream read failed: {e}"))?;
+        // reqwest yields `Bytes`; convert lossy because an SSE stream
+        // carrying non-UTF-8 is already broken at the server layer
+        // (we serialize JSON) and lossy avoids a hard error on a
+        // single bad codepoint from a misbehaving middlebox.
+        let text = String::from_utf8_lossy(&chunk);
+        for frame in parser.feed(&text) {
+            render_watch_frame(&frame, args.json);
+        }
+    }
+    Ok(())
+}
+
+/// Render one parsed frame to stdout, honouring `--json`.
+fn render_watch_frame(frame: &SseFrame, json_mode: bool) {
+    if json_mode {
+        // Raw mode: emit the `data:` payload verbatim, one JSON
+        // object per line. Downstream tools like `jq -c` can consume
+        // this without reconstructing frame boundaries.
+        if !frame.data.is_empty() {
+            println!("{}", frame.data);
+        }
+        return;
+    }
+
+    // Pretty mode: parse the data as a TenantChangeEvent-shaped JSON
+    // and render a human line. Failures fall through to a verbatim
+    // dump so a newer server variant never produces blank output.
+    let parsed: Option<serde_json::Value> = serde_json::from_str(&frame.data).ok();
+    let slug = parsed
+        .as_ref()
+        .and_then(|v| v.get("slug"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+
+    match frame.event_name() {
+        "provisioned" => println!("✓ {slug} provisioned"),
+        "updated" => println!("✓ {slug} updated"),
+        "deactivated" => println!("✗ {slug} deactivated"),
+        "provisioning_step" => {
+            // `kind` is the struct variant
+            // `{"provisioning_step": {"step": "...", "status": "...", "detail": "..."}}`
+            let step_obj = parsed
+                .as_ref()
+                .and_then(|v| v.get("kind"))
+                .and_then(|v| v.get("provisioning_step"));
+            let step = step_obj
+                .and_then(|v| v.get("step"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let status = step_obj
+                .and_then(|v| v.get("status"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let detail = step_obj
+                .and_then(|v| v.get("detail"))
+                .and_then(|v| v.as_str());
+            let marker = match status {
+                "started" => "→",
+                "ok" => "✓",
+                "failed" => "✗",
+                _ => "·",
+            };
+            match detail {
+                Some(d) => println!("  {marker} {step:<16} {status:<8} {d}"),
+                None => println!("  {marker} {step:<16} {status}"),
+            }
+        }
+        "lagged" => {
+            // Synthetic frame emitted by the SSE endpoint when a
+            // subscriber fell behind. Surface it so operators realise
+            // they missed events and know to reconnect.
+            let skipped = parsed
+                .as_ref()
+                .and_then(|v| v.get("skipped"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            eprintln!(
+                "warning: stream lagged — {skipped} event(s) dropped. \
+                 Reconnect to re-sync."
+            );
+        }
+        other => {
+            // Unknown / forward-compat kinds — print verbatim so a
+            // newer server never produces blank output.
+            println!("· [{other}] {}", frame.data);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Unit tests
 // ---------------------------------------------------------------------------
 
@@ -3633,6 +3938,122 @@ mod tests {
             msg.contains("Invalid JSON") || msg.contains("invalid") || msg.contains("expected"),
             "unexpected error message: {msg}"
         );
+    }
+
+    // -----------------------------------------------------------------
+    // B2 §7.5 — `tenant watch` SSE parser
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn sse_parser_single_frame_lf() {
+        // Happy path: a complete frame arrives in one chunk with LF
+        // line endings (Axum's Sse writes LF, not CRLF).
+        let mut p = SseParser::new();
+        let frames = p.feed("event: provisioned\ndata: {\"slug\":\"acme\"}\n\n");
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].event_name(), "provisioned");
+        assert_eq!(frames[0].data, r#"{"slug":"acme"}"#);
+    }
+
+    #[test]
+    fn sse_parser_handles_crlf() {
+        // Some middleboxes (Azure Front Door, older nginx) rewrite LF
+        // to CRLF. The parser must normalise.
+        let mut p = SseParser::new();
+        let frames = p.feed("event: updated\r\ndata: {\"x\":1}\r\n\r\n");
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].event_name(), "updated");
+        assert_eq!(frames[0].data, r#"{"x":1}"#);
+    }
+
+    #[test]
+    fn sse_parser_splits_across_chunks() {
+        // reqwest's `bytes_stream` makes no framing guarantees — a
+        // single logical frame may arrive as a dozen tiny chunks.
+        // The parser must hold state across `feed` calls.
+        let mut p = SseParser::new();
+        let mut frames = Vec::new();
+        for chunk in [
+            "event: provi",
+            "sioning_step\n",
+            "data: {\"slug\"",
+            ":\"acme\"}\n",
+            "\n",
+        ] {
+            frames.extend(p.feed(chunk));
+        }
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].event_name(), "provisioning_step");
+        assert_eq!(frames[0].data, r#"{"slug":"acme"}"#);
+    }
+
+    #[test]
+    fn sse_parser_ignores_comment_lines() {
+        // `KeepAlive::default()` on the server emits `:\n\n` every
+        // 15 s. These are not events — parser must swallow them and
+        // not synthesise a phantom empty frame.
+        let mut p = SseParser::new();
+        let frames = p.feed(":\n\n:ping\n\n");
+        assert!(
+            frames.is_empty(),
+            "keep-alive pings must not produce frames: {frames:?}"
+        );
+    }
+
+    #[test]
+    fn sse_parser_concatenates_multiline_data() {
+        // SSE spec: multiple `data:` fields in one frame concat with
+        // `\n`. Prevents silently dropping continuation lines.
+        let mut p = SseParser::new();
+        let frames = p.feed("data: line1\ndata: line2\n\n");
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].data, "line1\nline2");
+        assert_eq!(frames[0].event_name(), "message"); // SSE default
+    }
+
+    #[test]
+    fn sse_parser_strips_leading_space_after_colon() {
+        // Spec: optional space after colon. "data:foo" and
+        // "data: foo" must both yield "foo".
+        let mut p = SseParser::new();
+        let f1 = p.feed("data:no-space\n\n");
+        assert_eq!(f1[0].data, "no-space");
+        let f2 = p.feed("data: with-space\n\n");
+        assert_eq!(f2[0].data, "with-space");
+    }
+
+    #[test]
+    fn sse_parser_survives_stream_break_mid_field() {
+        // Partial line on one side of a feed boundary must survive to
+        // the next call without corrupting the next event.
+        let mut p = SseParser::new();
+        assert!(p.feed("event: prov").is_empty(), "partial line must not emit");
+        let frames = p.feed("isioned\ndata: {}\n\n");
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].event_name(), "provisioned");
+    }
+
+    #[test]
+    fn sse_frame_default_event_name_is_message() {
+        // Matches the SSE spec default. Callers downstream branch on
+        // this string verbatim so the default must be exact.
+        let f = SseFrame::default();
+        assert_eq!(f.event_name(), "message");
+    }
+
+    #[test]
+    fn tenant_watch_args_minimal_shape() {
+        // Smoke: the Args struct can be constructed with the minimal
+        // fields and preserves them. Same pattern as every other
+        // `*Args` test in this module.
+        let args = TenantWatchArgs {
+            slug: "acme".into(),
+            json: false,
+            target_tenant: None,
+        };
+        assert_eq!(args.slug, "acme");
+        assert!(!args.json);
+        assert!(args.target_tenant.is_none());
     }
 
     #[test]
