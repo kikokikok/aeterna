@@ -576,6 +576,8 @@ pub async fn run(cmd: TenantCommand) -> anyhow::Result<()> {
         },
         TenantCommand::Connection(sub) => match sub {
             TenantConnectionCommand::List(args) => run_connection_list(args).await,
+            TenantConnectionCommand::Grant(args) => run_connection_grant(args).await,
+            TenantConnectionCommand::Revoke(args) => run_connection_revoke(args).await,
         },
         TenantCommand::Validate(args) => run_validate(args).await,
         TenantCommand::Render(args) => run_render(args).await,
@@ -1280,14 +1282,72 @@ async fn run_config_inspect(args: TenantConfigInspectArgs) -> anyhow::Result<()>
 // connection sub-commands
 // ---------------------------------------------------------------------------
 
-/// Post-§7.6 `connection` surface: read-only. Grant/revoke mutations
-/// migrated to `tenant apply` (manifest `connections` field).
+/// `connection` surface.
+///
+/// Unlike the repo-binding / config / secrets mutations that were
+/// removed in §7.6 in favour of `tenant apply`, Git provider
+/// **connection visibility** has no representation in the v1
+/// `TenantManifest` schema — `/provision` does not touch the
+/// `git_provider_connections_tenants` junction table. Restoring
+/// `Grant` and `Revoke` here is the honest fix for that gap: the
+/// initial §7.6 sweep deleted them on the faulty assumption that
+/// every mutation had a manifest equivalent, which it does not.
+///
+/// The underlying HTTP endpoints
+/// (`POST /admin/git-connections/{id}/tenants/{slug}`,
+/// `DELETE` same path) are stable and widely used; this restore
+/// just re-exposes them through their original CLI surface.
+///
+/// If a future manifest revision adds a `connections[]` block (see
+/// B2 §2.10 idea), these commands become candidates for a second
+/// §7.6-style unification pass.
 #[derive(Subcommand)]
 pub enum TenantConnectionCommand {
     #[command(
         about = "List Git provider connections visible to a tenant (PlatformAdmin or TenantAdmin)"
     )]
     List(TenantConnectionListArgs),
+
+    #[command(about = "Grant a tenant visibility of a Git provider connection (PlatformAdmin)")]
+    Grant(TenantConnectionGrantArgs),
+
+    #[command(about = "Revoke a tenant's visibility of a Git provider connection (PlatformAdmin)")]
+    Revoke(TenantConnectionRevokeArgs),
+}
+
+/// Args for `tenant connection grant`. Restored in the §7.6 follow-up
+/// PR after the initial sweep erroneously deleted this subcommand —
+/// the manifest has no `connections[]` field, so there was no
+/// `apply`-based migration path.
+#[derive(Args)]
+pub struct TenantConnectionGrantArgs {
+    /// Tenant slug to grant visibility to
+    pub tenant: String,
+
+    /// Git provider connection ID to grant
+    #[arg(long)]
+    pub connection: String,
+
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// Args for `tenant connection revoke`. See the module-level doc on
+/// `TenantConnectionCommand` for why this command is intentionally
+/// **not** migrated to `tenant apply`.
+#[derive(Args)]
+pub struct TenantConnectionRevokeArgs {
+    /// Tenant slug to revoke visibility from
+    pub tenant: String,
+
+    /// Git provider connection ID to revoke
+    #[arg(long)]
+    pub connection: String,
+
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args)]
@@ -1367,6 +1427,109 @@ async fn run_connection_list(args: TenantConnectionListArgs) -> anyhow::Result<(
             "Cannot list connections for tenant '{}': server not connected",
             args.tenant
         ),
+    )
+}
+
+async fn run_connection_grant(args: TenantConnectionGrantArgs) -> anyhow::Result<()> {
+    if let Some(client) = get_live_client().await {
+        let result = client
+            .git_provider_connection_grant_tenant(&args.connection, &args.tenant)
+            .await
+            .inspect_err(|e| {
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(
+                            &json!({"success": false, "error": e.to_string()})
+                        )
+                        .unwrap()
+                    );
+                } else {
+                    ux_error::UxError::new(e.to_string())
+                        .fix("Run: aeterna auth login")
+                        .display();
+                }
+            })?;
+
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header("Connection Granted");
+            println!();
+            println!("  Tenant:     {}", args.tenant);
+            println!("  Connection: {}", args.connection);
+            println!();
+            output::hint(
+                "Use 'aeterna tenant connection list <tenant>' to verify the connection is visible",
+            );
+        }
+        return Ok(());
+    }
+
+    if args.json {
+        let out = json!({
+            "success": false,
+            "error": "server_not_connected",
+            "operation": "connection_grant",
+            "tenant": args.tenant,
+            "connection": args.connection
+        });
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        anyhow::bail!("Aeterna server not connected for operation: connection_grant");
+    }
+    tenant_server_required(
+        "connection_grant",
+        "Cannot grant connection: server not connected",
+    )
+}
+
+async fn run_connection_revoke(args: TenantConnectionRevokeArgs) -> anyhow::Result<()> {
+    if let Some(client) = get_live_client().await {
+        let result = client
+            .git_provider_connection_revoke_tenant(&args.connection, &args.tenant)
+            .await
+            .inspect_err(|e| {
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(
+                            &json!({"success": false, "error": e.to_string()})
+                        )
+                        .unwrap()
+                    );
+                } else {
+                    ux_error::UxError::new(e.to_string())
+                        .fix("Run: aeterna auth login")
+                        .display();
+                }
+            })?;
+
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            output::header("Connection Revoked");
+            println!();
+            println!("  Tenant:     {}", args.tenant);
+            println!("  Connection: {}", args.connection);
+            println!();
+        }
+        return Ok(());
+    }
+
+    if args.json {
+        let out = json!({
+            "success": false,
+            "error": "server_not_connected",
+            "operation": "connection_revoke",
+            "tenant": args.tenant,
+            "connection": args.connection
+        });
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        anyhow::bail!("Aeterna server not connected for operation: connection_revoke");
+    }
+    tenant_server_required(
+        "connection_revoke",
+        "Cannot revoke connection: server not connected",
     )
 }
 

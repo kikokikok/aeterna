@@ -12,19 +12,25 @@ All per-field **mutation** subcommands under `aeterna tenant` have been removed.
 
 The following subcommands **no longer exist**. `clap` will reject them with an "unrecognized subcommand" error:
 
-| Removed | Replaced by |
-|---------|-------------|
-| `tenant create` | `tenant apply -f manifest.json` |
-| `tenant update` | `tenant apply -f manifest.json` |
-| `tenant domain-map` | `tenant apply -f manifest.json` (`domainMappings` field) |
-| `tenant repo-binding set` | `tenant apply -f manifest.json` (`repoBinding` field) |
-| `tenant repo-binding validate` | `tenant validate -f manifest.json` |
-| `tenant config upsert` | `tenant apply -f manifest.json` (`tenantConfig` field) |
-| `tenant config validate` | `tenant validate -f manifest.json` |
-| `tenant secret set` | `tenant apply -f manifest.json` (`secrets[]` field) |
-| `tenant secret delete` | `tenant apply -f manifest.json` (omit entry; set `--prune` once available) |
-| `tenant connection grant` | `tenant apply -f manifest.json` (`connections[]` field) |
-| `tenant connection revoke` | `tenant apply -f manifest.json` (omit entry; set `--prune` once available) |
+| Removed | Replaced by | Manifest field |
+|---------|-------------|----------------|
+| `tenant create` | `tenant apply -f manifest.json` | `tenant` (`slug`, `name`) |
+| `tenant update` | `tenant apply -f manifest.json` | `tenant` (`slug`, `name`) |
+| `tenant domain-map` | `tenant apply -f manifest.json` | `tenant.domainMappings[]` |
+| `tenant repo-binding set` | `tenant apply -f manifest.json` | `repository` *(note: top-level field is `repository`, not `repoBinding`)* |
+| `tenant repo-binding validate` | `tenant validate -f manifest.json` | n/a |
+| `tenant config upsert` | `tenant apply -f manifest.json` | `config.fields{}` |
+| `tenant config validate` | `tenant validate -f manifest.json` | n/a |
+| `tenant secret set` | `tenant apply -f manifest.json` | `secrets[]` |
+| `tenant secret delete` | ⚠ no `--prune` shipped yet — use the server's `DELETE /admin/tenants/{slug}/secrets/{name}` directly, or remove the entry from the manifest and wait for `apply --prune` (tracked under B2 §7.1 `--prune`) |
+
+## Preserved (no manifest equivalent)
+
+| Kept | Why |
+|------|-----|
+| `tenant connection grant` | Git-provider-connection visibility lives in a separate junction table (`git_provider_connections_tenants`); `/provision` does not touch it. A future manifest revision may add a `connections[]` block (B2 §2.10 idea). |
+| `tenant connection revoke` | Same as above. |
+| `tenant deactivate` | Soft-delete lifecycle with tombstone semantics; not cleanly a manifest state. |
 
 ## Why
 
@@ -38,10 +44,13 @@ The `/provision` endpoint (§2.3 of `harden-tenant-provisioning`) writes the ful
 
 ```bash
 aeterna tenant create --slug acme --name "Acme Corp"
-aeterna tenant repo-binding set acme --kind github --github-owner acme --github-repo knowledge --branch main --credential-kind githubApp --credential-ref acme-gh-app
+aeterna tenant repo-binding set acme \
+  --kind github --github-owner acme --github-repo knowledge \
+  --branch main \
+  --credential-kind githubApp --credential-ref acme-gh-app
 aeterna tenant config upsert --tenant acme --file tenant-config.json
-aeterna tenant secret set --tenant acme repo.token --from-env GH_TOKEN
-aeterna tenant connection grant acme --connection github-default
+aeterna tenant secret set --tenant acme repo.token --value "$GH_TOKEN"
+aeterna tenant connection grant acme --connection github-default   # still exists, see below
 ```
 
 ### After (v0.9)
@@ -52,23 +61,28 @@ cat > acme.manifest.json <<'MANIFEST'
   "apiVersion": "aeterna/v1",
   "kind": "Tenant",
   "tenant": { "slug": "acme", "name": "Acme Corp" },
-  "repoBinding": {
+  "repository": {
     "kind": "github",
     "github": { "owner": "acme", "repo": "knowledge" },
     "branch": "main",
     "credentialKind": "githubApp",
     "credentialRef": "acme-gh-app"
   },
-  "tenantConfig": { "...": "contents of tenant-config.json inlined here" },
+  "config": {
+    "fields": { "...": "inline the k/v pairs from tenant-config.json here" },
+    "secretReferences": { }
+  },
   "secrets": [
-    { "logicalName": "repo.token", "secretRef": "env:GH_TOKEN" }
-  ],
-  "connections": [ { "connectionId": "github-default" } ]
+    { "logicalName": "repo.token", "ownership": "tenant", "secretValue": "$GH_TOKEN_LITERAL" }
+  ]
 }
 MANIFEST
 
 aeterna tenant validate -f acme.manifest.json   # dry-run preview
 aeterna tenant apply    -f acme.manifest.json   # real apply, interactive confirmation
+
+# Connection visibility is NOT a manifest field — still a standalone call:
+aeterna tenant connection grant acme --connection github-default
 ```
 
 **Tip:** Bootstrap the manifest by rendering the current server state:
@@ -90,7 +104,7 @@ aeterna tenant apply -f acme.manifest.json --watch
 | `tenant use` / `switch` / `current` | unchanged (user-context) |
 | `tenant repo-binding show` | unchanged (read) |
 | `tenant config inspect` | unchanged (read) |
-| `tenant connection list` | unchanged (read) |
+| `tenant connection list` / `grant` / `revoke` | unchanged — Git-connection visibility has no manifest equivalent in v1 |
 | `tenant validate` / `render` / `diff` / `apply` / `watch` | unchanged (GitOps pipeline) |
 
 ## Server endpoints

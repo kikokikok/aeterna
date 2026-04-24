@@ -65,41 +65,50 @@ aeterna auth status --json
 
 ## Tenant Control Plane
 
-### Tenant lifecycle
+> **v0.9 breaking change.** All tenant *mutations* now go through a single
+> manifest-based pipeline: `render → edit → diff → apply`. The
+> fine-grained mutation subcommands (`create`, `update`, `domain-map`,
+> `repo-binding set`, `config upsert`, `secret set`, …) have been
+> removed. See [`tenant-cli-migration-v0.9.md`](tenant-cli-migration-v0.9.md)
+> for the migration table and [`../tenant-provisioning.md`](../tenant-provisioning.md)
+> for the manifest reference.
+
+### Tenant manifest pipeline (all mutations)
 
 | Command | Description |
 |---------|-------------|
-| `aeterna tenant create --slug acme --name "Acme Corp"` | Create tenant (PlatformAdmin) |
+| `aeterna tenant render --slug acme > acme.json` | Emit the current server state as a `TenantManifest` |
+| `aeterna tenant validate -f acme.json` | Dry-run validation — no writes |
+| `aeterna tenant diff --slug acme -f acme.json -o unified` | Preview the delta |
+| `aeterna tenant apply -f acme.json [--yes] [--watch]` | Apply the manifest (interactive by default) |
+| `aeterna tenant watch --slug acme` | Stream per-step SSE readiness events |
+
+### Tenant reads
+
+| Command | Description |
+|---------|-------------|
 | `aeterna tenant list` | List tenants (PlatformAdmin) |
 | `aeterna tenant show acme` | Show tenant by slug or ID |
-| `aeterna tenant update acme --name "Acme Corp EU"` | Update tenant metadata |
-| `aeterna tenant deactivate acme --yes` | Deactivate a tenant |
-| `aeterna tenant use acme` | Write the default tenant context locally |
-| `aeterna tenant domain-map acme --domain acme.example.com` | Add verified tenant domain mapping |
-
-### Repository bindings
-
-| Command | Description |
-|---------|-------------|
-| `aeterna tenant repo-binding show acme` | Inspect the tenant's canonical knowledge repo binding |
-| `aeterna tenant repo-binding set acme --kind github --remote-url URL --branch main --credential-kind githubApp --github-owner acme --github-repo knowledge` | Set the canonical repository binding |
-| `aeterna tenant repo-binding validate acme --kind github --remote-url URL --branch main --credential-kind githubApp --github-owner acme --github-repo knowledge` | Validate a binding without persisting |
-
-### Tenant config and secrets
-
-| Command | Description |
-|---------|-------------|
-| `aeterna tenant config inspect --tenant acme` | Inspect tenant config as PlatformAdmin |
-| `aeterna tenant config upsert --tenant acme --file tenant-config.json` | Upsert tenant config from JSON |
-| `aeterna tenant config validate --tenant acme --file tenant-config.json` | Validate tenant config JSON |
-| `aeterna tenant secret set --tenant acme repo.token --value '...'` | Set a tenant secret entry |
-| `aeterna tenant secret delete --tenant acme repo.token` | Delete a tenant secret entry |
-
-### Shared Git provider connections
-
-| Command | Description |
-|---------|-------------|
+| `aeterna tenant repo-binding show acme` | Inspect the canonical knowledge-repo binding |
+| `aeterna tenant config inspect --tenant acme` | Inspect tenant config fields + secret references |
 | `aeterna tenant connection list acme` | List Git provider connections visible to a tenant |
+
+### Tenant lifecycle (non-manifest)
+
+| Command | Description |
+|---------|-------------|
+| `aeterna tenant deactivate acme --yes` | Soft-delete with tombstone (not a manifest operation) |
+| `aeterna tenant use acme` | Write default tenant to local `.aeterna/context.toml` |
+| `aeterna tenant switch acme` | Write server-side tenant preference (persists across devices) |
+| `aeterna tenant current` | Show effective tenant |
+
+### Git provider connection visibility (PlatformAdmin)
+
+Not part of the manifest model — Git provider connection visibility lives in the
+`git_provider_connections_tenants` junction table and has its own standalone surface:
+
+| Command | Description |
+|---------|-------------|
 | `aeterna tenant connection grant acme --connection <id>` | Grant tenant visibility to a shared connection |
 | `aeterna tenant connection revoke acme --connection <id>` | Revoke tenant visibility |
 
