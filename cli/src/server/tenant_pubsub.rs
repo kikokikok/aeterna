@@ -109,7 +109,13 @@ pub fn subscribe() -> broadcast::Receiver<TenantChangeEvent> {
 /// No-op when there are zero subscribers. Never blocks, never errors
 /// up — the broadcaster's `send` only fails when the channel has no
 /// receivers, which is the steady state (no active `watch` commands).
-fn fan_out_local(event: &TenantChangeEvent) {
+///
+/// `pub(crate)` so `tenant_events_api` tests can inject events
+/// directly into the bus without constructing a full `AppState` — the
+/// in-process fanout is what the SSE endpoint actually reads, so
+/// testing it through the real channel is strictly more faithful
+/// than a mocked publisher.
+pub(crate) fn fan_out_local(event: &TenantChangeEvent) {
     // `.send` returns the number of active receivers on success or
     // `SendError` when there are zero. Both are boring from the
     // publisher's perspective — we log at TRACE only for delivery
