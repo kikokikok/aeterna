@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-security/tenant-provisioning-security" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.9.2">
+<title data-rh="true">Tenant provisioning — security appendix | Aeterna</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://kikokikok.github.io/aeterna/docs/security/tenant-provisioning-security"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Tenant provisioning — security appendix | Aeterna"><meta data-rh="true" name="description" content="Audience: security reviewers, platform operators."><meta data-rh="true" property="og:description" content="Audience: security reviewers, platform operators."><link data-rh="true" rel="icon" href="/aeterna/img/favicon.ico"><link data-rh="true" rel="canonical" href="https://kikokikok.github.io/aeterna/docs/security/tenant-provisioning-security"><link data-rh="true" rel="alternate" href="https://kikokikok.github.io/aeterna/docs/security/tenant-provisioning-security" hreflang="en"><link data-rh="true" rel="alternate" href="https://kikokikok.github.io/aeterna/docs/security/tenant-provisioning-security" hreflang="x-default"><link rel="stylesheet" href="/aeterna/assets/css/styles.a5946a0e.css">
+<script src="/aeterna/assets/js/runtime~main.d39b5c57.js" defer="defer"></script>
+<script src="/aeterna/assets/js/main.a71493ce.js" defer="defer"></script>
+</head>
+<body class="navigation-with-keyboard">
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||"light"),document.documentElement.setAttribute("data-theme-choice",t||"light")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><link rel="preload" as="image" href="/aeterna/img/logo.svg"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav aria-label="Main" class="theme-layout-navbar navbar navbar--fixed-top"><div class="navbar__inner"><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded="false" class="navbar__toggle clean-btn" type="button"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2" d="M4 7h22M4 15h22M4 23h22"></path></svg></button><a class="navbar__brand" href="/aeterna/"><div class="navbar__logo"><img src="/aeterna/img/logo.svg" alt="Aeterna Logo" class="themedComponent_mlkZ themedComponent--light_NVdE"><img src="/aeterna/img/logo.svg" alt="Aeterna Logo" class="themedComponent_mlkZ themedComponent--dark_xIcU"></div><b class="navbar__title text--truncate">Aeterna</b></a><a class="navbar__item navbar__link" href="/aeterna/docs/">Documentation</a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a href="https://github.com/kikokikok/aeterna" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><div class="toggle_vylO colorModeToggle_DEke"><button class="clean-btn toggleButton_gllP toggleButtonDisabled_aARS" type="button" disabled="" title="system mode" aria-label="Switch between dark and light mode (currently system mode)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP lightToggleIcon_pyhR"><path fill="currentColor" d="M12,9c1.65,0,3,1.35,3,3s-1.35,3-3,3s-3-1.35-3-3S10.35,9,12,9 M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5 S14.76,7,12,7L12,7z M2,13l2,0c0.55,0,1-0.45,1-1s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13l2,0c0.55,0,1-0.45,1-1 s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1C11.45,19,11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0 c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95 c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41 L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41 s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06 c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP darkToggleIcon_wfgR"><path fill="currentColor" d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP systemToggleIcon_QzmC"><path fill="currentColor" d="m12 21c4.971 0 9-4.029 9-9s-4.029-9-9-9-9 4.029-9 9 4.029 9 9 9zm4.95-13.95c1.313 1.313 2.05 3.093 2.05 4.95s-0.738 3.637-2.05 4.95c-1.313 1.313-3.093 2.05-4.95 2.05v-14c1.857 0 3.637 0.737 4.95 2.05z"></path></svg></button></div><div class="navbarSearchContainer_Bca1"></div></div></div><div role="presentation" class="navbar-sidebar__backdrop"></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><main class="docMainContainer_TBSr docMainContainerEnhanced_lQrH"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>Tenant provisioning — security appendix</h1></header>
+<p><strong>Audience:</strong> security reviewers, platform operators.
+<strong>Related:</strong> <a class="" href="/aeterna/docs/tenant-provisioning.md"><code>../tenant-provisioning.md</code></a> · <a class="" href="/aeterna/docs/security/rbac-matrix"><code>rbac-matrix.md</code></a> · spec: <code>openspec/changes/harden-tenant-provisioning/</code>.</p>
+<p>This document covers the three surfaces that have a non-trivial security contract in the apply-based tenant pipeline: <strong>secret input modes</strong>, <strong>token scopes</strong>, and the <strong>readiness contract</strong>.</p>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="1-secret-input-modes">1. Secret input modes<a href="#1-secret-input-modes" class="hash-link" aria-label="Direct link to 1. Secret input modes" title="Direct link to 1. Secret input modes" translate="no">​</a></h2>
+<p>The manifest model has <strong>two distinct channels</strong> for sensitive material, and the distinction matters:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Channel</th><th>JSON field</th><th>Storage</th><th>Plaintext lifetime</th></tr></thead><tbody><tr><td><strong>Bound secret</strong></td><td><code>secrets[]</code></td><td><code>tenant_config_secrets.ciphertext</code> (AEAD-encrypted, DEK derived from tenant root key)</td><td>Server holds plaintext only long enough to encrypt-at-rest; request-scoped <code>SecretBytes</code>.</td></tr><tr><td><strong>Secret reference</strong></td><td><code>config.secretReferences{}</code></td><td><code>tenant_config_secrets.reference</code> (the <em>pointer</em> — e.g. <code>k8s:aeterna/openai#api-key</code>)</td><td>Resolved on every read through the resolver; server never persists plaintext at all.</td></tr></tbody></table>
+<p><strong>Rule of thumb:</strong> prefer references. They keep plaintext out of the database entirely. Bound secrets exist for material the operator genuinely wants Aeterna to be the source of truth for (e.g. per-tenant integration tokens that rotate from the Admin UI).</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="11-supported-reference-kinds-and-environment-gates">1.1 Supported reference kinds and environment gates<a href="#11-supported-reference-kinds-and-environment-gates" class="hash-link" aria-label="Direct link to 1.1 Supported reference kinds and environment gates" title="Direct link to 1.1 Supported reference kinds and environment gates" translate="no">​</a></h3>
+<p>Not every resolver is safe in every deployment. Cluster config (<code>server.secrets.allowed_reference_kinds</code>) gates them:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Kind</th><th style="text-align:center">Dev default</th><th style="text-align:center">Prod default</th><th>Notes</th></tr></thead><tbody><tr><td><code>k8sSecret</code></td><td style="text-align:center">off (no k8s)</td><td style="text-align:center"><strong>on</strong></td><td>Only usable when the server runs in-cluster with a ServiceAccount that has <code>get</code> on the target Secret.</td></tr><tr><td><code>file</code></td><td style="text-align:center"><strong>on</strong></td><td style="text-align:center">off</td><td>Path is resolved on the server host; gated off in prod because pod-level file access is a narrower audit boundary than k8s RBAC.</td></tr><tr><td><code>env</code></td><td style="text-align:center"><strong>on</strong></td><td style="text-align:center">off</td><td>Single-node only. Process environment is shared across requests; do not use in multi-tenant prod.</td></tr><tr><td><code>inline</code></td><td style="text-align:center"><strong>on</strong> (tests)</td><td style="text-align:center">off</td><td>For bootstrap/tests. Writing plaintext inside a manifest defeats the point of the reference channel; the validator emits a warning when it sees one.</td></tr></tbody></table>
+<p>When a gated kind is used, <code>/provision</code> returns <code>400 unsupported_secret_reference_kind</code> with the kind name and the config key that disabled it.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="12-plaintext-handling-invariants">1.2 Plaintext handling invariants<a href="#12-plaintext-handling-invariants" class="hash-link" aria-label="Direct link to 1.2 Plaintext handling invariants" title="Direct link to 1.2 Plaintext handling invariants" translate="no">​</a></h3>
+<ul>
+<li class=""><code>mk_core::SecretBytes</code> is the only type allowed to cross function boundaries for plaintext. Its <code>Debug</code> impl is redacted; <code>Serialize</code> is not implemented, so plaintext cannot accidentally round-trip through JSON.</li>
+<li class="">The manifest parser deserialises <code>secrets[].secretValue</code> <strong>directly</strong> into <code>SecretBytes</code>; it never exists as a <code>String</code> in process memory.</li>
+<li class=""><code>ManifestSecret</code>, <code>ManifestProvider</code>, and any downstream types that carry resolved plaintext do <strong>not</strong> implement <code>Clone</code> or <code>Serialize</code>. See <code>cli/src/server/tenant_api.rs</code>.</li>
+<li class="">Structured audit events (<code>TenantAuditEvent::Provisioned</code>, etc.) carry the <strong>canonical hash</strong> of the manifest and the list of logical secret names touched — never values.</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="13-rotation">1.3 Rotation<a href="#13-rotation" class="hash-link" aria-label="Direct link to 1.3 Rotation" title="Direct link to 1.3 Rotation" translate="no">​</a></h3>
+<p>Rotation is just another apply: supply the new bytes under the same <code>logicalName</code>, <code>apply</code>. The server emits a <code>TenantAuditEvent::SecretRotated</code> with the old and new ciphertext identifiers (content-hash-addressed) so the audit trail ties the rotation to the manifest generation that caused it.</p>
+<p>To rotate a <code>secretReferences</code> target (e.g. the k8s Secret behind a ref), rotate out-of-band; the reference string does not change and the next tenant-config read picks up the new value transparently.</p>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="2-token-scopes">2. Token scopes<a href="#2-token-scopes" class="hash-link" aria-label="Direct link to 2. Token scopes" title="Direct link to 2. Token scopes" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="21-who-can-call-provision">2.1 Who can call <code>/provision</code><a href="#21-who-can-call-provision" class="hash-link" aria-label="Direct link to 21-who-can-call-provision" title="Direct link to 21-who-can-call-provision" translate="no">​</a></h3>
+<p><code>POST /api/v1/admin/tenants/provision</code> accepts <strong>two principal kinds</strong>:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Principal</th><th>Check</th><th>Typical caller</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Cedar role check: must hold <code>PlatformAdmin</code> or <code>TenantAdmin</code> on the tenant</td><td>Admin UI, interactive CLI</td></tr><tr><td><strong>Service</strong></td><td>JWT must carry <code>tenants:provision</code> in the <code>scopes</code> claim</td><td>CI / GitOps bots, Terraform, ArgoCD</td></tr></tbody></table>
+<p>Either gate is sufficient. A user principal bypasses the scope check (Cedar role is authoritative for users); a service principal bypasses the role check (it has no user identity).</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="22-scope-vocabulary">2.2 Scope vocabulary<a href="#22-scope-vocabulary" class="hash-link" aria-label="Direct link to 2.2 Scope vocabulary" title="Direct link to 2.2 Scope vocabulary" translate="no">​</a></h3>
+<p>The complete scope list for tenant lifecycle operations:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Scope</th><th>Endpoints</th></tr></thead><tbody><tr><td><code>tenants:read</code></td><td><code>GET /admin/tenants</code>, <code>GET /admin/tenants/{slug}</code>, <code>GET /admin/tenants/{slug}/render</code></td></tr><tr><td><code>tenants:provision</code></td><td><code>POST /admin/tenants/provision</code></td></tr><tr><td><code>tenants:validate</code></td><td><code>POST /admin/tenants/validate</code></td></tr><tr><td><code>tenants:diff</code></td><td><code>POST /admin/tenants/{slug}/diff</code></td></tr><tr><td><code>tenants:watch</code></td><td><code>GET /admin/tenants/{slug}/watch</code> (SSE)</td></tr><tr><td><code>connections:manage</code></td><td><code>POST/DELETE /admin/git-connections/{id}/tenants/{slug}</code></td></tr></tbody></table>
+<p>Scopes are <strong>additive</strong>: a token that grants <code>tenants:provision</code> does not automatically grant <code>tenants:read</code>. Mint tokens with the minimum set required.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="23-mint--use--revoke-lifecycle">2.3 Mint → use → revoke lifecycle<a href="#23-mint--use--revoke-lifecycle" class="hash-link" aria-label="Direct link to 2.3 Mint → use → revoke lifecycle" title="Direct link to 2.3 Mint → use → revoke lifecycle" translate="no">​</a></h3>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token comment" style="color:#999988;font-style:italic"># Platform admin mints a scoped service token:</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token function" style="color:#d73a49">curl</span><span class="token plain"> </span><span class="token parameter variable" style="color:#36acaa">-XPOST</span><span class="token plain"> </span><span class="token variable" style="color:#36acaa">$SERVER</span><span class="token plain">/api/v1/admin/service-tokens </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token parameter variable" style="color:#36acaa">-H</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&quot;Authorization: Bearer </span><span class="token string variable" style="color:#36acaa">$ADMIN_USER_TOKEN</span><span class="token string" style="color:#e3116c">&quot;</span><span class="token plain"> </span><span class="token punctuation" style="color:#393A34">\</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain">  </span><span class="token parameter variable" style="color:#36acaa">-d</span><span class="token plain"> </span><span class="token string" style="color:#e3116c">&#x27;{</span><br></span><span class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">    &quot;name&quot;:   &quot;gitops-acme&quot;,</span><br></span><span class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">    &quot;scopes&quot;: [&quot;tenants:read&quot;, &quot;tenants:diff&quot;, &quot;tenants:provision&quot;],</span><br></span><span class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">    &quot;ttl_seconds&quot;: 3600</span><br></span><span class="token-line" style="color:#393A34"><span class="token string" style="color:#e3116c">  }&#x27;</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain" style="display:inline-block"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># Response includes {token_type:&quot;Bearer&quot;, access_token:&quot;…&quot;}. The access_token is</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># a JWT with &quot;token_type&quot;:&quot;service&quot; and &quot;scopes&quot;:[&quot;tenants:provision&quot;, …] as</span><span class="token plain"></span><br></span><span class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token comment" style="color:#999988;font-style:italic"># first-class claims, validated on every request by the scope middleware.</span><br></span></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="24-middleware-enforcement">2.4 Middleware enforcement<a href="#24-middleware-enforcement" class="hash-link" aria-label="Direct link to 2.4 Middleware enforcement" title="Direct link to 2.4 Middleware enforcement" translate="no">​</a></h3>
+<p>Each protected handler calls, in order:</p>
+<ol>
+<li class=""><code>service_token_validator::validate_service_token_from_headers(headers)</code> → <code>Option&lt;ServicePrincipal&gt;</code></li>
+<li class="">If <code>Some(principal)</code>: <code>require_capability(principal, &quot;&lt;scope&gt;&quot;)?</code> — returns <code>403 insufficient_scope</code> on miss</li>
+<li class="">If <code>None</code> (user call): existing Cedar <code>authorise(user, &quot;&lt;action&gt;&quot;, resource)</code> path</li>
+</ol>
+<p>Validator state (principal + scopes + revocation flag) is cached in Redis with a short TTL; mint and revoke operations warm/evict the cache eagerly (see <code>mint_handler</code>, <code>revoke_handler</code> in <code>server::auth::service_tokens</code>).</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="25-audit">2.5 Audit<a href="#25-audit" class="hash-link" aria-label="Direct link to 2.5 Audit" title="Direct link to 2.5 Audit" translate="no">​</a></h3>
+<p>Every scoped call produces an audit event that carries:</p>
+<ul>
+<li class="">The <strong>principal kind</strong> (<code>user</code> | <code>service</code>) and identifier</li>
+<li class="">The <strong>scope actually used</strong> (not just the scopes the token held)</li>
+<li class="">The <strong>canonical manifest hash</strong> of the applied document</li>
+<li class="">The <strong>generation</strong> before and after</li>
+</ul>
+<p>This makes it trivial to answer &quot;show me every tenant apply done by the <code>gitops-acme</code> bot in the last 24h&quot; as a single query on <code>tenant_audit_events</code>.</p>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="3-readiness-contract">3. Readiness contract<a href="#3-readiness-contract" class="hash-link" aria-label="Direct link to 3. Readiness contract" title="Direct link to 3. Readiness contract" translate="no">​</a></h2>
+<p>A successful <code>apply</code> is <strong>not</strong> a guarantee that every downstream system is serving the new state. The readiness contract makes this explicit.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="31-semantic-guarantee-of-apply">3.1 Semantic guarantee of <code>apply</code><a href="#31-semantic-guarantee-of-apply" class="hash-link" aria-label="Direct link to 31-semantic-guarantee-of-apply" title="Direct link to 31-semantic-guarantee-of-apply" translate="no">​</a></h3>
+<p>When <code>POST /provision</code> returns <code>200</code>:</p>
+<ul>
+<li class="">The Postgres transaction has committed.</li>
+<li class=""><code>tenants</code>, <code>tenant_config_fields</code>, <code>tenant_config_secrets</code>, <code>tenant_repository_bindings</code>, and all hierarchy tables reflect the manifest.</li>
+<li class="">A <code>TenantAuditEvent::Provisioned</code> row with the new generation is visible.</li>
+</ul>
+<p>What it does <strong>not</strong> guarantee:</p>
+<ul>
+<li class="">That in-process caches in other replicas have been invalidated.</li>
+<li class="">That background workers (indexer, embedding builders) have observed the new generation.</li>
+<li class="">That Git provider credentials have been verified against the live provider.</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="32-per-step-readiness-events">3.2 Per-step readiness events<a href="#32-per-step-readiness-events" class="hash-link" aria-label="Direct link to 3.2 Per-step readiness events" title="Direct link to 3.2 Per-step readiness events" translate="no">​</a></h3>
+<p><code>GET /admin/tenants/{slug}/watch</code> streams the following SSE event types in order:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Event</th><th>Emitted when</th></tr></thead><tbody><tr><td><code>manifest.validated</code></td><td>Server-side validation passed</td></tr><tr><td><code>transaction.committed</code></td><td>Postgres transaction succeeded (= <code>apply</code> returned 200)</td></tr><tr><td><code>cache.invalidated</code></td><td>In-process tenant-config cache evicted on every replica (via Redis pub/sub <code>tenant.config.invalidated</code>)</td></tr><tr><td><code>repo_binding.verified</code></td><td>Git provider auth verified against the live provider (best-effort — failure sets <code>warn</code> level)</td></tr><tr><td><code>providers.ready</code></td><td>LLM / embedding / memory-layer factories re-initialised for the tenant</td></tr><tr><td><code>indexer.generation_seen</code></td><td>Indexer worker observed the new generation and scheduled work if needed</td></tr><tr><td><code>ready</code></td><td>All required steps above reached terminal state</td></tr></tbody></table>
+<p>The <code>ready</code> event is the one most callers actually want to wait on; CI can simply <code>aeterna tenant apply --watch --until ready</code> and treat timeout as failure.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="33-steps-not-in-the-readiness-contract">3.3 Steps NOT in the readiness contract<a href="#33-steps-not-in-the-readiness-contract" class="hash-link" aria-label="Direct link to 3.3 Steps NOT in the readiness contract" title="Direct link to 3.3 Steps NOT in the readiness contract" translate="no">​</a></h3>
+<p>By design:</p>
+<ul>
+<li class=""><strong>Knowledge re-index completion</strong> — large repositories can take hours; decoupled from apply readiness.</li>
+<li class=""><strong>Downstream federated caches</strong> (API gateway, edge workers) — their own staleness budget applies.</li>
+<li class=""><strong>Role assignments propagating to sessions</strong> — users with active sessions need a token refresh to pick up new roles.</li>
+</ul>
+<p>Clients that need one of these should poll a dedicated endpoint, not the readiness stream.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="34-timeouts-and-retry">3.4 Timeouts and retry<a href="#34-timeouts-and-retry" class="hash-link" aria-label="Direct link to 3.4 Timeouts and retry" title="Direct link to 3.4 Timeouts and retry" translate="no">​</a></h3>
+<ul>
+<li class=""><code>apply</code> itself has a server-side 60s timeout on the transaction. Longer than that and the request fails with <code>504 provision_timeout</code> — the transaction is either committed or rolled back; caller inspects <code>generation</code> in <code>render</code> to disambiguate.</li>
+<li class=""><code>watch</code> holds the connection for up to 10 minutes; clients should reconnect with a <code>since</code> cursor on timeout.</li>
+<li class=""><strong><code>apply</code> is not idempotent on identical content</strong>: re-applying the same manifest bumps <code>generation</code> and emits a new audit row, but makes no DB change beyond that (the canonical hash is identical — a noop diff). Callers relying on strict idempotence should supply <code>metadata.generation</code> and expect <code>409 generation_stale</code> on collision.</li>
+</ul></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/kikokikok/aeterna/tree/master/website/docs/security/tenant-provisioning-security.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#1-secret-input-modes" class="table-of-contents__link toc-highlight">1. Secret input modes</a><ul><li><a href="#11-supported-reference-kinds-and-environment-gates" class="table-of-contents__link toc-highlight">1.1 Supported reference kinds and environment gates</a></li><li><a href="#12-plaintext-handling-invariants" class="table-of-contents__link toc-highlight">1.2 Plaintext handling invariants</a></li><li><a href="#13-rotation" class="table-of-contents__link toc-highlight">1.3 Rotation</a></li></ul></li><li><a href="#2-token-scopes" class="table-of-contents__link toc-highlight">2. Token scopes</a><ul><li><a href="#21-who-can-call-provision" class="table-of-contents__link toc-highlight">2.1 Who can call <code>/provision</code></a></li><li><a href="#22-scope-vocabulary" class="table-of-contents__link toc-highlight">2.2 Scope vocabulary</a></li><li><a href="#23-mint--use--revoke-lifecycle" class="table-of-contents__link toc-highlight">2.3 Mint → use → revoke lifecycle</a></li><li><a href="#24-middleware-enforcement" class="table-of-contents__link toc-highlight">2.4 Middleware enforcement</a></li><li><a href="#25-audit" class="table-of-contents__link toc-highlight">2.5 Audit</a></li></ul></li><li><a href="#3-readiness-contract" class="table-of-contents__link toc-highlight">3. Readiness contract</a><ul><li><a href="#31-semantic-guarantee-of-apply" class="table-of-contents__link toc-highlight">3.1 Semantic guarantee of <code>apply</code></a></li><li><a href="#32-per-step-readiness-events" class="table-of-contents__link toc-highlight">3.2 Per-step readiness events</a></li><li><a href="#33-steps-not-in-the-readiness-contract" class="table-of-contents__link toc-highlight">3.3 Steps NOT in the readiness contract</a></li><li><a href="#34-timeouts-and-retry" class="table-of-contents__link toc-highlight">3.4 Timeouts and retry</a></li></ul></li></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="row footer__links"><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Docs</div><ul class="footer__items clean-list"><li class="footer__item"><a class="footer__link-item" href="/aeterna/docs/">Getting Started</a></li></ul></div><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Community</div><ul class="footer__items clean-list"><li class="footer__item"><a href="https://github.com/kikokikok/aeterna" target="_blank" rel="noopener noreferrer" class="footer__link-item">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li></ul></div></div><div class="footer__bottom text--center"><div class="footer__copyright">Copyright © 2026 Aeterna Contributors.</div></div></div></footer></div>
+</body>
+</html>
