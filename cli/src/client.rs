@@ -239,6 +239,13 @@ struct LogoutRequest {
 // ---------------------------------------------------------------------------
 
 /// An authenticated HTTP client bound to one Aeterna server profile.
+///
+/// `Clone` is cheap — `reqwest::Client` is internally `Arc`-backed, and
+/// the auxiliary fields (access token, server URL, profile name,
+/// target tenant) are small owned `String`s. Cloning is used by
+/// background tasks (e.g. `tenant apply --watch` spawns an SSE
+/// subscriber that needs its own handle).
+#[derive(Clone)]
 pub struct AeternaClient {
     inner: Client,
     server_url: String,
