@@ -37,8 +37,16 @@ use commands::{Cli, Commands};
 /// We match on:
 ///
 /// - `--token` as a standalone argument (value in next position),
-/// - `--token=...` (value inline),
-/// - `-t` and `-t=...` — the short form old tooling used.
+/// - `--token=...` (value inline).
+///
+/// The short form `-t` is **intentionally not matched** here: several
+/// legitimate subcommands use `-t` as a short alias for an unrelated
+/// flag (`govern pending -t <type>`, `memory ... -t <tag>`,
+/// `knowledge ... -t <tag>`), and rejecting `-t` at the pre-clap
+/// layer produced friendly-fire failures against those commands.
+/// The `--token` long form was the only universally-documented
+/// legacy surface, so blocking only `--token` / `--token=` keeps the
+/// security guarantee without colliding with subcommand shorts.
 ///
 /// Returns `Some(&str)` with the offending form for the test suite
 /// to assert against; returns `None` when argv is clean.
@@ -61,12 +69,7 @@ where
         if a.starts_with("--token=") {
             return Some("--token=");
         }
-        if a == "-t" {
-            return Some("-t");
-        }
-        if a.starts_with("-t=") {
-            return Some("-t=");
-        }
+        // `-t` / `-t=` deliberately NOT matched — see doc-comment above.
     }
     None
 }
@@ -183,15 +186,22 @@ mod tests {
     }
 
     #[test]
-    fn standalone_short_flag_is_rejected() {
-        let argv = ["tenant", "list", "-t", "abc123"];
-        assert_eq!(reject_legacy_token_flag(argv.iter().copied()), Some("-t"));
+    fn standalone_short_flag_is_accepted() {
+        // `-t` is a legitimate short alias in several subcommands
+        // (`govern pending -t <type>`, `memory -t <tag>`,
+        // `knowledge -t <tag>`). The pre-clap legacy-token scanner
+        // must NOT steal `-t` from those commands; rejection is
+        // scoped to the unambiguous `--token` long form.
+        let argv = ["govern", "pending", "-t", "policy"];
+        assert_eq!(reject_legacy_token_flag(argv.iter().copied()), None);
     }
 
     #[test]
-    fn inline_short_flag_is_rejected() {
-        let argv = ["tenant", "list", "-t=abc123"];
-        assert_eq!(reject_legacy_token_flag(argv.iter().copied()), Some("-t="));
+    fn inline_short_flag_is_accepted() {
+        // Same rationale as `standalone_short_flag_is_accepted`:
+        // `-t=...` is not reserved by the legacy-token guard.
+        let argv = ["govern", "pending", "-t=policy"];
+        assert_eq!(reject_legacy_token_flag(argv.iter().copied()), None);
     }
 
     #[test]
