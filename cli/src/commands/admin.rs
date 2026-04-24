@@ -1086,8 +1086,8 @@ async fn run_import(args: AdminImportArgs) -> anyhow::Result<()> {
     };
 
     // If validation failed, report and bail.
-    if let Some(ref rpt) = report {
-        if !rpt.valid {
+    if let Some(ref rpt) = report
+        && !rpt.valid {
             if args.json {
                 println!(
                     "{}",
@@ -1109,7 +1109,6 @@ async fn run_import(args: AdminImportArgs) -> anyhow::Result<()> {
             }
             anyhow::bail!("Archive validation failed: {}", rpt.errors.join("; "));
         }
-    }
 
     // Read the manifest from the archive for display.
     let reader = ArchiveReader::open(&args.input)?;

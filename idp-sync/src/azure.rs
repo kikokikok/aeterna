@@ -43,11 +43,10 @@ impl AzureAdClient {
     async fn get_access_token(&self) -> IdpSyncResult<String> {
         {
             let cached = self.access_token.read().await;
-            if let Some(ref token) = *cached {
-                if token.expires_at > Utc::now() + chrono::Duration::minutes(5) {
+            if let Some(ref token) = *cached
+                && token.expires_at > Utc::now() + chrono::Duration::minutes(5) {
                     return Ok(token.token.clone());
                 }
-            }
         }
 
         let token_url = format!(

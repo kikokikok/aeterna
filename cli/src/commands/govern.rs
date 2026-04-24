@@ -344,14 +344,13 @@ async fn run_status(args: GovernStatusArgs) -> anyhow::Result<()> {
                 }
             }
 
-            if args.verbose {
-                if let Some(recent) = result.get("recent_activity").and_then(|v| v.as_array()) {
+            if args.verbose
+                && let Some(recent) = result.get("recent_activity").and_then(|v| v.as_array()) {
                     output::subheader("Recent Activity");
                     for item in recent {
                         println!("  • {}", item.as_str().unwrap_or("?"));
                     }
                 }
-            }
         }
         return Ok(());
     }

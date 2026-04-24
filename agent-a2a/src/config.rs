@@ -31,11 +31,10 @@ impl Config {
         if let Ok(addr) = std::env::var("AGENT_A2A_BIND_ADDRESS") {
             config.bind_address = addr;
         }
-        if let Ok(port) = std::env::var("AGENT_A2A_PORT") {
-            if let Ok(p) = port.parse() {
+        if let Ok(port) = std::env::var("AGENT_A2A_PORT")
+            && let Ok(p) = port.parse() {
                 config.port = p;
             }
-        }
         if let Ok(enabled) = std::env::var("AGENT_A2A_AUTH_ENABLED") {
             config.auth.enabled = enabled == "true";
         }
@@ -109,6 +108,7 @@ impl Default for Config {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Default)]
 pub struct AuthConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -123,16 +123,6 @@ pub struct AuthConfig {
     pub trusted_identity: TrustedIdentityConfig,
 }
 
-impl Default for AuthConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            api_key: None,
-            jwt_secret: None,
-            trusted_identity: TrustedIdentityConfig::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TrustedIdentityConfig {

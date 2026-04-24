@@ -319,11 +319,10 @@ async fn run_logout(args: LogoutArgs) -> anyhow::Result<()> {
     }
 
     // Best-effort server-side revocation (don't fail the local logout)
-    if !resolved.server_url.is_empty() {
-        if let Err(e) = client::server_logout(&resolved.server_url, &cred.refresh_token).await {
+    if !resolved.server_url.is_empty()
+        && let Err(e) = client::server_logout(&resolved.server_url, &cred.refresh_token).await {
             output::warn(&format!("Server-side revocation failed (continuing): {e}"));
         }
-    }
 
     // Remove local credentials
     credentials::delete(profile_name)?;

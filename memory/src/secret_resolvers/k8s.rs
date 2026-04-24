@@ -498,8 +498,8 @@ mod tests {
                 reason: reason.clone(),
             },
             ResolveError::WrongKind { expected, actual } => ResolveError::WrongKind {
-                expected: *expected,
-                actual: *actual,
+                expected: expected,
+                actual: actual,
             },
         }
     }

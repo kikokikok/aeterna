@@ -44,11 +44,10 @@ pub fn generate_all(config: &SetupConfig, output_dir: &Path) -> Result<Vec<PathB
         DeploymentTarget::OpencodeOnly => {}
     }
 
-    if config.opencode_enabled {
-        if let Some(mcp_path) = generate_opencode_config(config)? {
+    if config.opencode_enabled
+        && let Some(mcp_path) = generate_opencode_config(config)? {
             generated.push(mcp_path);
         }
-    }
 
     Ok(generated)
 }

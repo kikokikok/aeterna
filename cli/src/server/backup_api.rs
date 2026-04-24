@@ -164,8 +164,8 @@ impl ExportJobStore {
             if let Some(path_str) = &job.archive_path {
                 let path = std::path::PathBuf::from(path_str);
                 // Only remove local files, not S3 keys
-                if path.exists() {
-                    if tokio::fs::remove_file(&path).await.is_ok() {
+                if path.exists()
+                    && tokio::fs::remove_file(&path).await.is_ok() {
                         tracing::info!(
                             job_id = %job.job_id,
                             path = %path_str,
@@ -173,7 +173,6 @@ impl ExportJobStore {
                         );
                         cleaned += 1;
                     }
-                }
             }
         }
         cleaned
@@ -225,11 +224,10 @@ impl ExportJobStore {
     /// Mark a completed job for cleanup by setting `completed_at` to now if
     /// it was not already set.
     async fn mark_for_cleanup(&self, job_id: &str) {
-        if let Some(job) = self.jobs.write().await.get_mut(job_id) {
-            if job.completed_at.is_none() {
+        if let Some(job) = self.jobs.write().await.get_mut(job_id)
+            && job.completed_at.is_none() {
                 job.completed_at = Some(chrono::Utc::now().to_rfc3339());
             }
-        }
     }
 }
 
@@ -340,8 +338,8 @@ impl RedisExportJobStore {
             }
             if let Some(path_str) = &job.archive_path {
                 let path = std::path::PathBuf::from(path_str);
-                if path.exists() {
-                    if tokio::fs::remove_file(&path).await.is_ok() {
+                if path.exists()
+                    && tokio::fs::remove_file(&path).await.is_ok() {
                         tracing::info!(
                             job_id = %job.job_id,
                             path = %path_str,
@@ -349,7 +347,6 @@ impl RedisExportJobStore {
                         );
                         cleaned += 1;
                     }
-                }
             }
         }
         cleaned
@@ -923,8 +920,8 @@ pub async fn cleanup_temp_files() {
             continue;
         }
         // Check file age: only clean up files older than 2 hours
-        if let Ok(metadata) = tokio::fs::metadata(&path).await {
-            if let Ok(modified) = metadata.modified() {
+        if let Ok(metadata) = tokio::fs::metadata(&path).await
+            && let Ok(modified) = metadata.modified() {
                 let age = std::time::SystemTime::now()
                     .duration_since(modified)
                     .unwrap_or_default();
@@ -932,7 +929,6 @@ pub async fn cleanup_temp_files() {
                     continue;
                 }
             }
-        }
         if tokio::fs::remove_file(&path).await.is_ok() {
             tracing::info!(path = %path_str, "Cleaned up orphaned temp file");
             cleaned += 1;

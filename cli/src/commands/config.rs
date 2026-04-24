@@ -326,8 +326,8 @@ fn run_validate(args: ValidateArgs) -> anyhow::Result<()> {
         &[(&user_path, "user"), (&project_path, "project")];
 
     for (path_opt, source) in sources {
-        if let Some(path) = path_opt {
-            if path.exists() {
+        if let Some(path) = path_opt
+            && path.exists() {
                 match profile::load_config_file(path) {
                     Ok(cfg) => {
                         for (name, p) in &cfg.profiles {
@@ -353,7 +353,6 @@ fn run_validate(args: ValidateArgs) -> anyhow::Result<()> {
                     }
                 }
             }
-        }
     }
 
     let valid = issues.is_empty();

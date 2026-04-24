@@ -1786,11 +1786,10 @@ async fn run_repo_binding_validate(args: TenantRepoBindingValidateArgs) -> anyho
                 icon,
                 if valid { "valid" } else { "invalid" }
             );
-            if let Some(msg) = result["message"].as_str() {
-                if !msg.is_empty() {
+            if let Some(msg) = result["message"].as_str()
+                && !msg.is_empty() {
                     println!("  Detail: {msg}");
                 }
-            }
             println!();
         }
         return Ok(());
@@ -2008,11 +2007,10 @@ async fn run_config_validate(args: TenantConfigValidateArgs) -> anyhow::Result<(
                 icon,
                 if valid { "valid" } else { "invalid" }
             );
-            if let Some(msg) = redacted["message"].as_str() {
-                if !msg.is_empty() {
+            if let Some(msg) = redacted["message"].as_str()
+                && !msg.is_empty() {
                     println!("  Detail: {msg}");
                 }
-            }
             println!();
         }
         return Ok(());
@@ -3353,14 +3351,12 @@ async fn run_watch(args: TenantWatchArgs) -> anyhow::Result<()> {
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
-    {
-        if !ct.contains("text/event-stream") {
+        && !ct.contains("text/event-stream") {
             eprintln!(
                 "warning: server Content-Type is `{ct}` (expected text/event-stream) — \
                  a buffering proxy may hold events back"
             );
         }
-    }
 
     if !args.json {
         eprintln!("Watching tenant '{}' — Ctrl-C to stop.", args.slug);

@@ -96,8 +96,7 @@ fn ha_redis_sentinel_has_three_replicas() {
             .get("spec")
             .and_then(|s| s.get("replicas"))
             .and_then(serde_yaml::Value::as_u64)
-        {
-            if replicas == 3 {
+            && replicas == 3 {
                 if kind == "Deployment" && name.contains("sentinel") {
                     sentinel_replicas_3 = true;
                 }
@@ -105,7 +104,6 @@ fn ha_redis_sentinel_has_three_replicas() {
                     redis_replicas_3 = true;
                 }
             }
-        }
     }
 
     assert!(redis_replicas_3, "Redis StatefulSet must have 3 replicas");

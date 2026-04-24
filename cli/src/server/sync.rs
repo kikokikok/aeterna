@@ -157,8 +157,8 @@ async fn push_handler(
         .await
         .unwrap_or(None);
 
-        if let Some((remote_content, remote_updated)) = existing {
-            if remote_updated > updated_at {
+        if let Some((remote_content, remote_updated)) = existing
+            && remote_updated > updated_at {
                 conflicts.push(SyncConflictEntry {
                     id: entry.id.clone(),
                     remote_content,
@@ -166,7 +166,6 @@ async fn push_handler(
                 });
                 continue;
             }
-        }
 
         let properties = entry.metadata.clone().unwrap_or(serde_json::json!({}));
         let tags_value = serde_json::to_value(&entry.tags).unwrap_or(serde_json::json!([]));

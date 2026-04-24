@@ -855,15 +855,14 @@ async fn run_promotion_preview(args: KnowledgePromotionPreviewArgs) -> anyhow::R
                 println!("  {}", truncate(residual, 120));
                 println!();
             }
-            if let Some(impacts) = result["impacts"].as_array() {
-                if !impacts.is_empty() {
+            if let Some(impacts) = result["impacts"].as_array()
+                && !impacts.is_empty() {
                     output::subheader("Impacts");
                     for impact in impacts {
                         println!("  • {}", impact.as_str().unwrap_or("?"));
                     }
                     println!();
                 }
-            }
             output::hint(
                 "Run 'aeterna knowledge promote' with --yes to submit the promotion request",
             );

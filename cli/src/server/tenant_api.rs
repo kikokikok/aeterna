@@ -723,15 +723,14 @@ async fn delete_tenant_secret(
             .await
         {
             Ok(Some(existing)) => {
-                if let Some(ref_entry) = existing.secret_references.get(&logical_name) {
-                    if ref_entry.ownership == TenantConfigOwnership::Platform {
+                if let Some(ref_entry) = existing.secret_references.get(&logical_name)
+                    && ref_entry.ownership == TenantConfigOwnership::Platform {
                         return error_response(
                             StatusCode::FORBIDDEN,
                             "forbidden",
                             "TenantAdmin cannot delete a platform-owned secret entry",
                         );
                     }
-                }
             }
             Ok(None) => {}
             Err(err) => return map_tenant_config_provider_error("secret_delete", err),
@@ -1000,8 +999,7 @@ async fn delete_my_tenant_secret(
     if let Some(reference) = existing_config
         .as_ref()
         .and_then(|config| config.secret_references.get(&logical_name))
-    {
-        if reference.ownership == TenantConfigOwnership::Platform
+        && reference.ownership == TenantConfigOwnership::Platform
             && !ctx.has_known_role(&Role::PlatformAdmin)
         {
             return error_response(
@@ -1010,7 +1008,6 @@ async fn delete_my_tenant_secret(
                 "TenantAdmin cannot delete platform-owned secret entries",
             );
         }
-    }
 
     match state
         .tenant_config_provider
@@ -3914,7 +3911,7 @@ fn is_valid_memory_layer_key(layer: &str) -> bool {
     if bytes.is_empty() || bytes.len() > 63 {
         return false;
     }
-    if !matches!(bytes[0], b'a'..=b'z') {
+    if !bytes[0].is_ascii_lowercase() {
         return false;
     }
     bytes[1..]
@@ -4010,8 +4007,8 @@ fn validate_manifest(m: &TenantManifest) -> Vec<String> {
             if p.kind.trim().is_empty() {
                 errors.push(format!("providers.{slot}.kind must not be empty"));
             }
-            if let Some(ref_name) = &p.secret_ref {
-                if !declared_refs.contains(ref_name.as_str()) {
+            if let Some(ref_name) = &p.secret_ref
+                && !declared_refs.contains(ref_name.as_str()) {
                     let declared_list = if declared_refs.is_empty() {
                         "none".to_string()
                     } else {
@@ -4024,7 +4021,6 @@ fn validate_manifest(m: &TenantManifest) -> Vec<String> {
                          config.secretReferences (declared: {declared_list})"
                     ));
                 }
-            }
         }
 
         if let Some(llm) = &providers.llm {
@@ -4067,13 +4063,12 @@ fn validate_manifest(m: &TenantManifest) -> Vec<String> {
     // ── metadata.generation must be non-zero when present (0 is a common
     //    sentinel for "unset" and rejecting it catches accidental `0` from
     //    serializers that default numbers).
-    if let Some(meta) = &m.metadata {
-        if meta.generation == Some(0) {
+    if let Some(meta) = &m.metadata
+        && meta.generation == Some(0) {
             errors.push(
                 "metadata.generation must be >= 1 when set (use omit for auto-assign)".into(),
             );
         }
-    }
 
     // ── secret_references: per-variant well-formedness (B1 §1.2). The
     //    serde `tag = "kind"` union already rejects unknown kinds at parse
@@ -4147,13 +4142,12 @@ fn validate_manifest(m: &TenantManifest) -> Vec<String> {
                             "config.secretReferences.{ref_name}.key must not be empty"
                         ));
                     }
-                    if let Some(ns) = namespace {
-                        if ns.trim().is_empty() {
+                    if let Some(ns) = namespace
+                        && ns.trim().is_empty() {
                             errors.push(format!(
                                 "config.secretReferences.{ref_name}.namespace, when set, must not be empty (omit to use the server's namespace)"
                             ));
                         }
-                    }
                 }
                 mk_core::SecretReference::Vault { mount, path, field } => {
                     for (label, value) in [("mount", mount), ("path", path), ("field", field)] {
@@ -4438,8 +4432,8 @@ async fn provision_tenant(
     // the full pipeline, even if by coincidence the incoming hash would
     // match some stored sentinel — there is no sentinel, but the
     // `if Some(prior)` guard documents the intent.
-    if let Some((Some(prior_hash), _)) = prior_state.as_ref() {
-        if prior_hash == &incoming_hash {
+    if let Some((Some(prior_hash), _)) = prior_state.as_ref()
+        && prior_hash == &incoming_hash {
             let is_dry_run = query.dry_run.unwrap_or(false);
             // Dry-run on an unchanged manifest audits a preview event,
             // not a real unchanged-apply. Callers treat these separately
@@ -4481,7 +4475,6 @@ async fn provision_tenant(
             )
                 .into_response();
         }
-    }
 
     // Strict-monotonic generation check. Only rejects when the caller
     // explicitly set a non-increasing value; omitted `generation` is
