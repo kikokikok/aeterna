@@ -24,9 +24,9 @@
 use std::path::Path;
 
 use async_trait::async_trait;
+use mk_core::SecretBytes;
 use mk_core::secret::SecretReference;
 use mk_core::types::TenantId;
-use mk_core::SecretBytes;
 use tokio::io::AsyncReadExt;
 
 use crate::secret_resolver::{ResolveError, SecretRefResolver};
@@ -48,12 +48,12 @@ impl FileRefResolver {
     #[cfg(unix)]
     async fn check_mode(path: &Path) -> Result<(), ResolveError> {
         use std::os::unix::fs::MetadataExt;
-        let md = tokio::fs::metadata(path).await.map_err(|e| {
-            ResolveError::BackendUnavailable {
+        let md = tokio::fs::metadata(path)
+            .await
+            .map_err(|e| ResolveError::BackendUnavailable {
                 kind: "file",
                 reason: format!("stat failed: {e}"),
-            }
-        })?;
+            })?;
         let mode = md.mode() & 0o777;
         if mode & 0o077 != 0 {
             return Err(ResolveError::PermissionDenied {
@@ -161,10 +161,12 @@ impl SecretRefResolver for FileRefResolver {
         })?;
 
         let mut buf = Vec::with_capacity(md.len() as usize);
-        file.read_to_end(&mut buf).await.map_err(|e| ResolveError::BackendUnavailable {
-            kind: "file",
-            reason: format!("read failed: {e}"),
-        })?;
+        file.read_to_end(&mut buf)
+            .await
+            .map_err(|e| ResolveError::BackendUnavailable {
+                kind: "file",
+                reason: format!("read failed: {e}"),
+            })?;
 
         Ok(SecretBytes::from(buf))
     }
@@ -195,7 +197,9 @@ mod tests {
     }
 
     fn file_ref(p: &str) -> SecretReference {
-        SecretReference::File { path: p.to_string() }
+        SecretReference::File {
+            path: p.to_string(),
+        }
     }
 
     #[tokio::test]
@@ -228,13 +232,19 @@ mod tests {
     async fn empty_path_is_malformed() {
         let r = FileRefResolver::new();
         let err = r.resolve(&tid(), &file_ref("")).await.unwrap_err();
-        assert!(matches!(err, ResolveError::MalformedReference { kind: "file", .. }));
+        assert!(matches!(
+            err,
+            ResolveError::MalformedReference { kind: "file", .. }
+        ));
     }
 
     #[tokio::test]
     async fn relative_path_is_malformed() {
         let r = FileRefResolver::new();
-        let err = r.resolve(&tid(), &file_ref("relative/path")).await.unwrap_err();
+        let err = r
+            .resolve(&tid(), &file_ref("relative/path"))
+            .await
+            .unwrap_err();
         match err {
             ResolveError::MalformedReference { kind, reason } => {
                 assert_eq!(kind, "file");
@@ -247,9 +257,17 @@ mod tests {
     #[tokio::test]
     async fn wrong_kind_is_rejected() {
         let r = FileRefResolver::new();
-        let env = SecretReference::Env { var: "X".to_string() };
+        let env = SecretReference::Env {
+            var: "X".to_string(),
+        };
         let err = r.resolve(&tid(), &env).await.unwrap_err();
-        assert!(matches!(err, ResolveError::WrongKind { expected: "file", actual: "env" }));
+        assert!(matches!(
+            err,
+            ResolveError::WrongKind {
+                expected: "file",
+                actual: "env"
+            }
+        ));
     }
 
     #[cfg(unix)]
@@ -275,7 +293,10 @@ mod tests {
         let p = write_file(&dir, "world.secret", b"oops", 0o604).await;
         let r = FileRefResolver::new();
         let err = r.resolve(&tid(), &file_ref(&p)).await.unwrap_err();
-        assert!(matches!(err, ResolveError::PermissionDenied { kind: "file", .. }));
+        assert!(matches!(
+            err,
+            ResolveError::PermissionDenied { kind: "file", .. }
+        ));
     }
 
     #[tokio::test]

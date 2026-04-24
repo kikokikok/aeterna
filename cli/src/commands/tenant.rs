@@ -3040,10 +3040,16 @@ mod tests {
             "tenant": {"slug": "acme"},
         });
         let s = serialize_rendered_manifest(&v).unwrap();
-        assert!(s.ends_with('\n'), "output must end with exactly one newline: {s:?}");
+        assert!(
+            s.ends_with('\n'),
+            "output must end with exactly one newline: {s:?}"
+        );
         assert!(!s.ends_with("\n\n"), "no double newline: {s:?}");
         // Indent check — `to_string_pretty` uses two spaces.
-        assert!(s.contains("  \"apiVersion\""), "expected 2-space indent: {s}");
+        assert!(
+            s.contains("  \"apiVersion\""),
+            "expected 2-space indent: {s}"
+        );
         // Round-trips back to the same JSON.
         let v2: serde_json::Value = serde_json::from_str(&s).unwrap();
         assert_eq!(v, v2);

@@ -500,9 +500,9 @@ mod redaction_coverage {
     use super::*;
     use crate::secret_resolvers::{EnvRefResolver, InlineRefResolver};
     use async_trait::async_trait;
+    use mk_core::SecretBytes;
     use mk_core::secret::SecretReference;
     use mk_core::types::TenantId;
-    use mk_core::SecretBytes;
 
     /// The literal bytes we use as a sentinel “plaintext” in every test
     /// below. If any of these bytes appear in a rendered error message,
@@ -589,7 +589,10 @@ mod redaction_coverage {
         assert_no_plaintext(&rendered, SENTINEL_PLAINTEXT);
         // Both fields are `&'static str` — cannot carry dynamic data.
         match err {
-            ResolveError::WrongKind { expected: _, actual: _ } => {}
+            ResolveError::WrongKind {
+                expected: _,
+                actual: _,
+            } => {}
             _ => unreachable!(),
         }
     }
@@ -728,7 +731,12 @@ mod redaction_coverage {
         let mut registry = SecretResolverRegistry::new();
         registry.register(std::sync::Arc::new(LeakyResolver));
         let err = registry
-            .resolve(&tid(), &SecretReference::Env { var: "X".to_string() })
+            .resolve(
+                &tid(),
+                &SecretReference::Env {
+                    var: "X".to_string(),
+                },
+            )
             .await
             .unwrap_err();
         let rendered = format!("{err}");
