@@ -48,6 +48,8 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use futures_util::stream::{self, Stream};
+#[cfg(test)]
+use futures_util::stream::StreamExt as _;
 use mk_core::types::{Role, RoleIdentifier};
 use serde_json::json;
 use tokio::sync::broadcast;
