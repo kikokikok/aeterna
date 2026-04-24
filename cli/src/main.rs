@@ -17,12 +17,90 @@ pub mod ux_error;
 
 use commands::{Cli, Commands};
 
+/// Reject the deprecated `--token` / `--token=...` CLI flag (B2 §10.6).
+///
+/// The pre-§10 CLI accepted a `--token <value>` flag on several
+/// subcommands, which meant operators habitually pasted raw bearer
+/// tokens onto the command line — where they landed in shell history,
+/// `ps aux`, and CI logs. The supported surface is now:
+///
+/// 1. `AETERNA_API_TOKEN` env var — for CI and scripted callers.
+/// 2. `aeterna auth login` → `~/.config/aeterna/credentials.toml`
+///    — for interactive operators.
+/// 3. OS keychain (future work, tracked separately in `credentials.rs`).
+///
+/// Rather than letting clap silently ignore `--token` (it is not
+/// declared anywhere, so clap would emit a generic "unexpected
+/// argument" message and exit 2), we scan argv ourselves and emit a
+/// helpful migration message naming both supported paths.
+///
+/// We match on:
+///
+/// - `--token` as a standalone argument (value in next position),
+/// - `--token=...` (value inline),
+/// - `-t` and `-t=...` — the short form old tooling used.
+///
+/// Returns `Some(&str)` with the offending form for the test suite
+/// to assert against; returns `None` when argv is clean.
+///
+/// Scans but does **not** inspect values. The value itself might be
+/// a real token — we deliberately avoid reading it, printing it, or
+/// including it in the error message, so a user who pastes a command
+/// with `--token sk-live-...` into a support channel does not leak
+/// the token in their own pasted error output.
+fn reject_legacy_token_flag<I, S>(args: I) -> Option<&'static str>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    for arg in args {
+        let a = arg.as_ref();
+        if a == "--token" {
+            return Some("--token");
+        }
+        if a.starts_with("--token=") {
+            return Some("--token=");
+        }
+        if a == "-t" {
+            return Some("-t");
+        }
+        if a.starts_with("-t=") {
+            return Some("-t=");
+        }
+    }
+    None
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::registry()
         .with(fmt::layer())
         .with(EnvFilter::from_default_env())
         .init();
+
+    // B2 §10.6 — scan argv for the deprecated `--token` surface
+    // BEFORE clap parses. Clap would otherwise emit a generic
+    // "unexpected argument" error that buries the migration guidance.
+    // We skip argv[0] (the binary name) because an operator running
+    // the binary from a path containing "--token" (unlikely but
+    // possible) would get a spurious rejection otherwise.
+    if let Some(form) = reject_legacy_token_flag(std::env::args().skip(1)) {
+        ux_error::UxError::new(format!("The `{form}` CLI flag is no longer accepted."))
+            .why(
+                "Passing bearer tokens on the command line leaks them into shell \
+             history, process listings, and CI logs. The CLI now reads tokens \
+             only from the environment or from the credentials file written by \
+             `aeterna auth login`.",
+            )
+            .fix("For scripted / CI use: export AETERNA_API_TOKEN=<service-token>")
+            .fix("For interactive use: run `aeterna auth login`")
+            .fix(
+                "Service tokens are minted via `aeterna auth token create` \
+             (PlatformAdmin only; see B2 §10.2).",
+            )
+            .display();
+        exit_code::ExitCode::Usage.exit();
+    }
 
     let cli = Cli::parse();
 
@@ -50,5 +128,124 @@ async fn main() -> Result<()> {
         Commands::Auth(cmd) => commands::auth::run(cmd).await,
         Commands::Config(cmd) => commands::config::run(cmd).await,
         Commands::Profile(cmd) => commands::profile::run(cmd).await,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---------------------------------------------------------------
+    // B2 §10.6 — reject legacy --token flag
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn clean_argv_is_accepted() {
+        // No token flag anywhere — the scanner must return None so
+        // main proceeds to clap. We cover both long and short command
+        // shapes and a value that happens to contain the substring
+        // "token" to confirm we are not matching too greedily.
+        let cases: &[&[&str]] = &[
+            &["tenant", "apply", "-f", "manifest.json"],
+            &["auth", "login", "--profile", "prod"],
+            &["memory", "search", "--query", "my-api-token-policy"],
+            &["admin", "export", "--output", "backup.zst"],
+            &[], // empty argv — edge case
+        ];
+        for argv in cases {
+            assert_eq!(
+                reject_legacy_token_flag(argv.iter().copied()),
+                None,
+                "clean argv {argv:?} must not trigger rejection"
+            );
+        }
+    }
+
+    #[test]
+    fn standalone_long_flag_is_rejected() {
+        let argv = ["tenant", "list", "--token", "abc123"];
+        assert_eq!(
+            reject_legacy_token_flag(argv.iter().copied()),
+            Some("--token")
+        );
+    }
+
+    #[test]
+    fn inline_long_flag_is_rejected() {
+        // `--token=<value>` is the form clap would have accepted
+        // historically; catching it by the `=` prefix ensures we do
+        // not read the value itself.
+        let argv = ["tenant", "list", "--token=abc123"];
+        assert_eq!(
+            reject_legacy_token_flag(argv.iter().copied()),
+            Some("--token=")
+        );
+    }
+
+    #[test]
+    fn standalone_short_flag_is_rejected() {
+        let argv = ["tenant", "list", "-t", "abc123"];
+        assert_eq!(reject_legacy_token_flag(argv.iter().copied()), Some("-t"));
+    }
+
+    #[test]
+    fn inline_short_flag_is_rejected() {
+        let argv = ["tenant", "list", "-t=abc123"];
+        assert_eq!(reject_legacy_token_flag(argv.iter().copied()), Some("-t="));
+    }
+
+    #[test]
+    fn rejection_does_not_leak_token_value() {
+        // Regression guard: the scanner returns only a fixed-shape
+        // identifier, never the caller's actual token. A user pasting
+        // the rejection output into a support channel must not also
+        // leak their credential.
+        let secret = "sk-live-must-not-appear";
+        let argv = ["--token", secret];
+        let form = reject_legacy_token_flag(argv.iter().copied()).unwrap();
+        assert_eq!(form, "--token");
+        // The returned &'static str is a compile-time constant; it
+        // literally cannot contain the secret. The test asserts the
+        // *shape* of the guarantee, not the value.
+        assert!(!form.contains(secret));
+        assert!(!form.contains("sk-"));
+    }
+
+    #[test]
+    fn first_match_wins_when_flag_appears_twice() {
+        // Two different shapes of the flag on the same command line —
+        // we report the first one so the error message stays
+        // deterministic. Either result would technically be
+        // correct but deterministic output is easier to test and
+        // easier to reason about when a user reads the error.
+        let argv = ["--token=a", "cmd", "--token", "b"];
+        assert_eq!(
+            reject_legacy_token_flag(argv.iter().copied()),
+            Some("--token=")
+        );
+    }
+
+    #[test]
+    fn substring_match_is_not_triggered() {
+        // `--token-file`, `--service-token`, `--use-token=yes` etc.
+        // are NOT legacy `--token` — they are either nonexistent
+        // flags (clap will reject) or legitimate neighbouring flags.
+        // The scanner must match the exact forms only.
+        let cases: &[&[&str]] = &[
+            &["--token-file", "/tmp/t"],
+            &["--service-token"],
+            &["--use-token=yes"],
+            &["--tokenize"],
+            &["token"],  // bare positional
+            &["-tx"],    // short-flag cluster that is not `-t`
+            &["-token"], // single-dash long name — not our shape
+        ];
+        for argv in cases {
+            assert_eq!(
+                reject_legacy_token_flag(argv.iter().copied()),
+                None,
+                "argv {argv:?} must not be matched as legacy --token"
+            );
+        }
     }
 }

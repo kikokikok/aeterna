@@ -252,10 +252,51 @@ pub struct AeternaClient {
 
 impl AeternaClient {
     /// Build a client for `profile_name`, loading and refreshing credentials
-    /// as necessary. Returns an error if no valid credentials exist.
+    /// as necessary.
+    ///
+    /// ## Token resolution order (B2 §10.6)
+    ///
+    /// 1. `AETERNA_API_TOKEN` env var — opaque bearer token, used
+    ///    verbatim, **no refresh attempted**. The expected source is
+    ///    `aeterna auth token create` (service token) exported into a
+    ///    CI secret or shell profile. If the token is stale, the
+    ///    server will 401 on the first request and the caller retries
+    ///    out of band.
+    /// 2. `~/.config/aeterna/credentials.toml` — the interactive-login
+    ///    flow that tracks `access_token + refresh_token + expires_at`
+    ///    and proactively refreshes through `refresh_token()` when
+    ///    the access token is near expiry.
+    ///
+    /// The deprecated `--token` CLI flag is rejected at argv parse
+    /// time (see `main::reject_legacy_token_flag`) so the env var is
+    /// the *only* supported escape hatch.
+    ///
+    /// Returns an error if neither the env var nor stored credentials
+    /// yield a usable token.
     pub async fn from_profile(resolved: &ResolvedConfig) -> Result<Self> {
         let profile_name = &resolved.profile_name;
         let server_url = resolved.server_url.trim_end_matches('/').to_string();
+
+        // Env-var override: short-circuit the credentials file and
+        // refresh machinery entirely. This is the scripted-caller
+        // path — refresh requires a refresh_token we do not have, and
+        // the env flow deliberately keeps lifecycle out of the CLI.
+        if let Ok(tok) = std::env::var(crate::env_vars::AETERNA_API_TOKEN) {
+            let tok = tok.trim();
+            if !tok.is_empty() {
+                return Ok(Self {
+                    inner: build_http_client(),
+                    server_url,
+                    profile_name: profile_name.clone(),
+                    access_token: tok.to_string(),
+                    target_tenant: None,
+                });
+            }
+            // Empty value in env is treated as "unset" — falling
+            // through to the credentials file avoids surprising a
+            // caller who has `AETERNA_API_TOKEN=` in a stale .env
+            // but still expects the interactive login to work.
+        }
 
         // Load stored credentials
         let cred = credentials::load(profile_name)?
