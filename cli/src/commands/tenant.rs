@@ -3342,11 +3342,7 @@ async fn run_watch(args: TenantWatchArgs) -> anyhow::Result<()> {
         // Drain body for the error message; do NOT stream — this is
         // not an SSE response, it's a short error JSON / text blob.
         let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!(
-            "Server rejected stream open ({}): {}",
-            status,
-            body.trim()
-        );
+        anyhow::bail!("Server rejected stream open ({}): {}", status, body.trim());
     }
 
     // Sanity: we *should* have text/event-stream. A reverse proxy
@@ -4027,7 +4023,10 @@ mod tests {
         // Partial line on one side of a feed boundary must survive to
         // the next call without corrupting the next event.
         let mut p = SseParser::new();
-        assert!(p.feed("event: prov").is_empty(), "partial line must not emit");
+        assert!(
+            p.feed("event: prov").is_empty(),
+            "partial line must not emit"
+        );
         let frames = p.feed("isioned\ndata: {}\n\n");
         assert_eq!(frames.len(), 1);
         assert_eq!(frames[0].event_name(), "provisioned");

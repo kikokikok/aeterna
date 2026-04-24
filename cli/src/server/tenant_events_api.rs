@@ -47,7 +47,7 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
-use futures_util::stream::{self, Stream, StreamExt as _};
+use futures_util::stream::{self, Stream};
 use mk_core::types::{Role, RoleIdentifier};
 use serde_json::json;
 use tokio::sync::broadcast;
@@ -276,8 +276,7 @@ mod tests {
         // After both matches drain, a further poll with a tight
         // timeout must NOT resolve — the filter kept the `other` event
         // out, so the stream is idle.
-        let third =
-            tokio::time::timeout(std::time::Duration::from_millis(50), stream.next()).await;
+        let third = tokio::time::timeout(std::time::Duration::from_millis(50), stream.next()).await;
         assert!(
             third.is_err(),
             "stream must stay quiet after matches drain; got: {third:?}"

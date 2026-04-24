@@ -555,12 +555,7 @@ mod tests {
         // only know unit variants route unknown object-shaped kinds
         // through the `Unknown` catch-all (a harmless extra re-wire),
         // rather than failing deserialization.
-        let ev = TenantChangeEvent::step(
-            "acme",
-            "config",
-            "ok",
-            Some("applied 12 fields".into()),
-        );
+        let ev = TenantChangeEvent::step("acme", "config", "ok", Some("applied 12 fields".into()));
         let s = serde_json::to_string(&ev).unwrap();
         assert!(
             s.contains("\"provisioning_step\""),
@@ -637,10 +632,7 @@ mod tests {
         // `unknown_kind_round_trips` above (string-shaped unknown) and
         // by the stable wire shape proven by this test — an old pod's
         // serde sees the same JSON.
-        assert!(matches!(
-            ev.kind,
-            TenantChangeKind::ProvisioningStep { .. }
-        ));
+        assert!(matches!(ev.kind, TenantChangeKind::ProvisioningStep { .. }));
     }
 
     #[test]
