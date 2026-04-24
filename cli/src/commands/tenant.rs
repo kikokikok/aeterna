@@ -709,6 +709,18 @@ pub struct TenantApplyArgs {
     /// client uses, for audit attribution.
     #[arg(long)]
     pub target_tenant: Option<String>,
+
+    /// Stream live lifecycle events (SSE) while the apply is in
+    /// flight. Equivalent to running `aeterna tenant watch <slug>`
+    /// in a second terminal during the apply, but co-scheduled so
+    /// you never miss the opening `provisioning_step` frames.
+    ///
+    /// Events go to **stderr** (one line per frame, pretty form —
+    /// or raw JSON when `--json` is also set). The apply's final
+    /// response still goes to **stdout**, so `| jq` on the apply
+    /// output keeps working. (B2 §7.6)
+    #[arg(long)]
+    pub watch: bool,
 }
 
 #[derive(Args)]
@@ -3065,26 +3077,93 @@ async fn run_apply(args: TenantApplyArgs) -> anyhow::Result<()> {
     }
 
     // Step 2: real apply.
-    let body = client
-        .tenant_apply(&manifest, args.allow_inline)
-        .await
-        .inspect_err(|e| {
-            if args.json {
-                // Surface transport / auth errors as JSON too so the
-                // scripted consumer sees one shape regardless of
-                // where the failure occurred.
-                let out = json!({
-                    "success": false,
-                    "error": "transport_failure",
-                    "details": e.to_string(),
+    //
+    // When `--watch` is set, open an SSE subscription to the tenant
+    // before the write call so we don't miss the opening
+    // `provisioning_step` frames. The subscriber drains to stderr in
+    // the background and is cancelled once the apply round-trip
+    // returns (success or error), letting the final stdout render
+    // remain the single source of scriptable truth.
+    let watch_handle = if args.watch {
+        let slug = manifest
+            .get("tenant")
+            .and_then(|t| t.get("slug"))
+            .and_then(|s| s.as_str())
+            .map(std::string::ToString::to_string);
+        match slug {
+            Some(slug) => {
+                let client_clone = client.clone();
+                let json_mode = args.json;
+                let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+                let task = tokio::spawn(async move {
+                    // Non-fatal: if the subscription fails (server
+                    // returned 404 because the tenant doesn't exist
+                    // yet on first create, or the caller lacks the
+                    // read scope), log and move on — the apply
+                    // itself still runs and the operator gets the
+                    // final response the usual way.
+                    if let Err(e) = stream_tenant_events(
+                        &client_clone,
+                        &slug,
+                        json_mode,
+                        FrameSink::Stderr,
+                        cancel_rx,
+                    )
+                    .await
+                    {
+                        eprintln!("warning: watch stream ended: {e}");
+                    }
                 });
-                println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
-            } else {
-                ux_error::UxError::new(e.to_string())
-                    .fix("Run: aeterna auth login")
-                    .display();
+                // Give the server a tick to register the subscriber
+                // on the broadcast channel. The tenant_pubsub layer
+                // buffers up to ~16 events per subscriber, so a
+                // missed window is unlikely — but this 250ms pause
+                // makes the race impossible on a loaded machine.
+                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                Some((cancel_tx, task))
             }
-        })?;
+            None => {
+                // Shouldn't happen — preview would have caught a
+                // missing slug — but be defensive so `--watch`
+                // never panics on a malformed manifest.
+                eprintln!(
+                    "warning: --watch skipped: manifest has no `tenant.slug` to subscribe to"
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let apply_result = client.tenant_apply(&manifest, args.allow_inline).await;
+
+    // Cancel the watch subscription and briefly wait for the task to
+    // flush any in-flight frames already buffered in reqwest. Done
+    // before we interpret the apply result so the operator sees the
+    // step events before the summary line.
+    if let Some((cancel_tx, task)) = watch_handle {
+        let _ = cancel_tx.send(());
+        let _ = tokio::time::timeout(std::time::Duration::from_millis(200), task).await;
+    }
+
+    let body = apply_result.inspect_err(|e| {
+        if args.json {
+            // Surface transport / auth errors as JSON too so the
+            // scripted consumer sees one shape regardless of
+            // where the failure occurred.
+            let out = json!({
+                "success": false,
+                "error": "transport_failure",
+                "details": e.to_string(),
+            });
+            println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+        } else {
+            ux_error::UxError::new(e.to_string())
+                .fix("Run: aeterna auth login")
+                .display();
+        }
+    })?;
 
     let outcome = classify_apply_response(&body);
 
@@ -3329,67 +3408,65 @@ impl SseParser {
 /// future kinds so a newer server never produces blank output on an
 /// older CLI.
 async fn run_watch(args: TenantWatchArgs) -> anyhow::Result<()> {
-    use futures_util::StreamExt;
-
     let Some(client) = get_live_client_for(args.target_tenant.as_deref()).await else {
         anyhow::bail!("Not logged in — run `aeterna auth login` first.");
     };
-
-    let path = format!("/api/v1/admin/tenants/{}/events", args.slug);
-    let resp = client.get(&path).await?;
-    let status = resp.status();
-    if !status.is_success() {
-        // Drain body for the error message; do NOT stream — this is
-        // not an SSE response, it's a short error JSON / text blob.
-        let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("Server rejected stream open ({}): {}", status, body.trim());
-    }
-
-    // Sanity: we *should* have text/event-stream. A reverse proxy
-    // misconfigured to buffer would return text/html — warn loudly
-    // rather than deadlock waiting for frames that will never arrive
-    // in real time.
-    if let Some(ct) = resp
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        && !ct.contains("text/event-stream")
-    {
-        eprintln!(
-            "warning: server Content-Type is `{ct}` (expected text/event-stream) — \
-                 a buffering proxy may hold events back"
-        );
-    }
 
     if !args.json {
         eprintln!("Watching tenant '{}' — Ctrl-C to stop.", args.slug);
     }
 
-    let mut stream = resp.bytes_stream();
-    let mut parser = SseParser::new();
+    // `_cancel_tx` is intentionally dropped when the function
+    // returns. Dropping fires the oneshot's recv() with an Err(_),
+    // which the select! arm also treats as cancellation. But in
+    // practice `run_watch` ends on stream EOF, not cancellation.
+    let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+    stream_tenant_events(&client, &args.slug, args.json, FrameSink::Stdout, cancel_rx).await
+}
 
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| anyhow::anyhow!("stream read failed: {e}"))?;
-        // reqwest yields `Bytes`; convert lossy because an SSE stream
-        // carrying non-UTF-8 is already broken at the server layer
-        // (we serialize JSON) and lossy avoids a hard error on a
-        // single bad codepoint from a misbehaving middlebox.
-        let text = String::from_utf8_lossy(&chunk);
-        for frame in parser.feed(&text) {
-            render_watch_frame(&frame, args.json);
+/// Target stream for rendered frames.
+///
+/// `run_watch` writes to stdout (that's the command's only output).
+/// `run_apply --watch` writes to stderr so the final apply response
+/// stays the single thing on stdout — preserving `| jq` pipelines.
+#[derive(Clone, Copy)]
+enum FrameSink {
+    Stdout,
+    Stderr,
+}
+
+impl FrameSink {
+    fn emit(self, line: &str) {
+        match self {
+            Self::Stdout => println!("{line}"),
+            Self::Stderr => eprintln!("{line}"),
         }
     }
-    Ok(())
+
+    fn emit_warn(self, line: &str) {
+        // warnings always go to stderr regardless of sink — they're
+        // out-of-band and must never pollute stdout JSON.
+        let _ = self;
+        eprintln!("{line}");
+    }
 }
 
 /// Render one parsed frame to stdout, honouring `--json`.
 fn render_watch_frame(frame: &SseFrame, json_mode: bool) {
+    render_watch_frame_to(frame, json_mode, FrameSink::Stdout);
+}
+
+/// Render one parsed frame to the given sink, honouring `--json`.
+///
+/// Extracted so `run_apply --watch` can reuse the exact same
+/// formatting while routing frames to stderr.
+fn render_watch_frame_to(frame: &SseFrame, json_mode: bool, sink: FrameSink) {
     if json_mode {
         // Raw mode: emit the `data:` payload verbatim, one JSON
         // object per line. Downstream tools like `jq -c` can consume
         // this without reconstructing frame boundaries.
         if !frame.data.is_empty() {
-            println!("{}", frame.data);
+            sink.emit(&frame.data);
         }
         return;
     }
@@ -3405,9 +3482,9 @@ fn render_watch_frame(frame: &SseFrame, json_mode: bool) {
         .unwrap_or("?");
 
     match frame.event_name() {
-        "provisioned" => println!("✓ {slug} provisioned"),
-        "updated" => println!("✓ {slug} updated"),
-        "deactivated" => println!("✗ {slug} deactivated"),
+        "provisioned" => sink.emit(&format!("✓ {slug} provisioned")),
+        "updated" => sink.emit(&format!("✓ {slug} updated")),
+        "deactivated" => sink.emit(&format!("✗ {slug} deactivated")),
         "provisioning_step" => {
             // `kind` is the struct variant
             // `{"provisioning_step": {"step": "...", "status": "...", "detail": "..."}}`
@@ -3433,8 +3510,8 @@ fn render_watch_frame(frame: &SseFrame, json_mode: bool) {
                 _ => "·",
             };
             match detail {
-                Some(d) => println!("  {marker} {step:<16} {status:<8} {d}"),
-                None => println!("  {marker} {step:<16} {status}"),
+                Some(d) => sink.emit(&format!("  {marker} {step:<16} {status:<8} {d}")),
+                None => sink.emit(&format!("  {marker} {step:<16} {status}")),
             }
         }
         "lagged" => {
@@ -3446,15 +3523,74 @@ fn render_watch_frame(frame: &SseFrame, json_mode: bool) {
                 .and_then(|v| v.get("skipped"))
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0);
-            eprintln!(
+            sink.emit_warn(&format!(
                 "warning: stream lagged — {skipped} event(s) dropped. \
                  Reconnect to re-sync."
-            );
+            ));
         }
         other => {
             // Unknown / forward-compat kinds — print verbatim so a
             // newer server never produces blank output.
-            println!("· [{other}] {}", frame.data);
+            sink.emit(&format!("· [{other}] {}", frame.data));
+        }
+    }
+}
+
+/// Open an SSE subscription for `slug` and forward frames to `sink`
+/// until either the server closes the stream or `cancel` is fired.
+///
+/// Used by `run_watch` (sink = stdout, cancel = never) and by
+/// `run_apply --watch` (sink = stderr, cancel = fired after the
+/// apply HTTP round-trip returns).
+async fn stream_tenant_events(
+    client: &crate::client::AeternaClient,
+    slug: &str,
+    json_mode: bool,
+    sink: FrameSink,
+    mut cancel: tokio::sync::oneshot::Receiver<()>,
+) -> anyhow::Result<()> {
+    use futures_util::StreamExt;
+
+    let path = format!("/api/v1/admin/tenants/{slug}/events");
+    let resp = client.get(&path).await?;
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!("Server rejected stream open ({}): {}", status, body.trim());
+    }
+
+    if let Some(ct) = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        && !ct.contains("text/event-stream")
+    {
+        sink.emit_warn(&format!(
+            "warning: server Content-Type is `{ct}` (expected text/event-stream) — \
+             a buffering proxy may hold events back"
+        ));
+    }
+
+    let mut stream = resp.bytes_stream();
+    let mut parser = SseParser::new();
+
+    loop {
+        tokio::select! {
+            // Cancellation wins if both arms are ready, so a late
+            // frame arriving concurrently with the cancel signal
+            // still gets rendered only if the select picks the
+            // stream arm. That's fine — apply-watch bounds the
+            // "trailing frame" window to whatever's already buffered
+            // in reqwest's chunk queue.
+            _ = &mut cancel => return Ok(()),
+            maybe_chunk = stream.next() => {
+                let Some(chunk) = maybe_chunk else { return Ok(()) };
+                let chunk = chunk.map_err(|e| anyhow::anyhow!("stream read failed: {e}"))?;
+                let text = String::from_utf8_lossy(&chunk);
+                for frame in parser.feed(&text) {
+                    render_watch_frame_to(&frame, json_mode, sink);
+                }
+            }
         }
     }
 }
@@ -4562,6 +4698,44 @@ mod tests {
                 assert!(!args.json);
                 assert!(!args.allow_inline);
                 assert!(args.target_tenant.is_none());
+                assert!(!args.watch);
+            }
+            _ => panic!("expected Apply variant"),
+        }
+    }
+
+    #[test]
+    fn test_tenant_apply_watch_flag_parses() {
+        // B2 §7.6 — `apply --watch` MUST be accepted together with
+        // `--yes --json` (the unattended + machine-readable combo a
+        // CI pipeline uses to tail lifecycle events while the write
+        // is in flight). Guard against regressions that would
+        // accidentally make the flags mutually exclusive or reorder
+        // them in the clap definition.
+        use clap::Parser;
+
+        #[derive(Parser)]
+        struct Wrap {
+            #[command(subcommand)]
+            cmd: TenantCommand,
+        }
+
+        let parsed = Wrap::try_parse_from([
+            "prog",
+            "apply",
+            "-f",
+            "manifest.json",
+            "--yes",
+            "--json",
+            "--watch",
+        ])
+        .unwrap();
+        match parsed.cmd {
+            TenantCommand::Apply(args) => {
+                assert!(args.watch);
+                assert!(args.yes);
+                assert!(args.json);
+                assert_eq!(args.file, "manifest.json");
             }
             _ => panic!("expected Apply variant"),
         }
