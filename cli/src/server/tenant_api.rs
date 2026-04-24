@@ -2260,6 +2260,68 @@ async fn require_platform_admin(
     Ok(ctx)
 }
 
+/// B2 §10.5 per-route wiring helper.
+///
+/// Enforces the two-principal authorisation model documented in
+/// `docs/security/tenant-provisioning-security.md` §2:
+///
+/// - **Service token caller** — validated via
+///   [`validate_service_token_from_headers`]; the route's required
+///   capability is checked with [`require_capability`]. Role checks
+///   are intentionally skipped (a service principal has no user role).
+/// - **User caller** — the validator returns `Ok(None)` (no bearer, or
+///   a plugin token that the service-token validator classifies as a
+///   user identity), and we fall through to the existing
+///   [`require_platform_admin`] role check.
+///
+/// Either gate is sufficient: a caller holding a `tenants:provision`
+/// service token and a caller holding the `PlatformAdmin` user role
+/// both reach the handler body. A caller with neither fails closed.
+///
+/// Returns `Ok(None)` on the service-token path (no user `TenantContext`
+/// is synthesised for service tokens; handlers that need one must call
+/// the appropriate service-principal lookup themselves), or `Ok(Some(ctx))`
+/// on the user path.
+///
+/// The returned `Option<TenantContext>` is also the caller's signal for
+/// which branch matched — handlers that need `ctx.user_id` for audit
+/// logging must either (a) use the service-token audit path when `None`
+/// is returned, or (b) gate that attribution behind a helper that
+/// tolerates both principal kinds (see B2 §11.4).
+async fn require_platform_admin_or_scope(
+    state: &AppState,
+    headers: &HeaderMap,
+    required_scope: &str,
+) -> Result<Option<TenantContext>, axum::response::Response> {
+    // 1. Service-token path — short-circuits the role check entirely.
+    match crate::server::service_token_validator::validate_service_token_from_headers(
+        state, headers,
+    )
+    .await
+    {
+        Ok(Some(principal)) => {
+            // Valid service token — check scope, return None to signal
+            // "no user context, caller is a service identity".
+            crate::server::service_token_validator::require_capability(
+                Some(&principal),
+                required_scope,
+            )?;
+            Ok(None)
+        }
+        Ok(None) => {
+            // 2. User path — fall through to the existing role check.
+            let ctx = require_platform_admin(state, headers).await?;
+            Ok(Some(ctx))
+        }
+        Err(response) => {
+            // 3. Token *claimed* to be a service token but failed validation.
+            //    Fail closed — do NOT fall through to the role path, because
+            //    the caller's stated identity did not authenticate.
+            Err(response)
+        }
+    }
+}
+
 async fn require_tenant_admin_context(
     state: &AppState,
     headers: &HeaderMap,
@@ -4284,6 +4346,16 @@ async fn provision_tenant(
     Query(query): Query<ProvisionQuery>,
     Json(raw): Json<serde_json::Value>,
 ) -> impl IntoResponse {
+    // B2 §10.5 — provision is still user-principal only in this pass.
+    // The `tenants:provision` scope IS honoured on the read-side preview
+    // routes (see `diff_tenant`, `get_tenant_manifest`), but the mutation
+    // path below attributes every audit row to `ctx.user_id` + tenant,
+    // and the audit helper does not yet accept a service principal as
+    // the actor. Switching this to `require_platform_admin_or_scope`
+    // requires first extending `audit_tenant_action` to carry a
+    // `ServicePrincipal` actor kind (tracked as B2 §11.4 follow-up).
+    // Until then, service tokens with `tenants:provision` can preview
+    // and diff but must hand off the apply to a PlatformAdmin user.
     let ctx = match require_platform_admin(&state, &headers).await {
         Ok(ctx) => ctx,
         Err(response) => return response,
@@ -5431,7 +5503,18 @@ async fn diff_tenant(
     headers: HeaderMap,
     Json(raw): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let _ctx = match require_platform_admin(&state, &headers).await {
+    // B2 §10.5 — read-side preview. Either a PlatformAdmin user OR a
+    // service token carrying the `tenants:diff` scope is accepted.
+    // `_ctx` is `None` on the service-token path because the diff
+    // handler emits no audit rows and therefore needs no user
+    // attribution. See `docs/security/tenant-provisioning-security.md` §2.
+    let _ctx = match require_platform_admin_or_scope(
+        &state,
+        &headers,
+        "tenants:diff",
+    )
+    .await
+    {
         Ok(ctx) => ctx,
         Err(response) => return response,
     };
