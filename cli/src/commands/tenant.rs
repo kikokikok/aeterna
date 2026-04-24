@@ -11,19 +11,41 @@ use crate::ux_error;
 // Top-level command
 // ---------------------------------------------------------------------------
 
+/// Top-level `aeterna tenant` command surface (post-§7.6).
+///
+/// Per §7.6 of `harden-tenant-provisioning`, the fine-grained
+/// mutation subcommands (`create`, `update`, `domain-map`,
+/// `repo-binding set`, `config upsert`, `secret set`/`delete`,
+/// `connection grant`/`revoke`) were **removed** in favour of the
+/// single `apply` write path. Operators now compose a
+/// `TenantManifest` and invoke `aeterna tenant apply -f`; the
+/// server's `/provision` endpoint performs the equivalent mutation
+/// in one transaction, eliminating the N-endpoint consistency
+/// problem and matching the admin-UI wizard's semantics.
+///
+/// The following surfaces are **preserved** as first-class commands:
+///
+/// * **Reads** — `list`, `show`, `repo-binding show`, `config inspect`,
+///   `connection list`. Pure queries with no mutation path.
+/// * **Lifecycle** — `deactivate`. Special transition (soft-delete +
+///   tombstone); kept as its own command because it does not map
+///   cleanly to a manifest field (no `tenant.status` concept in v1).
+/// * **User context** — `use`, `switch`, `current`. Client-side /
+///   user-preference state unrelated to tenant mutations.
+/// * **Manifest pipeline** — `validate`, `render`, `diff`, `apply`,
+///   `watch`. The GitOps loop (the actual §7 CLI).
+///
+/// Deprecation-alias note: the two nested `validate` surfaces
+/// (`repo-binding validate`, `config validate`) shipped a stderr
+/// deprecation warning in PR #163 and are removed outright by this
+/// PR. Operators migrate to `tenant validate -f <manifest>`.
 #[derive(Subcommand)]
 pub enum TenantCommand {
-    #[command(about = "Create a new tenant")]
-    Create(TenantCreateArgs),
-
     #[command(about = "List tenants (platform admin)")]
     List(TenantListArgs),
 
     #[command(about = "Show tenant details")]
     Show(TenantShowArgs),
-
-    #[command(about = "Update tenant properties")]
-    Update(TenantUpdateArgs),
 
     #[command(about = "Deactivate a tenant")]
     Deactivate(TenantDeactivateArgs),
@@ -40,28 +62,23 @@ pub enum TenantCommand {
     Current(TenantCurrentArgs),
 
     #[command(
-        name = "domain-map",
-        about = "Add a verified domain mapping for a tenant"
-    )]
-    DomainMap(TenantDomainMapArgs),
-
-    #[command(
         name = "repo-binding",
         subcommand,
-        about = "Manage tenant repository bindings"
+        about = "Inspect tenant repository bindings (read-only; mutate via `tenant apply`)"
     )]
     RepoBinding(TenantRepoBindingCommand),
 
-    #[command(name = "config", subcommand, about = "Manage tenant configuration")]
+    #[command(
+        name = "config",
+        subcommand,
+        about = "Inspect tenant configuration (read-only; mutate via `tenant apply`)"
+    )]
     Config(TenantConfigCommand),
-
-    #[command(name = "secret", subcommand, about = "Manage tenant secret entries")]
-    Secret(TenantSecretCommand),
 
     #[command(
         name = "connection",
         subcommand,
-        about = "Manage Git provider connection visibility for tenants (PlatformAdmin)"
+        about = "Inspect Git provider connection visibility (read-only; mutate via `tenant apply`)"
     )]
     Connection(TenantConnectionCommand),
 
@@ -100,61 +117,28 @@ pub enum TenantCommand {
 // repo-binding sub-commands
 // ---------------------------------------------------------------------------
 
+/// Post-§7.6 `repo-binding` surface: read-only. Mutations migrated
+/// to `tenant apply` (manifest `repoBinding` field). The nested
+/// `validate` alias that shipped a deprecation warning in PR #163
+/// is removed outright; migrate to `tenant validate -f`.
 #[derive(Subcommand)]
 pub enum TenantRepoBindingCommand {
     #[command(about = "Show the repository binding for a tenant")]
     Show(TenantRepoBindingShowArgs),
-
-    #[command(about = "Set the repository binding for a tenant")]
-    Set(TenantRepoBindingSetArgs),
-
-    #[command(about = "Validate the repository binding for a tenant")]
-    Validate(TenantRepoBindingValidateArgs),
 }
 
+/// Post-§7.6 `config` surface: read-only. Mutations migrated to
+/// `tenant apply` (manifest `tenantConfig` field). The nested
+/// `validate` alias is removed; migrate to `tenant validate -f`.
 #[derive(Subcommand)]
 pub enum TenantConfigCommand {
     #[command(about = "Inspect tenant configuration")]
     Inspect(TenantConfigInspectArgs),
-
-    #[command(about = "Upsert tenant configuration from a JSON file")]
-    Upsert(TenantConfigUpsertArgs),
-
-    #[command(about = "Validate tenant configuration from a JSON file")]
-    Validate(TenantConfigValidateArgs),
-}
-
-#[derive(Subcommand)]
-pub enum TenantSecretCommand {
-    #[command(about = "Set a tenant secret entry")]
-    Set(TenantSecretSetArgs),
-
-    #[command(about = "Delete a tenant secret entry")]
-    Delete(TenantSecretDeleteArgs),
 }
 
 // ---------------------------------------------------------------------------
 // Args structs
 // ---------------------------------------------------------------------------
-
-#[derive(Args)]
-pub struct TenantCreateArgs {
-    /// Tenant slug (URL-safe identifier)
-    #[arg(long)]
-    pub slug: String,
-
-    /// Human-readable tenant name
-    #[arg(long)]
-    pub name: String,
-
-    /// Output as JSON
-    #[arg(long)]
-    pub json: bool,
-
-    /// Dry run – show what would be created without calling the server
-    #[arg(long)]
-    pub dry_run: bool,
-}
 
 #[derive(Args)]
 pub struct TenantListArgs {
@@ -183,28 +167,6 @@ pub struct TenantShowArgs {
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
-}
-
-#[derive(Args)]
-pub struct TenantUpdateArgs {
-    /// Tenant slug or ID to update
-    pub tenant: String,
-
-    /// New slug value
-    #[arg(long)]
-    pub new_slug: Option<String>,
-
-    /// New human-readable name
-    #[arg(long)]
-    pub name: Option<String>,
-
-    /// Output as JSON
-    #[arg(long)]
-    pub json: bool,
-
-    /// Dry run – show what would change without calling the server
-    #[arg(long)]
-    pub dry_run: bool,
 }
 
 #[derive(Args)]
@@ -255,20 +217,6 @@ pub struct TenantCurrentArgs {
 }
 
 #[derive(Args)]
-pub struct TenantDomainMapArgs {
-    /// Tenant slug or ID
-    pub tenant: String,
-
-    /// Domain to map (e.g. acme.example.com)
-    #[arg(long)]
-    pub domain: String,
-
-    /// Output as JSON
-    #[arg(long)]
-    pub json: bool,
-}
-
-#[derive(Args)]
 pub struct TenantRepoBindingShowArgs {
     /// Tenant slug or ID
     pub tenant: String,
@@ -283,190 +231,9 @@ pub struct TenantRepoBindingShowArgs {
 }
 
 #[derive(Args)]
-pub struct TenantRepoBindingSetArgs {
-    /// Tenant slug or ID
-    pub tenant: String,
-
-    #[arg(long)]
-    pub kind: String,
-
-    /// Local path (for kind=local)
-    #[arg(long)]
-    pub local_path: Option<String>,
-
-    /// Remote URL (for kind=remote)
-    #[arg(long)]
-    pub remote_url: Option<String>,
-
-    /// Branch name
-    #[arg(long)]
-    pub branch: Option<String>,
-
-    #[arg(long)]
-    pub branch_policy: Option<String>,
-
-    #[arg(long)]
-    pub credential_kind: Option<String>,
-
-    /// Credential reference (key name in secret store)
-    #[arg(long)]
-    pub credential_ref: Option<String>,
-
-    /// GitHub organization owner (for kind=github)
-    #[arg(long)]
-    pub github_owner: Option<String>,
-
-    /// GitHub repository name (for kind=github)
-    #[arg(long)]
-    pub github_repo: Option<String>,
-
-    /// Target a specific tenant context (PlatformAdmin only — for cross-tenant operations)
-    #[arg(long)]
-    pub target_tenant: Option<String>,
-
-    /// Output as JSON
-    #[arg(long)]
-    pub json: bool,
-
-    /// Dry run – show what would be set without calling the server
-    #[arg(long)]
-    pub dry_run: bool,
-}
-
-#[derive(Args)]
-pub struct TenantRepoBindingValidateArgs {
-    /// Tenant slug or ID
-    pub tenant: String,
-
-    #[arg(long)]
-    pub kind: String,
-
-    /// Local path (for kind=local)
-    #[arg(long)]
-    pub local_path: Option<String>,
-
-    /// Remote URL (for kind=remote)
-    #[arg(long)]
-    pub remote_url: Option<String>,
-
-    /// Branch name
-    #[arg(long)]
-    pub branch: Option<String>,
-
-    #[arg(long)]
-    pub branch_policy: Option<String>,
-
-    #[arg(long)]
-    pub credential_kind: Option<String>,
-
-    /// Credential reference (key name in secret store)
-    #[arg(long)]
-    pub credential_ref: Option<String>,
-
-    /// GitHub organization owner (for kind=github)
-    #[arg(long)]
-    pub github_owner: Option<String>,
-
-    /// GitHub repository name (for kind=github)
-    #[arg(long)]
-    pub github_repo: Option<String>,
-
-    /// Target a specific tenant context (PlatformAdmin only — for cross-tenant operations)
-    #[arg(long)]
-    pub target_tenant: Option<String>,
-
-    /// Output as JSON
-    #[arg(long)]
-    pub json: bool,
-}
-
-#[derive(Args)]
 pub struct TenantConfigInspectArgs {
     #[arg(long)]
     pub tenant: Option<String>,
-
-    #[arg(long)]
-    pub target_tenant: Option<String>,
-
-    #[arg(long)]
-    pub json: bool,
-}
-
-#[derive(Args)]
-pub struct TenantConfigUpsertArgs {
-    #[arg(long)]
-    pub tenant: Option<String>,
-
-    #[arg(long)]
-    pub file: String,
-
-    #[arg(long)]
-    pub target_tenant: Option<String>,
-
-    #[arg(long)]
-    pub json: bool,
-
-    #[arg(long)]
-    pub dry_run: bool,
-}
-
-#[derive(Args)]
-pub struct TenantConfigValidateArgs {
-    #[arg(long)]
-    pub tenant: Option<String>,
-
-    #[arg(long)]
-    pub file: String,
-
-    #[arg(long)]
-    pub target_tenant: Option<String>,
-
-    #[arg(long)]
-    pub json: bool,
-}
-
-#[derive(Args)]
-pub struct TenantSecretSetArgs {
-    #[arg(long)]
-    pub tenant: Option<String>,
-
-    pub logical_name: String,
-
-    /// **UNSAFE.** Inline secret value. Leaks into shell history,
-    /// `ps`, and CI logs; only accepted when paired with
-    /// `--allow-inline-secret`. Prefer `--from-stdin`, `--from-file`,
-    /// `--from-env`, or `--ref` (B2 §8.1/§8.2).
-    #[arg(long)]
-    pub value: Option<String>,
-
-    /// Opt-in escape hatch that unlocks `--value`. Required for tests
-    /// and one-off debugging; never set this in CI scripts.
-    #[arg(long)]
-    pub allow_inline_secret: bool,
-
-    /// Reference name of an already-stored secret; the CLI sends
-    /// only the name (no bytes) to the server (B2 §8.1).
-    #[arg(long = "ref", value_name = "NAME")]
-    pub reference: Option<String>,
-
-    /// Path to a file whose UTF-8 contents are the secret. File mode
-    /// must be `0600` or stricter on Unix (B2 §8.1/§8.3).
-    #[arg(long, value_name = "PATH")]
-    pub from_file: Option<std::path::PathBuf>,
-
-    /// Read the secret from stdin. On a TTY echo is disabled; when
-    /// piped the bytes are read verbatim (B2 §8.1/§8.4).
-    #[arg(long)]
-    pub from_stdin: bool,
-
-    /// Read the secret from the named environment variable; the
-    /// variable is cleared from the current process after read so
-    /// child processes cannot inherit it (B2 §8.1/§8.5).
-    #[arg(long, value_name = "VAR")]
-    pub from_env: Option<String>,
-
-    #[arg(long, default_value = "tenant")]
-    pub ownership: String,
 
     #[arg(long)]
     pub target_tenant: Option<String>,
@@ -763,20 +530,6 @@ pub struct TenantApplyArgs {
     pub watch_until: Option<String>,
 }
 
-#[derive(Args)]
-pub struct TenantSecretDeleteArgs {
-    #[arg(long)]
-    pub tenant: Option<String>,
-
-    pub logical_name: String,
-
-    #[arg(long)]
-    pub target_tenant: Option<String>,
-
-    #[arg(long)]
-    pub json: bool,
-}
-
 /// Args for `aeterna tenant watch <slug>` (B2 §7.5).
 ///
 /// Thin client over the `/api/v1/admin/tenants/{slug}/events` SSE
@@ -809,33 +562,20 @@ pub struct TenantWatchArgs {
 
 pub async fn run(cmd: TenantCommand) -> anyhow::Result<()> {
     match cmd {
-        TenantCommand::Create(args) => run_create(args).await,
         TenantCommand::List(args) => run_list(args).await,
         TenantCommand::Show(args) => run_show(args).await,
-        TenantCommand::Update(args) => run_update(args).await,
         TenantCommand::Deactivate(args) => run_deactivate(args).await,
         TenantCommand::Use(args) => run_use(args).await,
         TenantCommand::Switch(args) => run_switch(args).await,
         TenantCommand::Current(args) => run_current(args).await,
-        TenantCommand::DomainMap(args) => run_domain_map(args).await,
         TenantCommand::RepoBinding(sub) => match sub {
             TenantRepoBindingCommand::Show(args) => run_repo_binding_show(args).await,
-            TenantRepoBindingCommand::Set(args) => run_repo_binding_set(args).await,
-            TenantRepoBindingCommand::Validate(args) => run_repo_binding_validate(args).await,
         },
         TenantCommand::Config(sub) => match sub {
             TenantConfigCommand::Inspect(args) => run_config_inspect(args).await,
-            TenantConfigCommand::Upsert(args) => run_config_upsert(args).await,
-            TenantConfigCommand::Validate(args) => run_config_validate(args).await,
-        },
-        TenantCommand::Secret(sub) => match sub {
-            TenantSecretCommand::Set(args) => run_secret_set(args).await,
-            TenantSecretCommand::Delete(args) => run_secret_delete(args).await,
         },
         TenantCommand::Connection(sub) => match sub {
             TenantConnectionCommand::List(args) => run_connection_list(args).await,
-            TenantConnectionCommand::Grant(args) => run_connection_grant(args).await,
-            TenantConnectionCommand::Revoke(args) => run_connection_revoke(args).await,
         },
         TenantCommand::Validate(args) => run_validate(args).await,
         TenantCommand::Render(args) => run_render(args).await,
@@ -966,93 +706,6 @@ fn read_json_file(path: &str) -> anyhow::Result<Value> {
 // Handlers
 // ---------------------------------------------------------------------------
 
-async fn run_create(args: TenantCreateArgs) -> anyhow::Result<()> {
-    if args.dry_run {
-        if args.json {
-            let out = json!({
-                "dryRun": true,
-                "operation": "tenant_create",
-                "tenant": { "slug": args.slug, "name": args.name },
-                "nextSteps": [
-                    "Run without --dry-run to create",
-                    "Use 'aeterna tenant use <slug>' to set as default context"
-                ]
-            });
-            println!("{}", serde_json::to_string_pretty(&out)?);
-        } else {
-            output::header("Tenant Create (Dry Run)");
-            println!();
-            println!("  Slug: {}", args.slug);
-            println!("  Name: {}", args.name);
-            println!();
-            output::info("Dry run mode – tenant not created.");
-        }
-        return Ok(());
-    }
-
-    if let Some(client) = get_live_client().await {
-        let body = json!({ "slug": args.slug, "name": args.name });
-        let result = client.tenant_create(&body).await.inspect_err(|e| {
-            if args.json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(
-                        &json!({"success": false, "error": e.to_string()})
-                    )
-                    .unwrap()
-                );
-            } else {
-                ux_error::UxError::new(e.to_string())
-                    .fix("Run: aeterna auth login")
-                    .display();
-            }
-        })?;
-        if args.json {
-            println!("{}", serde_json::to_string_pretty(&result)?);
-        } else {
-            output::header("Tenant Created");
-            println!();
-            if let Some(t) = result["tenant"].as_object() {
-                println!(
-                    "  Slug:   {}",
-                    t.get("slug").and_then(|v| v.as_str()).unwrap_or("?")
-                );
-                println!(
-                    "  Name:   {}",
-                    t.get("name").and_then(|v| v.as_str()).unwrap_or("?")
-                );
-                println!(
-                    "  ID:     {}",
-                    t.get("id").and_then(|v| v.as_str()).unwrap_or("?")
-                );
-                println!(
-                    "  Status: {}",
-                    t.get("status").and_then(|v| v.as_str()).unwrap_or("?")
-                );
-            }
-            println!();
-            output::hint(
-                "Use 'aeterna tenant use <slug>' to set this tenant as your default context",
-            );
-        }
-        return Ok(());
-    }
-
-    if args.json {
-        let out = json!({
-            "success": false,
-            "error": "server_not_connected",
-            "operation": "tenant_create"
-        });
-        println!("{}", serde_json::to_string_pretty(&out)?);
-        anyhow::bail!("Aeterna server not connected for operation: tenant_create");
-    }
-    tenant_server_required(
-        "tenant_create",
-        "Cannot create tenant: server not connected",
-    )
-}
-
 async fn run_list(args: TenantListArgs) -> anyhow::Result<()> {
     if let Some(client) = get_live_client_for(args.target_tenant.as_deref()).await {
         let result = client
@@ -1169,104 +822,6 @@ async fn run_show(args: TenantShowArgs) -> anyhow::Result<()> {
     tenant_server_required(
         "tenant_show",
         &format!("Cannot show tenant '{}': server not connected", args.tenant),
-    )
-}
-
-async fn run_update(args: TenantUpdateArgs) -> anyhow::Result<()> {
-    if args.dry_run {
-        if args.json {
-            let out = json!({
-                "dryRun": true,
-                "operation": "tenant_update",
-                "tenant": args.tenant,
-                "changes": {
-                    "slug": args.new_slug,
-                    "name": args.name
-                }
-            });
-            println!("{}", serde_json::to_string_pretty(&out)?);
-        } else {
-            output::header("Tenant Update (Dry Run)");
-            println!();
-            println!("  Tenant: {}", args.tenant);
-            if let Some(ref s) = args.new_slug {
-                println!("  New Slug: {s}");
-            }
-            if let Some(ref n) = args.name {
-                println!("  New Name: {n}");
-            }
-            println!();
-            output::info("Dry run mode – tenant not updated.");
-        }
-        return Ok(());
-    }
-
-    if let Some(client) = get_live_client().await {
-        let mut body = json!({});
-        if let Some(ref s) = args.new_slug {
-            body["slug"] = json!(s);
-        }
-        if let Some(ref n) = args.name {
-            body["name"] = json!(n);
-        }
-        let result = client
-            .tenant_update(&args.tenant, &body)
-            .await
-            .inspect_err(|e| {
-                if args.json {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(
-                            &json!({"success": false, "error": e.to_string()})
-                        )
-                        .unwrap()
-                    );
-                } else {
-                    ux_error::UxError::new(e.to_string())
-                        .fix("Run: aeterna auth login")
-                        .display();
-                }
-            })?;
-        if args.json {
-            println!("{}", serde_json::to_string_pretty(&result)?);
-        } else {
-            output::header("Tenant Updated");
-            println!();
-            if let Some(t) = result["tenant"].as_object() {
-                println!(
-                    "  Slug:   {}",
-                    t.get("slug").and_then(|v| v.as_str()).unwrap_or("?")
-                );
-                println!(
-                    "  Name:   {}",
-                    t.get("name").and_then(|v| v.as_str()).unwrap_or("?")
-                );
-                println!(
-                    "  Status: {}",
-                    t.get("status").and_then(|v| v.as_str()).unwrap_or("?")
-                );
-            }
-            println!();
-        }
-        return Ok(());
-    }
-
-    if args.json {
-        let out = json!({
-            "success": false,
-            "error": "server_not_connected",
-            "operation": "tenant_update",
-            "tenant": args.tenant
-        });
-        println!("{}", serde_json::to_string_pretty(&out)?);
-        anyhow::bail!("Aeterna server not connected for operation: tenant_update");
-    }
-    tenant_server_required(
-        "tenant_update",
-        &format!(
-            "Cannot update tenant '{}': server not connected",
-            args.tenant
-        ),
     )
 }
 
@@ -1546,59 +1101,6 @@ fn read_local_context_tenant() -> Option<String> {
         .map(str::to_owned)
 }
 
-async fn run_domain_map(args: TenantDomainMapArgs) -> anyhow::Result<()> {
-    if let Some(client) = get_live_client().await {
-        let body = json!({ "domain": args.domain });
-        let result = client
-            .tenant_add_domain_mapping(&args.tenant, &body)
-            .await
-            .inspect_err(|e| {
-                if args.json {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(
-                            &json!({"success": false, "error": e.to_string()})
-                        )
-                        .unwrap()
-                    );
-                } else {
-                    ux_error::UxError::new(e.to_string())
-                        .fix("Run: aeterna auth login")
-                        .display();
-                }
-            })?;
-        if args.json {
-            println!("{}", serde_json::to_string_pretty(&result)?);
-        } else {
-            output::header("Domain Mapping Added");
-            println!();
-            println!("  Tenant: {}", args.tenant);
-            println!("  Domain: {}", args.domain);
-            println!();
-        }
-        return Ok(());
-    }
-
-    if args.json {
-        let out = json!({
-            "success": false,
-            "error": "server_not_connected",
-            "operation": "tenant_domain_map",
-            "tenant": args.tenant,
-            "domain": args.domain
-        });
-        println!("{}", serde_json::to_string_pretty(&out)?);
-        anyhow::bail!("Aeterna server not connected for operation: tenant_domain_map");
-    }
-    tenant_server_required(
-        "tenant_domain_map",
-        &format!(
-            "Cannot add domain mapping for tenant '{}': server not connected",
-            args.tenant
-        ),
-    )
-}
-
 async fn run_repo_binding_show(args: TenantRepoBindingShowArgs) -> anyhow::Result<()> {
     if let Some(client) = get_live_client_for(args.target_tenant.as_deref()).await {
         let result = client
@@ -1674,117 +1176,6 @@ async fn run_repo_binding_show(args: TenantRepoBindingShowArgs) -> anyhow::Resul
     )
 }
 
-async fn run_repo_binding_set(args: TenantRepoBindingSetArgs) -> anyhow::Result<()> {
-    let valid_kinds = ["local", "gitRemote", "github"];
-    if !valid_kinds.contains(&args.kind.as_str()) {
-        ux_error::UxError::new(format!("Invalid repository kind: '{}'", args.kind))
-            .why("Supported kinds are: local, gitRemote, github")
-            .fix("Use --kind local, --kind gitRemote, or --kind github")
-            .display();
-        anyhow::bail!("Invalid repository kind");
-    }
-
-    if args.dry_run {
-        let body = repo_binding_body(
-            &args.kind,
-            args.local_path.as_deref(),
-            args.remote_url.as_deref(),
-            args.branch.as_deref(),
-            args.branch_policy.as_deref(),
-            args.credential_kind.as_deref(),
-            args.credential_ref.as_deref(),
-            args.github_owner.as_deref(),
-            args.github_repo.as_deref(),
-        );
-        if args.json {
-            let out = json!({
-                "dryRun": true,
-                "operation": "tenant_repo_binding_set",
-                "tenant": args.tenant,
-                "binding": body
-            });
-            println!("{}", serde_json::to_string_pretty(&out)?);
-        } else {
-            output::header("Repository Binding Set (Dry Run)");
-            println!();
-            println!("  Tenant: {}", args.tenant);
-            println!("  Kind:   {}", args.kind);
-            if let Some(ref p) = args.local_path {
-                println!("  Path:   {p}");
-            }
-            if let Some(ref u) = args.remote_url {
-                println!("  URL:    {u}");
-            }
-            println!();
-            output::info("Dry run mode – binding not set.");
-        }
-        return Ok(());
-    }
-
-    if let Some(client) = get_live_client_for(args.target_tenant.as_deref()).await {
-        let body = repo_binding_body(
-            &args.kind,
-            args.local_path.as_deref(),
-            args.remote_url.as_deref(),
-            args.branch.as_deref(),
-            args.branch_policy.as_deref(),
-            args.credential_kind.as_deref(),
-            args.credential_ref.as_deref(),
-            args.github_owner.as_deref(),
-            args.github_repo.as_deref(),
-        );
-        let result = client
-            .tenant_repo_binding_set(&args.tenant, &body)
-            .await
-            .inspect_err(|e| {
-                if args.json {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(
-                            &json!({"success": false, "error": e.to_string()})
-                        )
-                        .unwrap()
-                    );
-                } else {
-                    ux_error::UxError::new(e.to_string())
-                        .fix("Run: aeterna auth login")
-                        .display();
-                }
-            })?;
-        if args.json {
-            println!("{}", serde_json::to_string_pretty(&result)?);
-        } else {
-            output::header("Repository Binding Set");
-            println!();
-            println!("  Tenant: {}", args.tenant);
-            println!("  Kind:   {}", args.kind);
-            println!();
-            output::hint(
-                "Use 'aeterna tenant repo-binding validate <tenant>' to verify the binding",
-            );
-        }
-        return Ok(());
-    }
-
-    if args.json {
-        let out = json!({
-            "success": false,
-            "error": "server_not_connected",
-            "operation": "tenant_repo_binding_set",
-            "tenant": args.tenant
-        });
-        println!("{}", serde_json::to_string_pretty(&out)?);
-        anyhow::bail!("Aeterna server not connected for operation: tenant_repo_binding_set");
-    }
-    tenant_server_required(
-        "tenant_repo_binding_set",
-        &format!(
-            "Cannot set repo binding for tenant '{}': server not connected",
-            args.tenant
-        ),
-    )
-}
-
 /// Emit a one-line stderr deprecation warning for the nested
 /// `tenant repo-binding validate` / `tenant config validate`
 /// commands per the §0.4 decision (`design.md` §D8):
@@ -1816,90 +1207,6 @@ fn print_nested_validate_deprecation(nested_path: &str, json_mode: bool) {
          use `aeterna tenant validate --file <manifest>` instead \
          (scheduled for removal in v0.10; see openspec §0.4)"
     );
-}
-
-async fn run_repo_binding_validate(args: TenantRepoBindingValidateArgs) -> anyhow::Result<()> {
-    print_nested_validate_deprecation("repo-binding validate", args.json);
-
-    let valid_kinds = ["local", "gitRemote", "github"];
-    if !valid_kinds.contains(&args.kind.as_str()) {
-        ux_error::UxError::new(format!("Invalid repository kind: '{}'", args.kind))
-            .why("Supported kinds are: local, gitRemote, github")
-            .fix("Use --kind local, --kind gitRemote, or --kind github")
-            .display();
-        anyhow::bail!("Invalid repository kind");
-    }
-
-    if let Some(client) = get_live_client_for(args.target_tenant.as_deref()).await {
-        let body = repo_binding_body(
-            &args.kind,
-            args.local_path.as_deref(),
-            args.remote_url.as_deref(),
-            args.branch.as_deref(),
-            args.branch_policy.as_deref(),
-            args.credential_kind.as_deref(),
-            args.credential_ref.as_deref(),
-            args.github_owner.as_deref(),
-            args.github_repo.as_deref(),
-        );
-        let result = client
-            .tenant_repo_binding_validate(&args.tenant, &body)
-            .await
-            .inspect_err(|e| {
-                if args.json {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(
-                            &json!({"success": false, "error": e.to_string()})
-                        )
-                        .unwrap()
-                    );
-                } else {
-                    ux_error::UxError::new(e.to_string())
-                        .fix("Run: aeterna auth login")
-                        .display();
-                }
-            })?;
-        if args.json {
-            println!("{}", serde_json::to_string_pretty(&result)?);
-        } else {
-            output::header("Repository Binding Validation");
-            println!();
-            println!("  Tenant: {}", args.tenant);
-            let valid = result["valid"].as_bool().unwrap_or(false);
-            let icon = if valid { "✓" } else { "✗" };
-            println!(
-                "  Result: {} {}",
-                icon,
-                if valid { "valid" } else { "invalid" }
-            );
-            if let Some(msg) = result["message"].as_str()
-                && !msg.is_empty()
-            {
-                println!("  Detail: {msg}");
-            }
-            println!();
-        }
-        return Ok(());
-    }
-
-    if args.json {
-        let out = json!({
-            "success": false,
-            "error": "server_not_connected",
-            "operation": "tenant_repo_binding_validate",
-            "tenant": args.tenant
-        });
-        println!("{}", serde_json::to_string_pretty(&out)?);
-        anyhow::bail!("Aeterna server not connected for operation: tenant_repo_binding_validate");
-    }
-    tenant_server_required(
-        "tenant_repo_binding_validate",
-        &format!(
-            "Cannot validate repo binding for tenant '{}': server not connected",
-            args.tenant
-        ),
-    )
 }
 
 async fn run_config_inspect(args: TenantConfigInspectArgs) -> anyhow::Result<()> {
@@ -1969,342 +1276,18 @@ async fn run_config_inspect(args: TenantConfigInspectArgs) -> anyhow::Result<()>
     )
 }
 
-async fn run_config_upsert(args: TenantConfigUpsertArgs) -> anyhow::Result<()> {
-    let payload = read_json_file(&args.file)?;
-
-    if args.dry_run {
-        let redacted_payload = redacted_json(payload);
-        if args.json {
-            let out = json!({
-                "dryRun": true,
-                "operation": "tenant_config_upsert",
-                "tenant": args.tenant,
-                "payload": redacted_payload,
-            });
-            println!("{}", serde_json::to_string_pretty(&out)?);
-        } else {
-            output::header("Tenant Config Upsert (Dry Run)");
-            println!();
-            if let Some(ref tenant) = args.tenant {
-                println!("  Tenant: {tenant}");
-            } else {
-                println!("  Scope: current tenant context");
-            }
-            println!("  File:   {}", args.file);
-            println!();
-            output::info("Dry run mode – tenant config not updated.");
-        }
-        return Ok(());
-    }
-
-    if let Some(client) = get_live_client_for(args.target_tenant.as_deref()).await {
-        let result = if let Some(ref tenant) = args.tenant {
-            client.tenant_config_upsert(tenant, &payload).await
-        } else {
-            client.my_tenant_config_upsert(&payload).await
-        }
-        .inspect_err(|e| {
-            if args.json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(
-                        &json!({"success": false, "error": e.to_string()})
-                    )
-                    .unwrap()
-                );
-            } else {
-                ux_error::UxError::new(e.to_string())
-                    .fix("Run: aeterna auth login")
-                    .display();
-            }
-        })?;
-
-        let redacted = redacted_json(result);
-        if args.json {
-            println!("{}", serde_json::to_string_pretty(&redacted)?);
-        } else {
-            output::header("Tenant Config Upserted");
-            println!();
-            if let Some(ref tenant) = args.tenant {
-                println!("  Tenant: {tenant}");
-            } else {
-                println!("  Scope: current tenant context");
-            }
-            println!("  File:   {}", args.file);
-            println!();
-        }
-        return Ok(());
-    }
-
-    if args.json {
-        let out = json!({
-            "success": false,
-            "error": "server_not_connected",
-            "operation": "tenant_config_upsert",
-            "tenant": args.tenant
-        });
-        println!("{}", serde_json::to_string_pretty(&out)?);
-        anyhow::bail!("Aeterna server not connected for operation: tenant_config_upsert");
-    }
-    tenant_server_required(
-        "tenant_config_upsert",
-        "Cannot upsert tenant config: server not connected",
-    )
-}
-
-async fn run_config_validate(args: TenantConfigValidateArgs) -> anyhow::Result<()> {
-    print_nested_validate_deprecation("config validate", args.json);
-
-    let payload = read_json_file(&args.file)?;
-
-    if let Some(client) = get_live_client_for(args.target_tenant.as_deref()).await {
-        let result = if let Some(ref tenant) = args.tenant {
-            client.tenant_config_validate(tenant, &payload).await
-        } else {
-            client.my_tenant_config_validate(&payload).await
-        }
-        .inspect_err(|e| {
-            if args.json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(
-                        &json!({"success": false, "error": e.to_string()})
-                    )
-                    .unwrap()
-                );
-            } else {
-                ux_error::UxError::new(e.to_string())
-                    .fix("Run: aeterna auth login")
-                    .display();
-            }
-        })?;
-
-        let redacted = redacted_json(result);
-        if args.json {
-            println!("{}", serde_json::to_string_pretty(&redacted)?);
-        } else {
-            output::header("Tenant Config Validation");
-            println!();
-            if let Some(ref tenant) = args.tenant {
-                println!("  Tenant: {tenant}");
-            } else {
-                println!("  Scope: current tenant context");
-            }
-            let valid = redacted["valid"].as_bool().unwrap_or(false);
-            let icon = if valid { "✓" } else { "✗" };
-            println!(
-                "  Result: {} {}",
-                icon,
-                if valid { "valid" } else { "invalid" }
-            );
-            if let Some(msg) = redacted["message"].as_str()
-                && !msg.is_empty()
-            {
-                println!("  Detail: {msg}");
-            }
-            println!();
-        }
-        return Ok(());
-    }
-
-    if args.json {
-        let out = json!({
-            "success": false,
-            "error": "server_not_connected",
-            "operation": "tenant_config_validate",
-            "tenant": args.tenant
-        });
-        println!("{}", serde_json::to_string_pretty(&out)?);
-        anyhow::bail!("Aeterna server not connected for operation: tenant_config_validate");
-    }
-    tenant_server_required(
-        "tenant_config_validate",
-        "Cannot validate tenant config: server not connected",
-    )
-}
-
-async fn run_secret_set(args: TenantSecretSetArgs) -> anyhow::Result<()> {
-    let ownership = tenant_config_ownership(args.ownership.as_str())?;
-
-    // B2 §8.1\u2013§8.5: resolve whichever input mode the user picked
-    // through the secret-input resolver. The real-IO seam is used in
-    // production; unit tests in `secret_input::tests` exercise every
-    // branch against a fake IO.
-    let flags = crate::secret_input::SecretInputFlags {
-        inline_value: args.value.clone(),
-        allow_inline: args.allow_inline_secret,
-        reference: args.reference.clone(),
-        from_file: args.from_file.clone(),
-        from_stdin: args.from_stdin,
-        from_env: args.from_env.clone(),
-    };
-    let payload = match crate::secret_input::resolve(&flags, &mut crate::secret_input::RealSecretIo)
-    {
-        Ok(p) => p,
-        Err(e) => {
-            if args.json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(
-                        &json!({"success": false, "error": e.what.clone()})
-                    )?
-                );
-            } else {
-                e.display();
-            }
-            anyhow::bail!("invalid secret input: {}", e.what);
-        }
-    };
-
-    // `Inline` \u2192 secretValue; `Reference` \u2192 secretRef. The two are
-    // mutually exclusive on the wire so the server cannot confuse
-    // \"user sent a raw secret named 'vault/foo'\" with \"user sent a
-    // reference to 'vault/foo'\".
-    let body = match &payload {
-        crate::secret_input::SecretPayload::Inline(v) => json!({
-            "ownership": ownership,
-            "secretValue": v,
-        }),
-        crate::secret_input::SecretPayload::Reference(r) => json!({
-            "ownership": ownership,
-            "secretRef": r,
-        }),
-    };
-
-    if let Some(client) = get_live_client_for(args.target_tenant.as_deref()).await {
-        let result = if let Some(ref tenant) = args.tenant {
-            client
-                .tenant_secret_set(tenant, &args.logical_name, &body)
-                .await
-        } else {
-            client.my_tenant_secret_set(&args.logical_name, &body).await
-        }
-        .inspect_err(|e| {
-            if args.json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(
-                        &json!({"success": false, "error": e.to_string()})
-                    )
-                    .unwrap()
-                );
-            } else {
-                ux_error::UxError::new(e.to_string())
-                    .fix("Run: aeterna auth login")
-                    .display();
-            }
-        })?;
-
-        let redacted = redacted_json(result);
-        if args.json {
-            println!("{}", serde_json::to_string_pretty(&redacted)?);
-        } else {
-            output::header("Tenant Secret Set");
-            println!();
-            if let Some(ref tenant) = args.tenant {
-                println!("  Tenant:       {tenant}");
-            } else {
-                println!("  Scope:        current tenant context");
-            }
-            println!("  Logical Name: {}", args.logical_name);
-            println!("  Ownership:    {ownership}");
-            println!();
-        }
-        return Ok(());
-    }
-
-    if args.json {
-        let out = json!({
-            "success": false,
-            "error": "server_not_connected",
-            "operation": "tenant_secret_set",
-            "tenant": args.tenant,
-            "logicalName": args.logical_name,
-        });
-        println!("{}", serde_json::to_string_pretty(&out)?);
-        anyhow::bail!("Aeterna server not connected for operation: tenant_secret_set");
-    }
-    tenant_server_required(
-        "tenant_secret_set",
-        "Cannot set tenant secret: server not connected",
-    )
-}
-
-async fn run_secret_delete(args: TenantSecretDeleteArgs) -> anyhow::Result<()> {
-    if let Some(client) = get_live_client_for(args.target_tenant.as_deref()).await {
-        let result = if let Some(ref tenant) = args.tenant {
-            client
-                .tenant_secret_delete(tenant, &args.logical_name)
-                .await
-        } else {
-            client.my_tenant_secret_delete(&args.logical_name).await
-        }
-        .inspect_err(|e| {
-            if args.json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(
-                        &json!({"success": false, "error": e.to_string()})
-                    )
-                    .unwrap()
-                );
-            } else {
-                ux_error::UxError::new(e.to_string())
-                    .fix("Run: aeterna auth login")
-                    .display();
-            }
-        })?;
-
-        let redacted = redacted_json(result);
-        if args.json {
-            println!("{}", serde_json::to_string_pretty(&redacted)?);
-        } else {
-            output::header("Tenant Secret Deleted");
-            println!();
-            if let Some(ref tenant) = args.tenant {
-                println!("  Tenant:       {tenant}");
-            } else {
-                println!("  Scope:        current tenant context");
-            }
-            println!("  Logical Name: {}", args.logical_name);
-            println!();
-        }
-        return Ok(());
-    }
-
-    if args.json {
-        let out = json!({
-            "success": false,
-            "error": "server_not_connected",
-            "operation": "tenant_secret_delete",
-            "tenant": args.tenant,
-            "logicalName": args.logical_name,
-        });
-        println!("{}", serde_json::to_string_pretty(&out)?);
-        anyhow::bail!("Aeterna server not connected for operation: tenant_secret_delete");
-    }
-    tenant_server_required(
-        "tenant_secret_delete",
-        "Cannot delete tenant secret: server not connected",
-    )
-}
-
 // ---------------------------------------------------------------------------
 // connection sub-commands
 // ---------------------------------------------------------------------------
 
+/// Post-§7.6 `connection` surface: read-only. Grant/revoke mutations
+/// migrated to `tenant apply` (manifest `connections` field).
 #[derive(Subcommand)]
 pub enum TenantConnectionCommand {
     #[command(
         about = "List Git provider connections visible to a tenant (PlatformAdmin or TenantAdmin)"
     )]
     List(TenantConnectionListArgs),
-
-    #[command(about = "Grant a tenant visibility of a Git provider connection (PlatformAdmin)")]
-    Grant(TenantConnectionGrantArgs),
-
-    #[command(about = "Revoke a tenant's visibility of a Git provider connection (PlatformAdmin)")]
-    Revoke(TenantConnectionRevokeArgs),
 }
 
 #[derive(Args)]
@@ -2315,34 +1298,6 @@ pub struct TenantConnectionListArgs {
     /// Target a specific tenant context (PlatformAdmin only — for cross-tenant operations)
     #[arg(long)]
     pub target_tenant: Option<String>,
-
-    /// Output as JSON
-    #[arg(long)]
-    pub json: bool,
-}
-
-#[derive(Args)]
-pub struct TenantConnectionGrantArgs {
-    /// Tenant slug to grant visibility to
-    pub tenant: String,
-
-    /// Git provider connection ID to grant
-    #[arg(long)]
-    pub connection: String,
-
-    /// Output as JSON
-    #[arg(long)]
-    pub json: bool,
-}
-
-#[derive(Args)]
-pub struct TenantConnectionRevokeArgs {
-    /// Tenant slug to revoke visibility from
-    pub tenant: String,
-
-    /// Git provider connection ID to revoke
-    #[arg(long)]
-    pub connection: String,
 
     /// Output as JSON
     #[arg(long)]
@@ -2412,109 +1367,6 @@ async fn run_connection_list(args: TenantConnectionListArgs) -> anyhow::Result<(
             "Cannot list connections for tenant '{}': server not connected",
             args.tenant
         ),
-    )
-}
-
-async fn run_connection_grant(args: TenantConnectionGrantArgs) -> anyhow::Result<()> {
-    if let Some(client) = get_live_client().await {
-        let result = client
-            .git_provider_connection_grant_tenant(&args.connection, &args.tenant)
-            .await
-            .inspect_err(|e| {
-                if args.json {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(
-                            &json!({"success": false, "error": e.to_string()})
-                        )
-                        .unwrap()
-                    );
-                } else {
-                    ux_error::UxError::new(e.to_string())
-                        .fix("Run: aeterna auth login")
-                        .display();
-                }
-            })?;
-
-        if args.json {
-            println!("{}", serde_json::to_string_pretty(&result)?);
-        } else {
-            output::header("Connection Granted");
-            println!();
-            println!("  Tenant:     {}", args.tenant);
-            println!("  Connection: {}", args.connection);
-            println!();
-            output::hint(
-                "Use 'aeterna tenant connection list <tenant>' to verify the connection is visible",
-            );
-        }
-        return Ok(());
-    }
-
-    if args.json {
-        let out = json!({
-            "success": false,
-            "error": "server_not_connected",
-            "operation": "connection_grant",
-            "tenant": args.tenant,
-            "connection": args.connection
-        });
-        println!("{}", serde_json::to_string_pretty(&out)?);
-        anyhow::bail!("Aeterna server not connected for operation: connection_grant");
-    }
-    tenant_server_required(
-        "connection_grant",
-        "Cannot grant connection: server not connected",
-    )
-}
-
-async fn run_connection_revoke(args: TenantConnectionRevokeArgs) -> anyhow::Result<()> {
-    if let Some(client) = get_live_client().await {
-        let result = client
-            .git_provider_connection_revoke_tenant(&args.connection, &args.tenant)
-            .await
-            .inspect_err(|e| {
-                if args.json {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(
-                            &json!({"success": false, "error": e.to_string()})
-                        )
-                        .unwrap()
-                    );
-                } else {
-                    ux_error::UxError::new(e.to_string())
-                        .fix("Run: aeterna auth login")
-                        .display();
-                }
-            })?;
-
-        if args.json {
-            println!("{}", serde_json::to_string_pretty(&result)?);
-        } else {
-            output::header("Connection Revoked");
-            println!();
-            println!("  Tenant:     {}", args.tenant);
-            println!("  Connection: {}", args.connection);
-            println!();
-        }
-        return Ok(());
-    }
-
-    if args.json {
-        let out = json!({
-            "success": false,
-            "error": "server_not_connected",
-            "operation": "connection_revoke",
-            "tenant": args.tenant,
-            "connection": args.connection
-        });
-        println!("{}", serde_json::to_string_pretty(&out)?);
-        anyhow::bail!("Aeterna server not connected for operation: connection_revoke");
-    }
-    tenant_server_required(
-        "connection_revoke",
-        "Cannot revoke connection: server not connected",
     )
 }
 
@@ -3873,20 +2725,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_tenant_create_args_dry_run_fields() {
-        let args = TenantCreateArgs {
-            slug: "acme".to_string(),
-            name: "Acme Corp".to_string(),
-            json: false,
-            dry_run: true,
-        };
-        assert_eq!(args.slug, "acme");
-        assert_eq!(args.name, "Acme Corp");
-        assert!(args.dry_run);
-        assert!(!args.json);
-    }
-
-    #[test]
     fn test_tenant_list_args_defaults() {
         let args = TenantListArgs {
             include_inactive: false,
@@ -3920,32 +2758,6 @@ mod tests {
     }
 
     #[test]
-    fn test_tenant_update_args_partial() {
-        let args = TenantUpdateArgs {
-            tenant: "acme".to_string(),
-            new_slug: None,
-            name: Some("Acme Corporation".to_string()),
-            json: false,
-            dry_run: false,
-        };
-        assert!(args.new_slug.is_none());
-        assert_eq!(args.name, Some("Acme Corporation".to_string()));
-    }
-
-    #[test]
-    fn test_tenant_update_args_dry_run() {
-        let args = TenantUpdateArgs {
-            tenant: "acme".to_string(),
-            new_slug: Some("acme-corp".to_string()),
-            name: None,
-            json: false,
-            dry_run: true,
-        };
-        assert!(args.dry_run);
-        assert_eq!(args.new_slug, Some("acme-corp".to_string()));
-    }
-
-    #[test]
     fn test_tenant_deactivate_args_requires_yes() {
         let args = TenantDeactivateArgs {
             tenant: "acme".to_string(),
@@ -3972,16 +2784,6 @@ mod tests {
             tenant: "acme".to_string(),
         };
         assert_eq!(args.tenant, "acme");
-    }
-
-    #[test]
-    fn test_tenant_domain_map_args() {
-        let args = TenantDomainMapArgs {
-            tenant: "acme".to_string(),
-            domain: "acme.example.com".to_string(),
-            json: false,
-        };
-        assert_eq!(args.domain, "acme.example.com");
     }
 
     #[test]
@@ -4063,48 +2865,6 @@ mod tests {
     }
 
     #[test]
-    fn test_tenant_repo_binding_set_args() {
-        let args = TenantRepoBindingSetArgs {
-            tenant: "acme".to_string(),
-            kind: "github".to_string(),
-            local_path: None,
-            remote_url: None,
-            branch: Some("main".to_string()),
-            branch_policy: Some("directCommit".to_string()),
-            credential_kind: Some("githubApp".to_string()),
-            credential_ref: Some("my-cred".to_string()),
-            github_owner: Some("acme-org".to_string()),
-            github_repo: Some("knowledge-repo".to_string()),
-            target_tenant: None,
-            json: false,
-            dry_run: false,
-        };
-        assert_eq!(args.kind, "github");
-        assert_eq!(args.github_owner, Some("acme-org".to_string()));
-        assert!(!args.dry_run);
-    }
-
-    #[test]
-    fn test_tenant_repo_binding_validate_args() {
-        let args = TenantRepoBindingValidateArgs {
-            tenant: "acme".to_string(),
-            kind: "local".to_string(),
-            local_path: Some("/repos/acme".to_string()),
-            remote_url: None,
-            branch: None,
-            branch_policy: None,
-            credential_kind: None,
-            credential_ref: None,
-            github_owner: None,
-            github_repo: None,
-            target_tenant: None,
-            json: true,
-        };
-        assert_eq!(args.kind, "local");
-        assert!(args.json);
-    }
-
-    #[test]
     fn test_tenant_config_inspect_args() {
         let args = TenantConfigInspectArgs {
             tenant: Some("acme".to_string()),
@@ -4113,53 +2873,6 @@ mod tests {
         };
         assert_eq!(args.tenant.as_deref(), Some("acme"));
         assert!(args.json);
-    }
-
-    #[test]
-    fn test_tenant_config_upsert_args_dry_run() {
-        let args = TenantConfigUpsertArgs {
-            tenant: None,
-            file: "config.json".to_string(),
-            target_tenant: Some("acme".to_string()),
-            json: false,
-            dry_run: true,
-        };
-        assert!(args.dry_run);
-        assert_eq!(args.file, "config.json");
-        assert_eq!(args.target_tenant.as_deref(), Some("acme"));
-    }
-
-    #[test]
-    fn test_tenant_secret_set_args() {
-        let args = TenantSecretSetArgs {
-            tenant: Some("acme".to_string()),
-            logical_name: "repo.token".to_string(),
-            value: Some("s3cr3t".to_string()),
-            allow_inline_secret: true,
-            reference: None,
-            from_file: None,
-            from_stdin: false,
-            from_env: None,
-            ownership: "tenant".to_string(),
-            target_tenant: None,
-            json: true,
-        };
-        assert_eq!(args.logical_name, "repo.token");
-        assert_eq!(args.ownership, "tenant");
-        assert!(args.json);
-        assert!(args.allow_inline_secret);
-    }
-
-    #[test]
-    fn test_tenant_secret_delete_args() {
-        let args = TenantSecretDeleteArgs {
-            tenant: None,
-            logical_name: "repo.token".to_string(),
-            target_tenant: Some("acme".to_string()),
-            json: false,
-        };
-        assert_eq!(args.target_tenant.as_deref(), Some("acme"));
-        assert_eq!(args.logical_name, "repo.token");
     }
 
     #[test]
@@ -4971,29 +3684,6 @@ mod tests {
             }
             _ => panic!("expected Apply variant"),
         }
-    }
-
-    #[test]
-    fn test_print_nested_validate_deprecation_is_json_silent() {
-        // Per §7.4 decision (design.md §D8): the nested validate
-        // commands emit a stderr deprecation warning routing
-        // operators to `tenant validate`, BUT the warning must be
-        // suppressed in `--json` mode so machine-parseable stdout
-        // stays clean and so downstream log scrapers don't trip on
-        // unexpected stderr lines mid-pipeline.
-        //
-        // We can't easily capture stderr in a unit test without
-        // pulling in a capture crate, so this test exercises the
-        // `json_mode = true` branch (which must be a no-op) and
-        // the `json_mode = false` branch (which must not panic).
-        // The actual warning text is pinned by the format string
-        // literal and by the reading reviewer; a behavioural test
-        // of the stderr bytes lives in the integration suite when
-        // one materialises.
-        print_nested_validate_deprecation("repo-binding validate", true);
-        print_nested_validate_deprecation("config validate", true);
-        print_nested_validate_deprecation("repo-binding validate", false);
-        print_nested_validate_deprecation("config validate", false);
     }
 
     #[test]
