@@ -23,6 +23,7 @@ pub mod project_api;
 pub mod request_context;
 pub mod role_grants;
 pub mod router;
+pub mod service_tokens;
 pub mod sessions;
 pub mod sync;
 pub mod team_api;

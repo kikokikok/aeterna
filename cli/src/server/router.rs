@@ -18,7 +18,8 @@ use super::auth_middleware::AuthenticationLayer;
 use super::{
     AppState, admin_sync, backup_api, bootstrap_api, govern_api, health, knowledge_api,
     lifecycle_api, manifest_api, mcp_transport, memory_api, org_api, plugin_auth, project_api,
-    role_grants, sessions, sync, team_api, tenant_api, tenant_wiring_api, user_api, webhooks,
+    role_grants, service_tokens, sessions, sync, team_api, tenant_api, tenant_wiring_api, user_api,
+    webhooks,
 };
 
 pub fn build_router(state: Arc<AppState>) -> Router {
@@ -56,6 +57,12 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(project_api::router(state.clone()))
         .merge(user_api::router(state.clone()))
         .nest("/admin", role_grants::router(state.clone()))
+        // B2 §10.2 / §10.4 / §10.6 — service-token lifecycle
+        // (mint / revoke / list). PlatformAdmin-gated inside the
+        // handlers; routes are `/auth/tokens{,/:id}` relative to
+        // this protected_api, so they become
+        // `/api/v1/auth/tokens{,/:id}` once nested.
+        .merge(service_tokens::router(state.clone()))
         .merge(govern_api::router(state.clone()))
         .merge(sync::router(state.clone()))
         .merge(memory_api::router(state.clone()))
