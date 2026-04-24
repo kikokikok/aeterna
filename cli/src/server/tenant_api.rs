@@ -2278,21 +2278,16 @@ async fn require_platform_admin(
 /// service token and a caller holding the `PlatformAdmin` user role
 /// both reach the handler body. A caller with neither fails closed.
 ///
-/// Returns `Ok(None)` on the service-token path (no user `TenantContext`
-/// is synthesised for service tokens; handlers that need one must call
-/// the appropriate service-principal lookup themselves), or `Ok(Some(ctx))`
-/// on the user path.
-///
-/// The returned `Option<TenantContext>` is also the caller's signal for
-/// which branch matched — handlers that need `ctx.user_id` for audit
-/// logging must either (a) use the service-token audit path when `None`
-/// is returned, or (b) gate that attribution behind a helper that
-/// tolerates both principal kinds (see B2 §11.4).
+/// Returns [`AuthPrincipal::Service`] on the service-token path and
+/// [`AuthPrincipal::User`] on the user path. Handlers that need to
+/// audit the action borrow the principal as an [`AuditActor`] via
+/// [`AuthPrincipal::as_audit_actor`] — the B2 §11.4 refactor makes
+/// the audit helpers accept either kind uniformly.
 async fn require_platform_admin_or_scope(
     state: &AppState,
     headers: &HeaderMap,
     required_scope: &str,
-) -> Result<Option<TenantContext>, axum::response::Response> {
+) -> Result<AuthPrincipal, axum::response::Response> {
     // 1. Service-token path — short-circuits the role check entirely.
     match crate::server::service_token_validator::validate_service_token_from_headers(
         state, headers,
@@ -2300,18 +2295,19 @@ async fn require_platform_admin_or_scope(
     .await
     {
         Ok(Some(principal)) => {
-            // Valid service token — check scope, return None to signal
-            // "no user context, caller is a service identity".
+            // Valid service token — check scope, return the
+            // principal so the handler can attribute its audit rows
+            // to the service agent (B2 §11.4).
             crate::server::service_token_validator::require_capability(
                 Some(&principal),
                 required_scope,
             )?;
-            Ok(None)
+            Ok(AuthPrincipal::Service(principal))
         }
         Ok(None) => {
             // 2. User path — fall through to the existing role check.
             let ctx = require_platform_admin(state, headers).await?;
-            Ok(Some(ctx))
+            Ok(AuthPrincipal::User(ctx))
         }
         Err(response) => {
             // 3. Token *claimed* to be a service token but failed validation.
@@ -2350,9 +2346,176 @@ async fn require_tenant_admin_context(
     }
 }
 
-async fn audit_tenant_action(
+/// B2 §11.4 — unified audit-attribution actor.
+///
+/// Before B2 §11.4 the audit helpers hard-coded `PrincipalType::User`
+/// and pulled `actor_id` from `TenantContext::user_id`. That made it
+/// impossible to attribute an audit row to a service-token caller
+/// (§10.5), because a service token carries a [`ServicePrincipal`]
+/// (agent UUID + tenant + scopes) with no user identity.
+///
+/// This enum is the single point of branching: each audit helper
+/// translates the actor kind into the matching
+/// `(PrincipalType, Option<Uuid>, acting_as_tenant_id, details.*)`
+/// tuple. Call sites pass either `&TenantContext` or `&ServicePrincipal`
+/// directly — the `From` impls below turn them into an `AuditActor`
+/// automatically, so the existing `audit_tenant_action(&ctx, ...)`
+/// call shape keeps compiling.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum AuditActor<'a> {
+    User(&'a TenantContext),
+    Service(&'a crate::server::service_token_validator::ServicePrincipal),
+}
+
+impl<'a> From<&'a TenantContext> for AuditActor<'a> {
+    fn from(ctx: &'a TenantContext) -> Self {
+        AuditActor::User(ctx)
+    }
+}
+
+impl<'a> From<&'a crate::server::service_token_validator::ServicePrincipal> for AuditActor<'a> {
+    fn from(p: &'a crate::server::service_token_validator::ServicePrincipal) -> Self {
+        AuditActor::Service(p)
+    }
+}
+
+/// Owned counterpart to [`AuditActor`], returned by
+/// [`require_platform_admin_or_scope`] so handlers can thread the
+/// authenticated principal through the full request lifetime and
+/// borrow it as an `AuditActor` at each audit call site without
+/// re-authenticating.
+#[derive(Debug)]
+pub(crate) enum AuthPrincipal {
+    User(TenantContext),
+    Service(crate::server::service_token_validator::ServicePrincipal),
+}
+
+impl AuthPrincipal {
+    /// Borrow this principal as an [`AuditActor`] for passing to the
+    /// `audit_tenant_action*` helpers.
+    pub(crate) fn as_audit_actor(&self) -> AuditActor<'_> {
+        match self {
+            AuthPrincipal::User(ctx) => AuditActor::User(ctx),
+            AuthPrincipal::Service(p) => AuditActor::Service(p),
+        }
+    }
+
+    /// Return a [`TenantContext`] suitable for threading into downstream
+    /// tenant-scoped helpers (`get_unit`, `create_unit`, storage calls
+    /// that expect a `TenantContext` arg).
+    ///
+    /// For the `User` variant this is the authenticated user's own
+    /// context — unchanged from pre-§11.4 behaviour.
+    ///
+    /// For the `Service` variant we synthesize a context from the
+    /// `ServicePrincipal`:
+    ///   - `user_id` ← the agent UUID (as string) — every audit /
+    ///     tracking column that expects a `UserId` gets a stable,
+    ///     unique identifier for the service token.
+    ///   - `agent_id` ← `Some(agent_uuid_string)` — distinguishes
+    ///     service-attributed downstream writes from user ones.
+    ///   - `roles` ← empty — downstream helpers must not re-check
+    ///     role; the scope check in
+    ///     [`require_platform_admin_or_scope`] is the authoritative
+    ///     authorisation gate for service tokens.
+    ///   - `tenant_id` / `target_tenant_id` ← both set to the supplied
+    ///     target (the tenant being provisioned). Service tokens do
+    ///     not carry an impersonation concept, so `target == actor`.
+    ///
+    /// The synthesized context is for DOWNSTREAM DATA OPS only. Any
+    /// *authorisation* decision that still depends on role must be
+    /// redirected through a scope-aware helper before calling this.
+    pub(crate) fn to_downstream_tenant_context(
+        &self,
+        target_tenant_id: mk_core::TenantId,
+    ) -> mk_core::types::TenantContext {
+        match self {
+            AuthPrincipal::User(ctx) => mk_core::types::TenantContext {
+                tenant_id: target_tenant_id.clone(),
+                user_id: ctx.user_id.clone(),
+                roles: ctx.roles.clone(),
+                target_tenant_id: Some(target_tenant_id),
+                agent_id: ctx.agent_id.clone(),
+            },
+            AuthPrincipal::Service(p) => {
+                let agent_str = p.agent_id.to_string();
+                mk_core::types::TenantContext {
+                    tenant_id: target_tenant_id.clone(),
+                    // `UserId::new` only rejects empty / >100 chars —
+                    // a UUID string always satisfies both.
+                    user_id: mk_core::types::UserId::new(agent_str.clone())
+                        .expect("agent UUID string fits UserId bounds"),
+                    roles: Vec::new(),
+                    target_tenant_id: Some(target_tenant_id),
+                    agent_id: Some(agent_str),
+                }
+            }
+        }
+    }
+}
+
+/// B2 §11.4 — resolve an [`AuditActor`] to the audit-row fields.
+///
+/// Returns `(actor_type, actor_id, acting_as_tenant_id, details_json)`.
+/// The first three bind directly into `log_audit_with_extensions`; the
+/// fourth is merged into the existing per-action `details` payload so
+/// downstream audit-log readers see the same `actorTenantId` /
+/// `selectedTargetTenantId` keys regardless of actor kind (service
+/// principals simply leave `selectedTargetTenantId` as `null`).
+fn audit_actor_fields(
+    actor: AuditActor<'_>,
+) -> (PrincipalType, Option<uuid::Uuid>, Option<uuid::Uuid>, serde_json::Value) {
+    match actor {
+        AuditActor::User(ctx) => {
+            let actor_id = uuid::Uuid::parse_str(ctx.user_id.as_str()).ok();
+            // #44.d §2.5 — `acting_as_tenant_id` is the tenant the action
+            // operated against: the impersonated tenant when set,
+            // otherwise the actor's own membership. Drives
+            // `/govern/audit?tenant=<slug>` filtering.
+            let acting_as = uuid::Uuid::parse_str(
+                ctx.target_tenant_id
+                    .as_ref()
+                    .map_or(ctx.tenant_id.as_str(), mk_core::TenantId::as_str),
+            )
+            .ok();
+            let envelope = serde_json::json!({
+                "actorTenantId": ctx.tenant_id.as_str(),
+                "selectedTargetTenantId": ctx.target_tenant_id.as_ref().map(mk_core::TenantId::as_str),
+                "actorKind": "user",
+            });
+            (PrincipalType::User, actor_id, acting_as, envelope)
+        }
+        AuditActor::Service(principal) => {
+            // Service tokens are persisted as `agents` rows with
+            // `agent_type='service'` (see §10.2 mint_handler), so
+            // `PrincipalType::Agent` is the right type and
+            // `principal.agent_id` is the FK into `agents`.
+            let envelope = serde_json::json!({
+                "actorTenantId": principal.tenant_id.to_string(),
+                "selectedTargetTenantId": serde_json::Value::Null,
+                "actorKind": "service",
+                "agentId": principal.agent_id.to_string(),
+            });
+            (
+                PrincipalType::Agent,
+                Some(principal.agent_id),
+                // For a service caller, `acting_as` is the service
+                // token's own tenant — consistent with how other
+                // agent-attributed audit rows filter today. Routes that
+                // provision a *different* target tenant carry the
+                // target slug in `target_id` and the full manifest hash
+                // in the §11.1 extensions, so the audit trail still
+                // links cause (service token) to effect (target tenant).
+                Some(principal.tenant_id),
+                envelope,
+            )
+        }
+    }
+}
+
+async fn audit_tenant_action<'a>(
     state: &AppState,
-    ctx: &TenantContext,
+    actor: impl Into<AuditActor<'a>>,
     action: &str,
     target_id: Option<&str>,
     details: serde_json::Value,
@@ -2361,30 +2524,22 @@ async fn audit_tenant_action(
         return;
     };
 
-    let actor_id = uuid::Uuid::parse_str(ctx.user_id.as_str()).ok();
-    // #44.d §2.5 — `acting_as_tenant_id` is the tenant the action operated
-    // against: the impersonated tenant when set, otherwise the actor's own
-    // membership. Drives `/govern/audit?tenant=<slug>` filtering.
-    let acting_as = uuid::Uuid::parse_str(
-        ctx.target_tenant_id
-            .as_ref()
-            .map_or(ctx.tenant_id.as_str(), mk_core::TenantId::as_str),
-    )
-    .ok();
+    let (actor_type, actor_id, acting_as, mut envelope) = audit_actor_fields(actor.into());
+    // Preserve the pre-§11.4 payload shape: the per-action `details`
+    // are nested under a `details` key so existing audit consumers
+    // that look for `details.<action_specific_field>` keep working.
+    envelope["details"] = details;
+
     let _ = storage
         .log_audit(
             action,
             None,
             Some("tenant"),
             target_id,
-            PrincipalType::User,
+            actor_type,
             actor_id,
             None,
-            serde_json::json!({
-                "actorTenantId": ctx.tenant_id.as_str(),
-                "selectedTargetTenantId": ctx.target_tenant_id.as_ref().map(mk_core::TenantId::as_str),
-                "details": details,
-            }),
+            envelope,
             acting_as,
         )
         .await;
@@ -2395,9 +2550,9 @@ async fn audit_tenant_action(
 /// `generation`, `dry_run`) alongside the primary audit payload. Used only
 /// by the provisioning handlers; every other call site keeps using the
 /// zero-ceremony [`audit_tenant_action`] helper.
-async fn audit_tenant_action_ext(
+async fn audit_tenant_action_ext<'a>(
     state: &AppState,
-    ctx: &TenantContext,
+    actor: impl Into<AuditActor<'a>>,
     action: &str,
     target_id: Option<&str>,
     details: serde_json::Value,
@@ -2407,27 +2562,19 @@ async fn audit_tenant_action_ext(
         return;
     };
 
-    let actor_id = uuid::Uuid::parse_str(ctx.user_id.as_str()).ok();
-    let acting_as = uuid::Uuid::parse_str(
-        ctx.target_tenant_id
-            .as_ref()
-            .map_or(ctx.tenant_id.as_str(), mk_core::TenantId::as_str),
-    )
-    .ok();
+    let (actor_type, actor_id, acting_as, mut envelope) = audit_actor_fields(actor.into());
+    envelope["details"] = details;
+
     let _ = storage
         .log_audit_with_extensions(
             action,
             None,
             Some("tenant"),
             target_id,
-            PrincipalType::User,
+            actor_type,
             actor_id,
             None,
-            serde_json::json!({
-                "actorTenantId": ctx.tenant_id.as_str(),
-                "selectedTargetTenantId": ctx.target_tenant_id.as_ref().map(mk_core::TenantId::as_str),
-                "details": details,
-            }),
+            envelope,
             acting_as,
             ext,
         )
@@ -4346,19 +4493,55 @@ async fn provision_tenant(
     Query(query): Query<ProvisionQuery>,
     Json(raw): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    // B2 §10.5 — provision is still user-principal only in this pass.
-    // The `tenants:provision` scope IS honoured on the read-side preview
-    // routes (see `diff_tenant`, `get_tenant_manifest`), but the mutation
-    // path below attributes every audit row to `ctx.user_id` + tenant,
-    // and the audit helper does not yet accept a service principal as
-    // the actor. Switching this to `require_platform_admin_or_scope`
-    // requires first extending `audit_tenant_action` to carry a
-    // `ServicePrincipal` actor kind (tracked as B2 §11.4 follow-up).
-    // Until then, service tokens with `tenants:provision` can preview
-    // and diff but must hand off the apply to a PlatformAdmin user.
-    let ctx = match require_platform_admin(&state, &headers).await {
-        Ok(ctx) => ctx,
+    // B2 §10.5 + §11.4 — either a PlatformAdmin user OR a service
+    // token carrying the `tenants:provision` scope is accepted. The
+    // audit helpers (`audit_tenant_action`, `audit_tenant_action_ext`)
+    // are actor-polymorphic since §11.4: a service-principal caller is
+    // recorded as `actor_type='agent'` with `actor_id=<agent_uuid>`
+    // and the original `tenant_id` of the minted service token. All
+    // provisioning audit rows therefore link cause (which principal)
+    // to effect (target tenant + manifest hash + generation) whether
+    // the apply came from a CI pipeline or a PA operator.
+    let principal = match require_platform_admin_or_scope(
+        &state,
+        &headers,
+        "tenants:provision",
+    )
+    .await
+    {
+        Ok(p) => p,
         Err(response) => return response,
+    };
+
+    // B2 §11.4 — synthesize a `TenantContext` from the authenticated
+    // principal so helpers that still require a ctx (notably
+    // [`persist_governance_event`], which forwards it to the admin-pool
+    // `with_admin_context` write path) accept both callers uniformly.
+    //
+    // For the User variant this is the authenticated user's own ctx
+    // (unchanged behaviour). For the Service variant we fabricate one
+    // with `tenant_id = service-token's own tenant`, `user_id =
+    // agent_uuid`, empty roles, and `agent_id = Some(agent_uuid)` so
+    // admin-context writes are attributable to the service agent.
+    //
+    // Audit rows use `principal.as_audit_actor()` directly (below) so
+    // they record `actor_type = 'agent'` for service callers — this
+    // ctx is only for call sites that still type-require
+    // `&TenantContext`.
+    let ctx: mk_core::types::TenantContext = match &principal {
+        AuthPrincipal::User(c) => c.clone(),
+        AuthPrincipal::Service(sp) => {
+            let agent_str = sp.agent_id.to_string();
+            mk_core::types::TenantContext {
+                tenant_id: mk_core::TenantId::new(sp.tenant_id.to_string())
+                    .expect("service principal tenant_id is a valid uuid"),
+                user_id: mk_core::types::UserId::new(agent_str.clone())
+                    .expect("agent UUID string fits UserId bounds"),
+                roles: Vec::new(),
+                target_tenant_id: None,
+                agent_id: Some(agent_str),
+            }
+        }
     };
 
     // B2 §11.4 — base request-context extensions for every audit row this
@@ -4515,7 +4698,7 @@ async fn provision_tenant(
         // (a preview does not imply the operator decided to proceed).
         audit_tenant_action_ext(
             state.as_ref(),
-            &ctx,
+            principal.as_audit_actor(),
             if is_dry_run {
                 "tenant_provision_dry_run_unchanged"
             } else {
@@ -4596,7 +4779,7 @@ async fn provision_tenant(
         };
         audit_tenant_action_ext(
             state.as_ref(),
-            &ctx,
+            principal.as_audit_actor(),
             "tenant_provision_dry_run",
             None,
             json!({
@@ -4681,7 +4864,7 @@ async fn provision_tenant(
             }
             audit_tenant_action_ext(
                 state.as_ref(),
-                &ctx,
+                principal.as_audit_actor(),
                 "tenant_provision_tenant",
                 Some(record.id.as_str()),
                 json!({ "slug": record.slug, "name": record.name }),
@@ -4790,7 +4973,7 @@ async fn provision_tenant(
                 Ok(config) => {
                     audit_tenant_action_ext(
                         state.as_ref(),
-                        &ctx,
+                        principal.as_audit_actor(),
                         "tenant_provision_config",
                         Some(tenant_id.as_str()),
                         json!({
@@ -4957,7 +5140,7 @@ async fn provision_tenant(
                         state.tenant_repo_resolver.invalidate(&tenant_id);
                         audit_tenant_action_ext(
                             state.as_ref(),
-                            &ctx,
+                            principal.as_audit_actor(),
                             "tenant_provision_repository",
                             Some(binding.id.as_str()),
                             json!({
@@ -4992,13 +5175,13 @@ async fn provision_tenant(
     // ── Step 6: Organizational hierarchy ─────────────────────────────────
     // We build a TenantContext from the platform-admin ctx but scoped to the
     // newly provisioned tenant so that get_unit / create_unit work correctly.
-    let tenant_ctx = mk_core::types::TenantContext {
-        tenant_id: tenant_id.clone(),
-        user_id: ctx.user_id.clone(),
-        roles: ctx.roles.clone(),
-        target_tenant_id: Some(tenant_id.clone()),
-        agent_id: ctx.agent_id.clone(),
-    };
+    // B2 §11.4 — synthesize a downstream `TenantContext` from the
+    // authenticated principal. For a User caller this is the user's
+    // own ctx scoped to the new tenant; for a Service caller we
+    // fabricate one with `user_id=agent_uuid`, empty roles, and
+    // `agent_id=Some(agent_uuid)` so downstream org-hierarchy ops
+    // can attribute writes without a user identity.
+    let tenant_ctx = principal.to_downstream_tenant_context(tenant_id.clone());
 
     if let Some(companies) = &manifest.hierarchy {
         // B2 §7.5 — hierarchy upsert loops through every company /
@@ -5606,6 +5789,143 @@ async fn diff_tenant(
 mod tests {
     use super::*;
     use crate::server::PluginAuthState;
+
+    // -------------------------------------------------------------------
+    // B2 §11.4 — audit-actor attribution regression tests
+    //
+    // These tests pin the contract that the unified audit-actor
+    // helpers produce the correct `(actor_type, actor_id, acting_as,
+    // envelope)` tuple for both caller kinds, without requiring a
+    // Postgres round-trip. A full end-to-end test that writes a
+    // service-attributed audit row through `log_audit_with_extensions`
+    // lives in the §13 consistency suite.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn audit_actor_fields_user_matches_pre_11_4_shape() {
+        let user_uuid = uuid::Uuid::new_v4();
+        let tenant_uuid = uuid::Uuid::new_v4();
+        let ctx = mk_core::types::TenantContext {
+            tenant_id: mk_core::TenantId::new(tenant_uuid.to_string()).unwrap(),
+            user_id: mk_core::types::UserId::new(user_uuid.to_string()).unwrap(),
+            roles: Vec::new(),
+            target_tenant_id: None,
+            agent_id: None,
+        };
+
+        let (kind, actor_id, acting_as, envelope) =
+            super::audit_actor_fields(super::AuditActor::User(&ctx));
+
+        assert!(matches!(kind, storage::governance::PrincipalType::User));
+        assert_eq!(actor_id, Some(user_uuid));
+        // No target_tenant_id → acting_as falls back to actor's own tenant.
+        assert_eq!(acting_as, Some(tenant_uuid));
+        assert_eq!(envelope["actorKind"], "user");
+        assert_eq!(envelope["actorTenantId"], tenant_uuid.to_string());
+        assert!(envelope["selectedTargetTenantId"].is_null());
+    }
+
+    #[test]
+    fn audit_actor_fields_user_with_target_tenant_prefers_target() {
+        let user_uuid = uuid::Uuid::new_v4();
+        let actor_tenant = uuid::Uuid::new_v4();
+        let target_tenant = uuid::Uuid::new_v4();
+        let ctx = mk_core::types::TenantContext {
+            tenant_id: mk_core::TenantId::new(actor_tenant.to_string()).unwrap(),
+            user_id: mk_core::types::UserId::new(user_uuid.to_string()).unwrap(),
+            roles: Vec::new(),
+            target_tenant_id: Some(
+                mk_core::TenantId::new(target_tenant.to_string()).unwrap(),
+            ),
+            agent_id: None,
+        };
+
+        let (_, _, acting_as, envelope) =
+            super::audit_actor_fields(super::AuditActor::User(&ctx));
+
+        // `acting_as_tenant_id` is the filter key for
+        // `/govern/audit?tenant=<slug>`; when the caller targeted a
+        // different tenant we MUST record the target, not the actor.
+        assert_eq!(acting_as, Some(target_tenant));
+        assert_eq!(envelope["selectedTargetTenantId"], target_tenant.to_string());
+    }
+
+    #[test]
+    fn audit_actor_fields_service_records_agent_attribution() {
+        let agent_uuid = uuid::Uuid::new_v4();
+        let tenant_uuid = uuid::Uuid::new_v4();
+        let principal = crate::server::service_token_validator::ServicePrincipal {
+            agent_id: agent_uuid,
+            tenant_id: tenant_uuid,
+            scopes: vec!["tenants:provision".into()],
+        };
+
+        let (kind, actor_id, acting_as, envelope) =
+            super::audit_actor_fields(super::AuditActor::Service(&principal));
+
+        // Service tokens are persisted as `agents` rows — the audit
+        // log attributes them with `actor_type='agent'` and
+        // `actor_id=<agent_uuid>`, NOT user.
+        assert!(matches!(kind, storage::governance::PrincipalType::Agent));
+        assert_eq!(actor_id, Some(agent_uuid));
+        // Service tokens have no impersonation concept; `acting_as` is
+        // the service token's own tenant.
+        assert_eq!(acting_as, Some(tenant_uuid));
+        assert_eq!(envelope["actorKind"], "service");
+        assert_eq!(envelope["actorTenantId"], tenant_uuid.to_string());
+        assert_eq!(envelope["agentId"], agent_uuid.to_string());
+        // Service callers do not set `selectedTargetTenantId`.
+        assert!(envelope["selectedTargetTenantId"].is_null());
+    }
+
+    #[test]
+    fn audit_actor_from_impls_coerce_through_into() {
+        // Regression guard: the `impl Into<AuditActor<'_>>` on the
+        // audit helpers relies on these `From` impls. If either
+        // conversion breaks, every existing call site that passes
+        // `&ctx` (not `AuditActor::User(&ctx)`) would stop compiling.
+        let ctx = mk_core::types::TenantContext::default();
+        let actor: super::AuditActor<'_> = (&ctx).into();
+        assert!(matches!(actor, super::AuditActor::User(_)));
+
+        let principal = crate::server::service_token_validator::ServicePrincipal {
+            agent_id: uuid::Uuid::new_v4(),
+            tenant_id: uuid::Uuid::new_v4(),
+            scopes: Vec::new(),
+        };
+        let actor: super::AuditActor<'_> = (&principal).into();
+        assert!(matches!(actor, super::AuditActor::Service(_)));
+    }
+
+    #[test]
+    fn auth_principal_to_downstream_ctx_service_synthesizes_agent_identity() {
+        let agent_uuid = uuid::Uuid::new_v4();
+        let principal_tenant = uuid::Uuid::new_v4();
+        let target_tenant = uuid::Uuid::new_v4();
+        let principal = super::AuthPrincipal::Service(
+            crate::server::service_token_validator::ServicePrincipal {
+                agent_id: agent_uuid,
+                tenant_id: principal_tenant,
+                scopes: vec!["tenants:provision".into()],
+            },
+        );
+        let target = mk_core::TenantId::new(target_tenant.to_string()).unwrap();
+
+        let ctx = principal.to_downstream_tenant_context(target.clone());
+
+        // Downstream ctx is scoped to the TARGET tenant (not the
+        // principal's own) — org-hierarchy ops target the new tenant.
+        assert_eq!(ctx.tenant_id, target);
+        assert_eq!(ctx.target_tenant_id, Some(target));
+        // `user_id` / `agent_id` both carry the agent UUID so the
+        // downstream write path can attribute ownership.
+        assert_eq!(ctx.user_id.as_str(), agent_uuid.to_string());
+        assert_eq!(ctx.agent_id.as_deref(), Some(agent_uuid.to_string().as_str()));
+        // Roles are empty — downstream MUST NOT re-check role for a
+        // service caller; scope was already validated at the gate.
+        assert!(ctx.roles.is_empty());
+    }
+
     use crate::server::plugin_auth::{RefreshTokenStore, RefreshTokenStoreBackend};
     use agent_a2a::config::TrustedIdentityConfig;
     use async_trait::async_trait;
