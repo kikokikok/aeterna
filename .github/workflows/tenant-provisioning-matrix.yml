@@ -1,0 +1,74 @@
+name: Tenant Provisioning Consistency Matrix
+
+# B2 §13.6 — the consistency matrix runs every fixture in
+# `tests/tenant_provisioning/scenarios/` through every available
+# runner and asserts they all produce the same rendered tenant
+# state.
+#
+# Current runners:
+#   - api  (§13.2): cargo test --test tenant_provisioning_consistency_test
+#                  In-process router, testcontainer Postgres.
+#   - cli  (§13.3): TODO — spawns `aeterna tenant apply` against a
+#                  running server. Tracked, not yet wired.
+#   - ui   (§13.4): TODO — Playwright drives the admin-ui wizard.
+#                  Tracked, not yet wired.
+#
+# When the cli + ui runners land they get added to the matrix below
+# as additional `runner: [api, cli, ui]` axes. Until then the matrix
+# carries only the `api` axis but the workflow is shaped for
+# fan-out so adding the others is a one-line change.
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "cli/**"
+      - "crates/**"
+      - "tests/tenant_provisioning/**"
+      - ".github/workflows/tenant-provisioning-matrix.yml"
+  push:
+    branches: [master]
+    paths:
+      - "cli/**"
+      - "crates/**"
+      - "tests/tenant_provisioning/**"
+
+jobs:
+  consistency-matrix:
+    name: ${{ matrix.runner }} runner
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Add `cli` and `ui` here once §13.3 / §13.4 land.
+        runner: [api]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "."
+          shared-key: tenant-consistency
+
+      - name: Verify Docker is available (testcontainers prerequisite)
+        run: docker info
+
+      - name: Run ${{ matrix.runner }} runner
+        if: matrix.runner == 'api'
+        run: cargo test --test tenant_provisioning_consistency_test --release -- --test-threads=1 --nocapture
+        working-directory: cli
+        env:
+          RUST_BACKTRACE: "1"
+
+      # Future runners go here:
+      # - name: Run cli runner
+      #   if: matrix.runner == 'cli'
+      #   run: ...
+      # - name: Run ui runner
+      #   if: matrix.runner == 'ui'
+      #   run: ...

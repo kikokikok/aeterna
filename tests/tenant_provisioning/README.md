@@ -39,16 +39,21 @@ tests/tenant_provisioning/
 | Task   | Component                                             | Status |
 |--------|-------------------------------------------------------|--------|
 | §13.1  | Scenario fixtures (5, covering bootstrap → prune)     | ✅     |
-| §13.2  | `runner_api.rs` (direct POST with scoped token)       | ⏳     |
+| §13.2  | API runner (in-process router via `cargo test`)       | ✅     |
 | §13.3  | `runner_cli.rs` (spawns `aeterna tenant apply`)       | ⏳     |
 | §13.4  | `runner_ui.rs` (Playwright against `/admin/*`)        | ⏳     |
-| §13.5  | `assertions.rs` (render-diff with allowlist)          | ⏳     |
-| §13.6  | CI job `consistency-matrix` (all runners in parallel) | ⏳     |
-| §13.7  | CI job running `tenant validate` as fast pre-check    | ✅     |
+| §13.5  | Render-diff assertions with allowlist                 | ✅     |
+| §13.6  | CI job `consistency-matrix` (matrix-shaped, api only) | ✅     |
+| §13.7  | CI job running structural pre-check (jq)              | ✅     |
 
-§13.2–§13.6 are blocked on the Admin UI Create-Tenant wizard (§12)
-and on the service-token minter reaching production use (§10.2),
-both of which are follow-up change requests.
+The API runner lives at
+[`cli/tests/tenant_provisioning_consistency_test.rs`](../../cli/tests/tenant_provisioning_consistency_test.rs).
+It runs every fixture sequentially through the in-process axum router
+against a testcontainer Postgres and structurally diffs each rendered
+tenant against the input manifest. The CLI and UI runners (§13.3 /
+§13.4) will reuse the same fixture set and the same `redact_volatile`
+allowlist; their absence today is a harness-shape gap, not a
+correctness gap.
 
 ## Scenario Design Notes
 
