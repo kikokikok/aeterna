@@ -30,12 +30,12 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
-use mk_core::types::{Role, RoleIdentifier};
 use serde::Deserialize;
 use serde_json::json;
 
+use super::AppState;
 use super::manifest_render::{RenderError, render_current_manifest};
-use super::{AppState, authenticated_platform_context};
+use super::tenant_api::require_platform_admin_or_scope;
 
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
@@ -54,28 +54,6 @@ struct RenderQuery {
     redact: bool,
 }
 
-/// PA gate. Mirrors the pattern from `tenant_wiring_api` — the
-/// `authenticated_platform_context` helper authenticates off raw
-/// headers (no tenant resolution required for platform-scoped routes).
-async fn require_platform_admin(state: &AppState, headers: &HeaderMap) -> Result<(), Response> {
-    let (_uid, roles) = authenticated_platform_context(state, headers).await?;
-    if !is_platform_admin(&roles) {
-        return Err(error_response(
-            StatusCode::FORBIDDEN,
-            "forbidden",
-            "PlatformAdmin role required",
-        ));
-    }
-    Ok(())
-}
-
-/// Whether the role set grants platform-admin privileges. Unit-test
-/// seam identical to the one in `tenant_wiring_api`.
-fn is_platform_admin(roles: &[RoleIdentifier]) -> bool {
-    let pa: RoleIdentifier = Role::PlatformAdmin.into();
-    roles.contains(&pa)
-}
-
 #[tracing::instrument(skip_all, fields(slug = %slug, redact = q.redact))]
 async fn get_tenant_manifest(
     State(state): State<Arc<AppState>>,
@@ -83,7 +61,12 @@ async fn get_tenant_manifest(
     Path(slug): Path<String>,
     Query(q): Query<RenderQuery>,
 ) -> Response {
-    if let Err(resp) = require_platform_admin(&state, &headers).await {
+    // B2 §10.5 — read-only manifest render. Accepts PlatformAdmin user
+    // OR service token with `tenants:render`. `redact=true` mode does
+    // not relax the gate: redaction is for sharing sanitized manifests,
+    // not for demoting the endpoint to a lower-trust tier (per
+    // module-level doc).
+    if let Err(resp) = require_platform_admin_or_scope(&state, &headers, "tenants:render").await {
         return resp;
     }
     match render_current_manifest(&state, &slug, q.redact).await {
@@ -140,22 +123,13 @@ mod tests {
         assert!(q.redact);
     }
 
-    #[test]
-    fn is_platform_admin_accepts_pa_role() {
-        let pa: RoleIdentifier = Role::PlatformAdmin.into();
-        assert!(is_platform_admin(&[pa]));
-    }
-
-    #[test]
-    fn is_platform_admin_rejects_non_pa_roles() {
-        let viewer: RoleIdentifier = Role::Viewer.into();
-        assert!(!is_platform_admin(&[viewer]));
-    }
-
-    #[test]
-    fn is_platform_admin_rejects_empty_roles() {
-        assert!(!is_platform_admin(&[]));
-    }
+    // The local `is_platform_admin` / `require_platform_admin` helpers
+    // were removed when this endpoint migrated to the shared
+    // [`require_platform_admin_or_scope`] gate (B2 §10.5). The
+    // role-membership behaviour is now covered by
+    // `tenant_api::require_platform_admin*` tests; keeping a
+    // duplicate-shape test here would only re-pin
+    // `RoleIdentifier::contains` against itself.
 
     #[test]
     fn error_response_preserves_status() {

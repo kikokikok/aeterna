@@ -108,7 +108,12 @@ impl KnowledgeRepository for MockRepo {
         layer: KnowledgeLayer,
         path: &str,
     ) -> Result<Option<KnowledgeEntry>, Self::Error> {
-        Ok(self.items.read().await.get(&(layer, path.to_string())).cloned())
+        Ok(self
+            .items
+            .read()
+            .await
+            .get(&(layer, path.to_string()))
+            .cloned())
     }
 
     async fn store(
@@ -117,7 +122,10 @@ impl KnowledgeRepository for MockRepo {
         entry: KnowledgeEntry,
         _message: &str,
     ) -> Result<String, Self::Error> {
-        self.items.write().await.insert((entry.layer, entry.path.clone()), entry);
+        self.items
+            .write()
+            .await
+            .insert((entry.layer, entry.path.clone()), entry);
         Ok("mock-commit".to_string())
     }
 
@@ -179,11 +187,7 @@ pub struct TestNoopReasoner;
 
 #[async_trait]
 impl ReflectiveReasoner for TestNoopReasoner {
-    async fn reason(
-        &self,
-        query: &str,
-        _ctx: Option<&str>,
-    ) -> anyhow::Result<ReasoningTrace> {
+    async fn reason(&self, query: &str, _ctx: Option<&str>) -> anyhow::Result<ReasoningTrace> {
         let now = chrono::Utc::now();
         Ok(ReasoningTrace {
             strategy: ReasoningStrategy::SemanticOnly,
@@ -297,9 +301,8 @@ pub async fn build_test_state_with_plugin_auth(
     let tenant_store = Arc::new(TenantStore::new(postgres.pool().clone()));
     let tenant_repository_binding_store =
         Arc::new(TenantRepositoryBindingStore::new(postgres.pool().clone()));
-    let git_provider_connection_registry = Arc::new(
-        storage::git_provider_connection_store::InMemoryGitProviderConnectionStore::new(),
-    );
+    let git_provider_connection_registry =
+        Arc::new(storage::git_provider_connection_store::InMemoryGitProviderConnectionStore::new());
     let tenant_repo_resolver = Arc::new(
         TenantRepositoryResolver::new(
             tenant_repository_binding_store.clone(),

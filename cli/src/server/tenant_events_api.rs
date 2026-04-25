@@ -41,46 +41,26 @@
 use std::convert::Infallible;
 use std::sync::Arc;
 
+use axum::Router;
 use axum::extract::{Path, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::HeaderMap;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use axum::{Json, Router};
 #[cfg(test)]
 use futures_util::stream::StreamExt as _;
 use futures_util::stream::{self, Stream};
-use mk_core::types::{Role, RoleIdentifier};
 use serde_json::json;
 use tokio::sync::broadcast;
 
+use super::AppState;
+use super::tenant_api::require_platform_admin_or_scope;
 use super::tenant_pubsub::{TenantChangeEvent, TenantChangeKind};
-use super::{AppState, authenticated_platform_context};
 
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/admin/tenants/{slug}/events", get(stream_tenant_events))
         .with_state(state)
-}
-
-/// PA gate, mirroring `tenant_wiring_api::require_platform_admin`.
-/// Duplicated rather than made `pub(crate)` to preserve the current
-/// module boundary — each `/admin/tenants/...` endpoint owns its auth
-/// surface so refactors in one do not silently open another.
-async fn require_platform_admin(state: &AppState, headers: &HeaderMap) -> Result<(), Response> {
-    let (_uid, roles) = authenticated_platform_context(state, headers).await?;
-    let pa: RoleIdentifier = Role::PlatformAdmin.into();
-    if !roles.contains(&pa) {
-        return Err((
-            StatusCode::FORBIDDEN,
-            Json(json!({
-                "error": "forbidden",
-                "message": "PlatformAdmin role required",
-            })),
-        )
-            .into_response());
-    }
-    Ok(())
 }
 
 /// Render one [`TenantChangeEvent`] as an SSE frame.
@@ -118,7 +98,9 @@ async fn stream_tenant_events(
     headers: HeaderMap,
     Path(slug): Path<String>,
 ) -> Response {
-    if let Err(resp) = require_platform_admin(&state, &headers).await {
+    // B2 §10.5 — accepts PA user OR service token with `tenants:watch`.
+    // Read-only stream, no audit rows, principal discarded after gate.
+    if let Err(resp) = require_platform_admin_or_scope(&state, &headers, "tenants:watch").await {
         return resp;
     }
 
