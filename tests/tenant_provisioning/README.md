@@ -41,9 +41,9 @@ tests/tenant_provisioning/
 | §13.1  | Scenario fixtures (5, covering bootstrap → prune)     | ✅     |
 | §13.2  | API runner (in-process router via `cargo test`)       | ✅     |
 | §13.3  | `runner_cli.rs` (spawns `aeterna tenant apply`)       | ✅     |
-| §13.4  | `runner_ui.rs` (Playwright against `/admin/*`)        | ⏳     |
+| §13.4  | `runner_ui.rs` (Playwright against `/admin/*`)        | ✅     |
 | §13.5  | Render-diff assertions with allowlist                 | ✅     |
-| §13.6  | CI job `consistency-matrix` (matrix-shaped, api+cli)  | ✅     |
+| §13.6  | CI job `consistency-matrix` (api+cli+ui)              | ✅     |
 | §13.7  | CI job running structural pre-check (jq)              | ✅     |
 
 The API runner lives at
@@ -62,8 +62,22 @@ JWT exported as `AETERNA_API_TOKEN`. Same fixture set, same
 exercising the binary's wire shape (including the
 `X-Aeterna-Client-Kind: cli` header that the API runner cannot reach).
 
-The UI runner (§13.4) is still ⏳; it will reuse the same fixtures and
-allowlist.
+The UI runner lives at
+[`admin-ui/e2e/tenant-consistency-runner.spec.ts`](../../admin-ui/e2e/tenant-consistency-runner.spec.ts).
+It is render-side only: it mocks `GET /admin/tenants/{slug}/manifest`
+to return each fixture verbatim, then drives the Manifest tab and
+asserts that the UI's YAML serializer (`manifestToYaml`) round-trips
+every structural marker — slug, name, generation, scenario label,
+every `config.fields[*]` key, every `config.secretReferences[*]`
+logical name, and every top-level `hierarchy[*].name`. Download
+filename is pinned to `<slug>.manifest.redacted.yaml` per §14.3.
+The runner is hermetic (Vite + `page.route()` only — no backend, no
+Docker), so it complements the JSON-shaped §13.2/§13.3 runners by
+covering the YAML serializer they cannot reach.
+
+The CLI runner (§13.3) reuses the same fixture set and the same
+`redact_volatile` allowlist as §13.2; its absence today is a
+harness-shape gap, not a correctness gap.
 
 ## Scenario Design Notes
 
