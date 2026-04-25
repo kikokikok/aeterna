@@ -12,11 +12,16 @@ name: Tenant Provisioning Consistency Matrix
 #                  Same router bound on 127.0.0.1:0, real `aeterna`
 #                  binary spawned via tokio::process::Command, HS256
 #                  JWT minted in-test and exported as AETERNA_API_TOKEN.
-#   - ui   (§13.4): TODO — Playwright drives the admin-ui wizard.
-#                  Tracked, not yet wired.
-#
-# When the ui runner lands it gets added to the matrix below as the
-# `ui` axis. Until then the matrix carries `api` + `cli`.
+#   - ui   (§13.4): cd admin-ui && npx playwright test tenant-consistency-runner
+#                  Hermetic Playwright spec. Walks every fixture
+#                  through the Manifest tab and asserts the YAML
+#                  serializer (`manifestToYaml`) round-trips slug,
+#                  name, generation, scenario label, every
+#                  `config.fields` key, every `config.secretReferences`
+#                  logical name, every top-level `hierarchy[*].name`,
+#                  and that the download filename matches
+#                  `<slug>.manifest.redacted.yaml`. No backend, no
+#                  Docker — Vite dev server + page.route() mocks only.
 
 on:
   pull_request:
@@ -24,6 +29,7 @@ on:
     paths:
       - "cli/**"
       - "crates/**"
+      - "admin-ui/**"
       - "tests/tenant_provisioning/**"
       - ".github/workflows/tenant-provisioning-matrix.yml"
   push:
@@ -31,6 +37,7 @@ on:
     paths:
       - "cli/**"
       - "crates/**"
+      - "admin-ui/**"
       - "tests/tenant_provisioning/**"
 
 jobs:
@@ -40,22 +47,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Add `ui` here once §13.4 lands.
-        runner: [api, cli]
+        runner: [api, cli, ui]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ---- Rust-runner setup (api / cli only) -----------------------
       - name: Install Rust toolchain
+        if: matrix.runner != 'ui'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
+        if: matrix.runner != 'ui'
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "."
           shared-key: tenant-consistency
 
       - name: Verify Docker is available (testcontainers prerequisite)
+        if: matrix.runner != 'ui'
         run: docker info
 
       - name: Run api runner
@@ -72,7 +82,34 @@ jobs:
         env:
           RUST_BACKTRACE: "1"
 
-      # Future runners go here:
-      # - name: Run ui runner
-      #   if: matrix.runner == 'ui'
-      #   run: ...
+      # ---- UI-runner setup (Playwright, no backend) -----------------
+      - name: Setup Node
+        if: matrix.runner == 'ui'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: admin-ui/package-lock.json
+
+      - name: Install admin-ui deps
+        if: matrix.runner == 'ui'
+        run: npm ci
+        working-directory: admin-ui
+
+      - name: Install Playwright chromium
+        if: matrix.runner == 'ui'
+        run: npx playwright install chromium --with-deps
+        working-directory: admin-ui
+
+      - name: Run ui runner
+        if: matrix.runner == 'ui'
+        run: npx playwright test tenant-consistency-runner --reporter=list
+        working-directory: admin-ui
+
+      - name: Upload Playwright report on failure
+        if: failure() && matrix.runner == 'ui'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-ui-runner
+          path: admin-ui/playwright-report/
+          retention-days: 7
