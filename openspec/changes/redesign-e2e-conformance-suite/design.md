@@ -135,6 +135,78 @@ Contributors must be able to run the suite locally without GH App credentials.
 - Without `--local`, the script targets whatever cluster `KUBECONFIG` points to, refuses to run unless `AETERNA_E2E_PA_SIGNING_KEY` is set, and uses real GitHub.
 - A make target `make e2e-local` is the documented entry point for new contributors.
 
+### D13 — Configurability & downstream redistribution
+
+The suite must be runnable not just from `kikokikok/aeterna`'s CI, but from any consumer's internal repo against their own aeterna deployment, with their own secrets backend and (potentially) their own GitHub Enterprise instance. Concrete consumer in mind: an internal Kyriba repo dedicated to the Kyriba production aeterna deployment that wants to run the same conformance suite as a recurring health gate.
+
+**Decision:** every deployment-specific value is an environment variable with a documented default. The suite ships three orthogonal mode dials:
+
+1. **`AETERNA_E2E_CLUSTER_MODE`** — what brings up the system under test:
+   - `kind-bootstrap` (default for `--local` / `kikokikok/aeterna` CI) — boot kind, build image, helm-install. Phase E3 owns this path.
+   - `existing-kubeconfig` — assume `KUBECONFIG` points at a working cluster with aeterna already running; skip kind/helm bring-up; useful for staging-conformance runs against a long-lived cluster.
+   - `external-https` — no kubectl required at all; treat the target purely as an HTTPS endpoint; skip cluster-state failure-artifact dump (use `--keep-logs-only` instead). Useful for SaaS-style consumers verifying a managed aeterna instance.
+2. **`AETERNA_E2E_SECRETS_BACKEND`** — where secret values come from:
+   - `env` (default) — values already injected as env by the caller (the GH Actions case satisfies this with `secrets:` blocks).
+   - `op` — 1Password CLI: `op read op://vault/item/field`
+   - `aws-sm` — AWS Secrets Manager: `aws secretsmanager get-secret-value --secret-id`
+   - `vault` — HashiCorp Vault: `vault kv get -field`
+   - Each backend is implemented as `e2e/secrets/<backend>.sh` (a small adapter taking a logical secret name, returning the value to stdout). Runner script shells out: `value=$(bash "e2e/secrets/${BACKEND}.sh" resolve "AETERNA_E2E_PA_SIGNING_KEY")`. New backends are one file each.
+3. **`AETERNA_E2E_GITHUB_MODE`** — extended from §D3:
+   - `mock` (default when no GH App key) — wiremock fixture
+   - `real` — `https://api.github.com` with a real test App (the `kikokikok/aeterna` CI case)
+   - `ghe` — same as `real` but targets `AETERNA_E2E_GITHUB_API_URL` (e.g. `https://github.kyriba.com/api/v3`); for consumers running against GitHub Enterprise.
+
+**Full configurable surface** (defaults shown; all overridable via env or `e2e.config.yaml`):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AETERNA_E2E_BASE_URL` | `https://aeterna.local:8443` | API target |
+| `AETERNA_E2E_INGRESS_HOST` | `aeterna.local` | TLS SAN check (folder 1.1) |
+| `AETERNA_E2E_TLS_CA_FILE` | _(empty = system CAs)_ | Custom CA bundle path for internal CA-signed certs |
+| `AETERNA_E2E_TLS_INSECURE` | `false` | Allow `--insecure`; only for kind self-signed mode |
+| `AETERNA_E2E_TENANT_SLUG_PREFIX` | `e2e-` | Slug namespacing per consumer (e.g. `kyriba-conformance-`) |
+| `AETERNA_E2E_TENANT_SLUG_SUFFIX` | `${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}` or `local-${EPOCH}` | Collision avoidance |
+| `AETERNA_E2E_PA_SIGNING_KEY` | _(required)_ | Resolved via secrets backend |
+| `AETERNA_E2E_PA_JWT_ALG` | `HS256` | `RS256` for asymmetric setups (key file then in `AETERNA_E2E_PA_SIGNING_KEY_FILE`) |
+| `AETERNA_E2E_PA_JWT_AUDIENCE` | `aeterna` | JWT `aud` |
+| `AETERNA_E2E_PA_JWT_ISSUER` | `e2e-bootstrap` | JWT `iss` |
+| `AETERNA_E2E_PA_JWT_TTL_SECONDS` | `1800` | PA JWT validity window |
+| `AETERNA_E2E_GITHUB_MODE` | `mock` _(or `real` if `…GITHUB_APP_KEY` set)_ | See above |
+| `AETERNA_E2E_GITHUB_API_URL` | `https://api.github.com` | GHE override |
+| `AETERNA_E2E_GITHUB_APP_ID` | _(required for `real`/`ghe`)_ | Test App ID |
+| `AETERNA_E2E_GITHUB_APP_KEY` | _(required for `real`/`ghe`)_ | PEM; resolved via secrets backend |
+| `AETERNA_E2E_GITHUB_ORG` | `kikokikok-test` | Test org / installation target |
+| `AETERNA_E2E_CLUSTER_MODE` | `kind-bootstrap` | See above |
+| `AETERNA_E2E_SECRETS_BACKEND` | `env` | See above |
+| `AETERNA_E2E_PROFILE` | `fast` | `fast` or `full` |
+| `AETERNA_E2E_HTTP_TIMEOUT_MS` | `30000` | Per-request newman timeout |
+| `AETERNA_E2E_KEEP_CLUSTER` | `false` | Skip `kind delete cluster` on exit (debug aid) |
+| `AETERNA_E2E_REPORT_DIR` | `./e2e/results` | Where Newman HTML / JSON lands |
+
+A single `e2e.config.yaml` file may set all of the above (env wins); useful for downstream consumers who want their config in source control rather than CI variables.
+
+**Distribution shape:** `e2e/` is self-contained — no hard dependencies on paths outside itself **except** `helm/aeterna`, which it reads only when `CLUSTER_MODE=kind-bootstrap`. In `existing-kubeconfig` and `external-https` modes the suite needs nothing from the rest of the repo. A consumer can:
+
+1. **Vendor:** `git subtree add --prefix=tools/aeterna-e2e https://github.com/kikokikok/aeterna openspec/redesign-e2e-conformance-suite --squash` (or simple copy). Their CI calls `bash tools/aeterna-e2e/run-e2e.sh --profile fast` with their env populated. Pinning is by commit SHA.
+2. **Same-repo (the `kikokikok/aeterna` case):** `.github/workflows/e2e-conformance.yml` is the canonical caller. Phase E3.
+3. **OCI image (v2 — out of scope here, but designed to support):** publish `ghcr.io/kikokikok/aeterna-e2e:<aeterna-version>` bundling newman + collection + run-e2e.sh. Consumers `docker run -e ... ghcr.io/.../aeterna-e2e:1.2.3`. Tracked as a follow-up; the design here doesn't preclude it.
+
+**CI portability:** `e2e/templates/ci/` ships templates for the common CI systems:
+- `github-actions.yml` — a generic version (different from `kikokikok/aeterna`'s own `e2e-conformance.yml`); reusable workflow shape so consumers `uses: kikokikok/aeterna/.github/workflows/e2e-conformance-reusable.yml@main` if they prefer not to vendor.
+- `gitlab-ci.yml` — for GitLab consumers.
+- `Makefile.snippet` — for any-CI use; just sets env + invokes `run-e2e.sh`.
+
+Each template is a thin wrapper around env-var population + `run-e2e.sh` invocation. Anything CI-specific (artifact upload syntax, secret syntax) lives in the template; orchestration lives in `run-e2e.sh`.
+
+**Reusable workflow vs vendoring:** consumers pick one. Vendoring trades update-friction for full control + air-gap support. The reusable workflow trades pin-version for simpler updates. Document both in §17.1; don't pick a winner.
+
+**Rejected alternatives:**
+- *"Make `kikokikok/aeterna` the only consumer; downstream just runs `helm test`."* Rejected: `helm test` covers `/health` + a few smoke-level assertions, not ingress/TLS/SSE/scope-matrix/teardown-leak. Downstream consumers operating internal deployments need the same signal we want.
+- *"Hardcode all values; consumers fork."* Rejected: forks drift; conformance assertion drift defeats the suite's purpose.
+- *"Use Helm `tests/` directory."* Rejected: Helm tests run inside the cluster, can't exercise external HTTPS / TLS chain / SSE properly, and have a poor reporting story.
+
+**Acceptance:** AC6 (added in tasks.md) — a fresh checkout of an empty repo with only `e2e/` vendored + a 5-line CI snippet + the four required env vars must produce a green run against any conforming aeterna deployment. Verified by a smoke job in `kikokikok/aeterna`'s CI that simulates the consumer path against a private fixture deployment.
+
 ## Risks & Mitigations
 
 | Risk | Likelihood | Impact | Mitigation |
@@ -145,7 +217,10 @@ Contributors must be able to run the suite locally without GH App credentials.
 | Wiremock drifts from real GH | medium | medium | Nightly drift-check workflow runs both modes, fails on diff |
 | §D11 residue endpoint becomes stale as new tables land | medium | medium | Registry unit test queries `information_schema` at test time and fails if any `tenant_id`-bearing table is missing from the registry |
 | `fast` profile blows the 15-min budget | medium | medium | Per-folder timeout in Newman; profile shrinks before adding parallelism |
+| Downstream consumer's env diverges from the documented variable set (D13) | medium | medium | Strict-mode flag on `run-e2e.sh` rejects unknown `AETERNA_E2E_*` vars; CI-side smoke job in §17.4 exercises the consumer-vendor path on every change to `e2e/` |
+| Vendored copies in downstream repos go stale | high | low–medium | Document semver discipline on the `e2e/` directory; ship a `e2e/VERSION` file consumers can check; reusable-workflow alternative for consumers who don't want to vendor |
+| Secrets backend shell-out leaks values into logs | low | high | Adapter scripts must redirect stderr only; `set -o pipefail` + `+x` discipline; explicit test in 14.5 that `AETERNA_E2E_PA_SIGNING_KEY` never appears in any artifact |
 
 ## Open questions
 
-None as of this draft. (1Password vs GH Actions secrets answered in §D2; wiremock vs real GH in §D3; runtime tooling in §D10.)
+None as of this draft. (1Password vs GH Actions secrets answered in §D2 + extended in §D13; wiremock vs real GH in §D3; runtime tooling in §D10; portability + downstream redistribution in §D13.)
