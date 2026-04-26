@@ -225,12 +225,12 @@ export function SecretsStep({ manifest, onChange }: StepProps) {
         <p className="text-sm text-gray-500 italic">No references declared.</p>
       ) : (
         <ul className="space-y-3">
-          {entries.map(([key, ref]) => (
+          {entries.map(([key, secretRef]) => (
             <li key={key} className="rounded-md border border-gray-200 p-3 dark:border-gray-700">
               <div className="mb-2 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-sm font-semibold">{key}</span>
-                  <span className="rounded bg-gray-100 px-2 py-0.5 text-xs dark:bg-gray-700">{ref.kind}</span>
+                  <span className="rounded bg-gray-100 px-2 py-0.5 text-xs dark:bg-gray-700">{secretRef.kind}</span>
                 </div>
                 <button
                   type="button"
@@ -241,7 +241,7 @@ export function SecretsStep({ manifest, onChange }: StepProps) {
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
-              <SecretRefFields refKey={key} ref={ref} onPatch={(p) => updateRef(key, p)} />
+              <SecretRefFields refKey={key} secretRef={secretRef} onPatch={(p) => updateRef(key, p)} />
             </li>
           ))}
         </ul>
@@ -252,20 +252,20 @@ export function SecretsStep({ manifest, onChange }: StepProps) {
 
 function SecretRefFields({
   refKey,
-  ref,
+  secretRef,
   onPatch,
 }: {
   refKey: string
-  ref: ManifestSecretReference
+  secretRef: ManifestSecretReference
   onPatch: (p: Partial<ManifestSecretReference>) => void
 }) {
-  switch (ref.kind) {
+  switch (secretRef.kind) {
     case "env":
       return (
         <input
           type="text"
           placeholder="ENV_VAR_NAME"
-          value={ref.var ?? ""}
+          value={secretRef.var ?? ""}
           onChange={(e) => onPatch({ var: e.target.value })}
           className={inputCls}
           aria-label={`${refKey} env variable`}
@@ -276,7 +276,7 @@ function SecretRefFields({
         <input
           type="text"
           placeholder="/etc/aeterna/secrets/name"
-          value={ref.path ?? ""}
+          value={secretRef.path ?? ""}
           onChange={(e) => onPatch({ path: e.target.value })}
           className={inputCls}
           aria-label={`${refKey} file path`}
@@ -285,16 +285,16 @@ function SecretRefFields({
     case "k8s":
       return (
         <div className="grid grid-cols-3 gap-2">
-          <input type="text" placeholder="secret name" value={ref.name ?? ""} onChange={(e) => onPatch({ name: e.target.value })} className={inputCls} aria-label={`${refKey} k8s name`} />
-          <input type="text" placeholder="key" value={ref.key ?? ""} onChange={(e) => onPatch({ key: e.target.value })} className={inputCls} aria-label={`${refKey} k8s key`} />
-          <input type="text" placeholder="namespace (optional)" value={ref.namespace ?? ""} onChange={(e) => onPatch({ namespace: e.target.value })} className={inputCls} aria-label={`${refKey} k8s namespace`} />
+          <input type="text" placeholder="secret name" value={secretRef.name ?? ""} onChange={(e) => onPatch({ name: e.target.value })} className={inputCls} aria-label={`${refKey} k8s name`} />
+          <input type="text" placeholder="key" value={secretRef.key ?? ""} onChange={(e) => onPatch({ key: e.target.value })} className={inputCls} aria-label={`${refKey} k8s key`} />
+          <input type="text" placeholder="namespace (optional)" value={secretRef.namespace ?? ""} onChange={(e) => onPatch({ namespace: e.target.value })} className={inputCls} aria-label={`${refKey} k8s namespace`} />
         </div>
       )
     case "postgres":
       return (
         <div className="grid grid-cols-2 gap-2">
-          <input type="text" placeholder="secret id" value={ref.secretId ?? ""} onChange={(e) => onPatch({ secretId: e.target.value })} className={inputCls} aria-label={`${refKey} pg secret id`} />
-          <input type="text" placeholder="label" value={ref.label ?? ""} onChange={(e) => onPatch({ label: e.target.value })} className={inputCls} aria-label={`${refKey} pg label`} />
+          <input type="text" placeholder="secret id" value={secretRef.secretId ?? ""} onChange={(e) => onPatch({ secretId: e.target.value })} className={inputCls} aria-label={`${refKey} pg secret id`} />
+          <input type="text" placeholder="label" value={secretRef.label ?? ""} onChange={(e) => onPatch({ label: e.target.value })} className={inputCls} aria-label={`${refKey} pg label`} />
         </div>
       )
     case "inline":
@@ -303,7 +303,7 @@ function SecretRefFields({
           <input
             type="password"
             placeholder="plaintext value (dev only)"
-            value={ref.inline ?? ""}
+            value={secretRef.inline ?? ""}
             onChange={(e) => onPatch({ inline: e.target.value })}
             className={inputCls}
             aria-label={`${refKey} inline value`}

@@ -152,7 +152,7 @@ export function manifestToYaml(v: unknown, indent = 0): string {
   const pad = "  ".repeat(indent)
   if (v === null || v === undefined) return "null"
   if (typeof v === "string") {
-    if (v === "" || /[:#\n\-\{\}\[\]&*!|>%@`,]/.test(v) || /^\s|\s$/.test(v)) {
+    if (v === "" || /[:#\n\-{}[\]&*!|>%@`,]/.test(v) || /^\s|\s$/.test(v)) {
       return JSON.stringify(v)
     }
     return v
