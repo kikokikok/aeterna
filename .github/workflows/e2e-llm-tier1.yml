@@ -1,0 +1,27 @@
+name: e2e LLM tier 1 (github-models)
+
+on:
+  push:
+    branches: [master, main]
+  schedule:
+    - cron: '17 3 * * *'  # 03:17 UTC nightly
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  models: read  # GitHub Models scope
+
+jobs:
+  github-models-smoke:
+    name: GitHub Models adapter smoke (real inference)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provision + health
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AETERNA_E2E_LLM_MODEL: openai/gpt-4o-mini
+        run: |
+          ./e2e/llm/github-models.sh provision
+          ./e2e/llm/github-models.sh env
+          ./e2e/llm/github-models.sh health
