@@ -17,8 +17,16 @@ pub struct OpenAILlmService {
 }
 
 impl OpenAILlmService {
-    pub fn new(api_key: String, model: String) -> Self {
-        let config = async_openai::config::OpenAIConfig::new().with_api_key(api_key);
+    /// Construct a new service against the public OpenAI API.
+    ///
+    /// For OpenAI-compatible endpoints (ollama, GitHub Models, replay
+    /// servers, self-hosted gateways) pass an `Some(_)` `base_url` to
+    /// override the default `https://api.openai.com/v1`.
+    pub fn new(api_key: String, model: String, base_url: Option<String>) -> Self {
+        let mut config = async_openai::config::OpenAIConfig::new().with_api_key(api_key);
+        if let Some(url) = base_url {
+            config = config.with_api_base(url);
+        }
         let client = async_openai::Client::with_config(config);
         let cache = lru::LruCache::new(NonZeroUsize::new(100).unwrap());
 
