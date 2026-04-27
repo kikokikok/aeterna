@@ -54,6 +54,9 @@ impl std::str::FromStr for EmbeddingProviderType {
 pub struct OpenAiEmbeddingConfig {
     pub model: String,
     pub api_key: String,
+    /// Optional override for the OpenAI-compatible API base URL. See
+    /// [`crate::llm::factory::OpenAiLlmConfig::base_url`] for context.
+    pub base_url: Option<String>,
 }
 
 impl OpenAiEmbeddingConfig {
@@ -64,6 +67,7 @@ impl OpenAiEmbeddingConfig {
             api_key: std::env::var("OPENAI_API_KEY").map_err(|_| {
                 EmbeddingFactoryError::Configuration("OPENAI_API_KEY not set".into())
             })?,
+            base_url: std::env::var("AETERNA_OPENAI_BASE_URL").ok().filter(|s| !s.is_empty()),
         })
     }
 }
@@ -171,8 +175,11 @@ pub fn create_embedding_service(
 
             #[cfg(feature = "embedding-integration")]
             {
-                let service =
-                    super::openai::OpenAIEmbeddingService::new(openai.api_key, &openai.model);
+                let service = super::openai::OpenAIEmbeddingService::new(
+                    openai.api_key,
+                    &openai.model,
+                    openai.base_url.as_deref(),
+                );
                 Ok(Some(Arc::new(service)))
             }
 

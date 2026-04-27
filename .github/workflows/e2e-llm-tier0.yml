@@ -1,0 +1,66 @@
+name: e2e LLM tier 0 (ollama)
+
+on:
+  pull_request:
+    paths:
+      - 'e2e/llm/**'
+      - 'e2e/tools/mock-llm-server.py'
+      - 'e2e/fixtures/llm/**'
+      - 'memory/src/llm/**'
+      - 'memory/src/embedding/**'
+      - '.github/workflows/e2e-llm-tier0.yml'
+  push:
+    branches: [master, main]
+
+permissions:
+  contents: read
+
+jobs:
+  contract-test:
+    name: Adapter contract
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./e2e/llm/contract-test.sh
+
+  ollama-smoke:
+    name: Ollama adapter smoke (real inference)
+    runs-on: ubuntu-24.04
+    services:
+      ollama:
+        image: ollama/ollama:latest
+        ports: ['11434:11434']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache Ollama model blob
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama
+          key: ollama-model-qwen2.5-0.5b-v1
+      - name: Provision + health
+        env:
+          AETERNA_E2E_OLLAMA_HOST: http://localhost:11434
+        run: |
+          ./e2e/llm/ollama.sh provision
+          ./e2e/llm/ollama.sh env
+          ./e2e/llm/ollama.sh health
+      - name: Cleanup (best-effort)
+        if: always()
+        run: ./e2e/llm/ollama.sh cleanup || true
+
+  recorded-replay:
+    name: Recorded-fixture adapter replay
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provision + replay one fixture
+        run: |
+          ./e2e/llm/recorded.sh provision
+          ./e2e/llm/recorded.sh env > /tmp/llm.env
+          # shellcheck disable=SC1091
+          set -a; source /tmp/llm.env; set +a
+          curl -fsS "$AETERNA_OPENAI_BASE_URL/chat/completions" \
+            -H 'Content-Type: application/json' \
+            -d '{"messages":[{"role":"user","content":"ping"}],"model":"qwen2.5:0.5b"}' \
+            | grep -q '"pong"'
+          ./e2e/llm/recorded.sh cleanup

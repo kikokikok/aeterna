@@ -38,7 +38,16 @@ export AETERNA_LLM_PROVIDER=openai
 export OPENAI_API_KEY=your-api-key
 export AETERNA_OPENAI_MODEL=gpt-4.1-mini
 export AETERNA_OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+# Optional: route to an OpenAI-compatible endpoint instead of api.openai.com.
+# Used by the e2e suite (ollama, GitHub Models, recorded fixtures) and by
+# self-hosted users running a local OpenAI-compat gateway.
+# export AETERNA_OPENAI_BASE_URL=http://localhost:11434/v1
 ```
+
+> **`AETERNA_OPENAI_BASE_URL`** is honored by both the LLM and embedding
+> services. Empty string is treated as unset. Per-tenant DB-stored
+> providers always use the public OpenAI endpoint; only env-based config
+> reads this variable.
 
 ### Google Cloud Runtime Configuration
 

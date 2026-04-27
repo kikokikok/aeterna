@@ -1,0 +1,33 @@
+name: e2e LLM tier 2 (live providers — COSTS MONEY)
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend:
+        description: 'Adapter to exercise'
+        required: true
+        type: choice
+        options: [live-openai, live-anthropic]
+      model:
+        description: 'Override model (optional)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  live-smoke:
+    name: Live provider smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provision + health
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AETERNA_E2E_LLM_MODEL: ${{ inputs.model }}
+        run: |
+          ./e2e/llm/${{ inputs.backend }}.sh provision
+          ./e2e/llm/${{ inputs.backend }}.sh env
+          ./e2e/llm/${{ inputs.backend }}.sh health
