@@ -168,3 +168,100 @@ valkey:
     requests:
       cpu: 50m
       memory: 128Mi
+
+## OpenBao subchart (secrets backend for Aeterna)
+## https://github.com/openbao/openbao-helm
+##
+## Three deployment modes are supported via `openbao.mode`:
+##
+##   internal-dev-seal  — single pod, in-memory dev mode, root token = "root".
+##                        Data is ephemeral. ONLY for ephemeral CI / e2e clusters.
+##                        REQUIRES: openbao.server.dev.enabled=true
+##
+##   internal-shamir    — single pod with file storage and Shamir unseal.
+##                        Bootstrap Job stores 1 unseal key + root token in a Secret.
+##                        Convenient for shared dev clusters; NOT production-grade.
+##                        REQUIRES: openbao.server.standalone.enabled=true
+##
+##   external           — assumes the embedded OpenBao subchart is configured with
+##                        an external auto-unseal seal stanza (e.g. AWS KMS, GCP KMS,
+##                        Azure Key Vault, Transit). Bootstrap Job runs init only.
+##                        Suitable for production with proper operator review.
+##
+## The bootstrap Job writes connection info into a Secret consumed by the Aeterna
+## chart via `vault.bootstrapSecretName`. See the Aeterna chart for wiring details.
+openbao:
+  enabled: false
+  ## Deployment mode — gates the bootstrap Job behaviour.
+  ## One of: internal-dev-seal | internal-shamir | external
+  mode: internal-dev-seal
+
+  ## Bootstrap Job — runs once on `helm install/upgrade` to initialise OpenBao,
+  ## persist credentials into a Secret, and enable a kv-v2 mount at `secret/`.
+  bootstrap:
+    enabled: true
+    ## Container image used by the bootstrap Job. Must include `bao` and `kubectl`.
+    image:
+      repository: openbao/openbao
+      tag: "2.5.3"
+      pullPolicy: IfNotPresent
+    ## Override the generated Secret name (default: <release>-openbao-bootstrap).
+    secretName: ""
+    ## KV-v2 mount path to enable post-init.
+    kvPath: "secret"
+    ## Helm hook weight + delete-policy. Default: hook on post-install,post-upgrade.
+    hookWeight: 5
+    ## ServiceAccount + RBAC scope (namespace-local).
+    serviceAccount:
+      create: true
+      name: ""
+    resources:
+      limits:
+        cpu: 200m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 100
+      runAsGroup: 1000
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
+
+  ## --- Below: passthrough to the upstream openbao chart ---
+  ## Defaults shown match `mode: internal-dev-seal`. Override per-mode as needed.
+  ## See: https://github.com/openbao/openbao-helm/blob/main/charts/openbao/values.yaml
+  global:
+    enabled: true
+  injector:
+    enabled: false
+  csi:
+    enabled: false
+  server:
+    image:
+      repository: openbao/openbao
+      tag: "2.5.3"
+    dev:
+      enabled: true
+      devRootToken: "root"
+    standalone:
+      enabled: false
+    ha:
+      enabled: false
+    dataStorage:
+      enabled: false
+    auditStorage:
+      enabled: false
+    resources:
+      limits:
+        cpu: 500m
+        memory: 256Mi
+      requests:
+        cpu: 50m
+        memory: 128Mi

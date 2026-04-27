@@ -1,0 +1,66 @@
+{{- if and .Values.openbao.enabled .Values.openbao.bootstrap.enabled -}}
+{{- include "prereqs.openbao.assertSealMode" . -}}
+{{- if .Values.openbao.bootstrap.serviceAccount.create -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "prereqs.openbao.bootstrapSA" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "prereqs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: openbao-bootstrap
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "prereqs.openbao.bootstrapSA" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "prereqs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: openbao-bootstrap
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+rules:
+  # Manage exactly one Secret — the bootstrap output Secret — in this namespace.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames:
+      - {{ include "prereqs.openbao.bootstrapSecretName" . | quote }}
+    verbs: ["get", "update", "patch"]
+  # Need to be able to create the Secret if it does not exist yet — list/create at namespace scope.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  # Read OpenBao pod status to wait for readiness.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "prereqs.openbao.bootstrapSA" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "prereqs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: openbao-bootstrap
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "prereqs.openbao.bootstrapSA" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "prereqs.openbao.bootstrapSA" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}

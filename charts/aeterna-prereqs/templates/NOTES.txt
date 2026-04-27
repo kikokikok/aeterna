@@ -35,3 +35,40 @@ Install the main Aeterna chart with connection parameters:
 
 Or use the connection secret:
   Secret name: {{ include "prereqs.connectionSecretName" . }}
+
+{{- if .Values.openbao.enabled }}
+
+=== OpenBao (secrets backend) ===
+
+Mode: {{ .Values.openbao.mode }}
+Service: {{ include "prereqs.openbao.addr" . }}
+Bootstrap Secret: {{ include "prereqs.openbao.bootstrapSecretName" . }}
+
+The bootstrap Job runs as a Helm post-install/post-upgrade hook and stores
+connection credentials (root_token, kv_path{{ if eq .Values.openbao.mode "internal-shamir" }}, unseal_key{{ end }})
+into the Secret above. Wire the Aeterna chart to it with:
+
+  --set vault.bootstrapSecretName={{ include "prereqs.openbao.bootstrapSecretName" . }}
+
+  {{- if eq .Values.openbao.mode "internal-dev-seal" }}
+
+⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️
+                  DEV-SEAL MODE — DO NOT USE FOR PRODUCTION
+⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️
+
+OpenBao is running in dev mode:
+  • Storage is IN-MEMORY — all secrets are LOST on pod restart.
+  • Root token is the well-known string "{{ (((.Values.openbao).server).dev).devRootToken | default "root" }}".
+  • Unsealed automatically — no key custody.
+  • TLS disabled.
+
+This mode is ONLY appropriate for ephemeral CI / e2e clusters that are
+created fresh per run. For shared clusters use mode=internal-shamir.
+For production use mode=external with a real auto-unseal seal stanza.
+  {{- else if eq .Values.openbao.mode "internal-shamir" }}
+
+⚠️  internal-shamir mode: 1-of-1 unseal key is stored in the bootstrap Secret.
+   This is convenient but NOT production-grade key custody. Migrate to
+   mode=external with an auto-unseal seal stanza before exposing real data.
+  {{- end }}
+{{- end }}

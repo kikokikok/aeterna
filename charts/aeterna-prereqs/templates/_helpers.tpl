@@ -124,3 +124,66 @@ requests:
   memory: {{ $limits.memory }}
   {{- end }}
 {{- end }}
+
+{{/*
+OpenBao bootstrap Secret name (consumed by Aeterna chart).
+*/}}
+{{- define "prereqs.openbao.bootstrapSecretName" -}}
+{{- if .Values.openbao.bootstrap.secretName }}
+{{- .Values.openbao.bootstrap.secretName }}
+{{- else }}
+{{- printf "%s-openbao-bootstrap" (include "prereqs.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}
+
+{{/*
+OpenBao bootstrap ServiceAccount name.
+*/}}
+{{- define "prereqs.openbao.bootstrapSA" -}}
+{{- if .Values.openbao.bootstrap.serviceAccount.name }}
+{{- .Values.openbao.bootstrap.serviceAccount.name }}
+{{- else }}
+{{- printf "%s-openbao-bootstrap" (include "prereqs.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}
+
+{{/*
+In-cluster OpenBao address. Upstream chart names its service `<release>-openbao`
+where `<release>` is the *subchart* release — i.e. parent .Release.Name.
+*/}}
+{{- define "prereqs.openbao.addr" -}}
+{{- printf "http://%s-openbao.%s.svc:8200" .Release.Name .Release.Namespace }}
+{{- end }}
+
+{{/*
+Guardrail: validate that openbao.mode is supported and that the upstream subchart
+values are consistent with the chosen mode. Fails `helm template/install` early
+with an actionable message if the contract is broken.
+*/}}
+{{- define "prereqs.openbao.assertSealMode" -}}
+{{- $mode := .Values.openbao.mode | default "internal-dev-seal" -}}
+{{- $valid := list "internal-dev-seal" "internal-shamir" "external" -}}
+{{- if not (has $mode $valid) -}}
+{{- fail (printf "openbao.mode=%q is invalid. Must be one of: %s" $mode (join ", " $valid)) -}}
+{{- end -}}
+{{- $dev := (((.Values.openbao).server).dev).enabled | default false -}}
+{{- $standalone := (((.Values.openbao).server).standalone).enabled | default false -}}
+{{- if eq $mode "internal-dev-seal" -}}
+{{- if not $dev -}}
+{{- fail "openbao.mode=internal-dev-seal requires openbao.server.dev.enabled=true. Set it explicitly or switch mode." -}}
+{{- end -}}
+{{- end -}}
+{{- if eq $mode "internal-shamir" -}}
+{{- if $dev -}}
+{{- fail "openbao.mode=internal-shamir is incompatible with openbao.server.dev.enabled=true (dev mode is in-memory and auto-unsealed). Set openbao.server.dev.enabled=false and openbao.server.standalone.enabled=true." -}}
+{{- end -}}
+{{- if not $standalone -}}
+{{- fail "openbao.mode=internal-shamir requires openbao.server.standalone.enabled=true." -}}
+{{- end -}}
+{{- end -}}
+{{- if eq $mode "external" -}}
+{{- if $dev -}}
+{{- fail "openbao.mode=external is incompatible with openbao.server.dev.enabled=true. Disable dev mode and configure an auto-unseal seal stanza in openbao.server.{standalone,ha}.config." -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
