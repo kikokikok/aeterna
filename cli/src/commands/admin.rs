@@ -534,7 +534,11 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
             storage::postgres::PostgresBackend::from_pool(pool.clone())
                 .initialize_schema()
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to initialize core schema tables before running migrations: {e}"))?;
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "Failed to initialize core schema tables before running migrations: {e}"
+                    )
+                })?;
 
             ensure_migration_table(&pool).await?;
             let applied = get_applied_migrations(&pool).await?;
