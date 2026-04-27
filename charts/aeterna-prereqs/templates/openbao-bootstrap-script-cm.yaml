@@ -1,0 +1,160 @@
+{{- if and .Values.openbao.enabled .Values.openbao.bootstrap.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-openbao-bootstrap-script" (include "prereqs.fullname" .) | trunc 63 | trimSuffix "-" }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "prereqs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: openbao-bootstrap
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  bootstrap.sh: |
+    #!/usr/bin/env bash
+    # OpenBao bootstrap — idempotent.
+    # Modes: internal-dev-seal | internal-shamir | external
+    set -euo pipefail
+
+    log() { printf '[bootstrap] %s\n' "$*" >&2; }
+    die() { log "FATAL: $*"; exit 1; }
+
+    : "${MODE:?MODE is required}"
+    : "${BAO_ADDR:?BAO_ADDR is required}"
+    : "${KV_PATH:?KV_PATH is required}"
+    : "${SECRET_NAME:?SECRET_NAME is required}"
+    : "${NAMESPACE:?NAMESPACE is required}"
+    export VAULT_ADDR="$BAO_ADDR"  # bao CLI honours both
+
+    # ---------- Wait for OpenBao to respond on /v1/sys/health ----------
+    log "Waiting for OpenBao at $BAO_ADDR ..."
+    for i in $(seq 1 60); do
+      # /sys/health returns:
+      #  200 = initialized + unsealed + active
+      #  429 = unsealed + standby
+      #  472 = data recovery mode
+      #  473 = performance standby
+      #  501 = not initialized
+      #  503 = sealed
+      code=$(curl -ksS -o /dev/null -w '%{http_code}' "$BAO_ADDR/v1/sys/health?standbyok=true&sealedcode=200&uninitcode=200" || echo "000")
+      if [ "$code" = "200" ] || [ "$code" = "429" ]; then
+        log "OpenBao reachable (HTTP $code)"
+        break
+      fi
+      log "  ...not ready yet (HTTP $code), retry $i/60"
+      sleep 2
+    done
+    [ "$code" = "200" ] || [ "$code" = "429" ] || die "OpenBao did not become reachable"
+
+    # ---------- Initialize / unseal per mode ----------
+    ROOT_TOKEN=""
+    UNSEAL_KEY=""
+
+    init_status=$(curl -ksS "$BAO_ADDR/v1/sys/init" | jq -r '.initialized')
+    log "sys/init.initialized = $init_status"
+
+    case "$MODE" in
+      internal-dev-seal)
+        # Dev mode: server is auto-initialized, auto-unsealed, root token comes from chart values.
+        # We expect VAULT_DEV_ROOT_TOKEN to be passed in env.
+        : "${DEV_ROOT_TOKEN:?DEV_ROOT_TOKEN required for internal-dev-seal}"
+        ROOT_TOKEN="$DEV_ROOT_TOKEN"
+        log "dev-seal mode: using configured dev root token"
+        ;;
+
+      internal-shamir)
+        if [ "$init_status" = "true" ]; then
+          log "already initialized — reading existing root token from Secret"
+          # Re-fetch from existing Secret if present
+          existing=$(kubectl -n "$NAMESPACE" get secret "$SECRET_NAME" -o json 2>/dev/null || echo "")
+          if [ -n "$existing" ]; then
+            ROOT_TOKEN=$(echo "$existing" | jq -r '.data.root_token // empty' | base64 -d || true)
+            UNSEAL_KEY=$(echo "$existing" | jq -r '.data.unseal_key // empty' | base64 -d || true)
+          fi
+          [ -n "$ROOT_TOKEN" ] || die "OpenBao initialized but no Secret with root_token found — manual recovery required"
+        else
+          log "initializing OpenBao with shamir (1/1)"
+          init_resp=$(curl -ksS -X POST -d '{"secret_shares":1,"secret_threshold":1}' "$BAO_ADDR/v1/sys/init")
+          ROOT_TOKEN=$(echo "$init_resp" | jq -r '.root_token')
+          UNSEAL_KEY=$(echo "$init_resp" | jq -r '.keys[0]')
+          [ "$ROOT_TOKEN" != "null" ] && [ -n "$ROOT_TOKEN" ] || die "init failed: $init_resp"
+        fi
+        # Unseal if currently sealed
+        sealed=$(curl -ksS "$BAO_ADDR/v1/sys/seal-status" | jq -r '.sealed')
+        if [ "$sealed" = "true" ]; then
+          log "unsealing"
+          curl -ksS -X POST -d "{\"key\":\"$UNSEAL_KEY\"}" "$BAO_ADDR/v1/sys/unseal" >/dev/null
+        fi
+        ;;
+
+      external)
+        if [ "$init_status" = "true" ]; then
+          log "already initialized — reading existing root token from Secret"
+          existing=$(kubectl -n "$NAMESPACE" get secret "$SECRET_NAME" -o json 2>/dev/null || echo "")
+          if [ -n "$existing" ]; then
+            ROOT_TOKEN=$(echo "$existing" | jq -r '.data.root_token // empty' | base64 -d || true)
+          fi
+          [ -n "$ROOT_TOKEN" ] || die "OpenBao initialized but no Secret with root_token found — manual recovery required"
+        else
+          log "initializing OpenBao with auto-unseal (recovery 1/1)"
+          init_resp=$(curl -ksS -X POST -d '{"recovery_shares":1,"recovery_threshold":1}' "$BAO_ADDR/v1/sys/init")
+          ROOT_TOKEN=$(echo "$init_resp" | jq -r '.root_token')
+          [ "$ROOT_TOKEN" != "null" ] && [ -n "$ROOT_TOKEN" ] || die "init failed: $init_resp"
+        fi
+        ;;
+
+      *)
+        die "unknown MODE=$MODE"
+        ;;
+    esac
+
+    # ---------- Wait for active (unsealed) status ----------
+    log "waiting for active status"
+    for i in $(seq 1 30); do
+      code=$(curl -ksS -o /dev/null -w '%{http_code}' "$BAO_ADDR/v1/sys/health" || echo "000")
+      [ "$code" = "200" ] && break
+      sleep 2
+    done
+    [ "$code" = "200" ] || die "OpenBao not active after unseal (HTTP $code)"
+
+    # ---------- Enable kv-v2 at $KV_PATH if not already mounted ----------
+    log "ensuring kv-v2 mount at $KV_PATH/"
+    mounts=$(curl -ksS -H "X-Vault-Token: $ROOT_TOKEN" "$BAO_ADDR/v1/sys/mounts")
+    if echo "$mounts" | jq -e --arg p "${KV_PATH}/" '.[$p]' >/dev/null 2>&1; then
+      log "  $KV_PATH/ already mounted — skipping"
+    else
+      curl -ksS -X POST -H "X-Vault-Token: $ROOT_TOKEN" \
+        -d '{"type":"kv","options":{"version":"2"}}' \
+        "$BAO_ADDR/v1/sys/mounts/$KV_PATH" >/dev/null
+      log "  mounted kv-v2 at $KV_PATH/"
+    fi
+
+    # ---------- Persist credentials into Secret ----------
+    log "writing Secret $NAMESPACE/$SECRET_NAME"
+    tmp=$(mktemp)
+    cat > "$tmp" <<EOF
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: $SECRET_NAME
+      namespace: $NAMESPACE
+      labels:
+        app.kubernetes.io/component: openbao-bootstrap
+        app.kubernetes.io/managed-by: aeterna-prereqs
+    type: Opaque
+    stringData:
+      bao_addr: "$BAO_ADDR"
+      root_token: "$ROOT_TOKEN"
+      kv_path: "$KV_PATH"
+      mode: "$MODE"
+    EOF
+    if [ -n "$UNSEAL_KEY" ]; then
+      printf '  unseal_key: "%s"\n' "$UNSEAL_KEY" >> "$tmp"
+    fi
+    kubectl apply -f "$tmp"
+    rm -f "$tmp"
+
+    log "bootstrap complete — mode=$MODE secret=$NAMESPACE/$SECRET_NAME"
+{{- end }}

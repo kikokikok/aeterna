@@ -45,3 +45,9 @@ dependencies:
     repository: https://valkey.io/valkey-helm/
     condition: cache.valkey.enabled
     alias: valkey
+
+  - name: openbao
+    version: "~0.27.0"
+    repository: https://openbao.github.io/openbao-helm
+    condition: openbao.enabled
+    alias: openbao

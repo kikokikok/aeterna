@@ -1,0 +1,94 @@
+{{- if and .Values.openbao.enabled .Values.openbao.bootstrap.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "%s-openbao-bootstrap" (include "prereqs.fullname" .) | trunc 63 | trimSuffix "-" }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "prereqs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: openbao-bootstrap
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": {{ .Values.openbao.bootstrap.hookWeight | quote }}
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        {{- include "prereqs.labels" . | nindent 8 }}
+        app.kubernetes.io/component: openbao-bootstrap
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "prereqs.openbao.bootstrapSA" . }}
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Copy the `bao` binary out of the openbao image into a shared volume.
+        # This avoids requiring a single image with both bao and kubectl.
+        - name: copy-bao
+          image: "{{ .Values.openbao.bootstrap.image.repository }}:{{ .Values.openbao.bootstrap.image.tag }}"
+          imagePullPolicy: {{ .Values.openbao.bootstrap.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              cp /bin/bao /shared/bao
+              chmod +x /shared/bao
+          securityContext:
+            {{- toYaml .Values.openbao.bootstrap.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: shared
+              mountPath: /shared
+      containers:
+        - name: bootstrap
+          # bitnami/kubectl ships with kubectl + curl + jq + bash on a small base.
+          image: docker.io/bitnami/kubectl:1.30
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- toYaml .Values.openbao.bootstrap.securityContext | nindent 12 }}
+          command: ["bash", "/scripts/bootstrap.sh"]
+          env:
+            - name: MODE
+              value: {{ .Values.openbao.mode | quote }}
+            - name: BAO_ADDR
+              value: {{ include "prereqs.openbao.addr" . | quote }}
+            - name: KV_PATH
+              value: {{ .Values.openbao.bootstrap.kvPath | quote }}
+            - name: SECRET_NAME
+              value: {{ include "prereqs.openbao.bootstrapSecretName" . | quote }}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: PATH
+              # Prepend /shared so `bao` from the initContainer is on PATH.
+              value: "/shared:/opt/bitnami/kubectl/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            {{- if eq .Values.openbao.mode "internal-dev-seal" }}
+            - name: DEV_ROOT_TOKEN
+              value: {{ (((.Values.openbao).server).dev).devRootToken | default "root" | quote }}
+            {{- end }}
+          volumeMounts:
+            - name: shared
+              mountPath: /shared
+              readOnly: true
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.openbao.bootstrap.resources | nindent 12 }}
+      volumes:
+        - name: shared
+          emptyDir: {}
+        - name: scripts
+          configMap:
+            name: {{ printf "%s-openbao-bootstrap-script" (include "prereqs.fullname" .) | trunc 63 | trimSuffix "-" }}
+            defaultMode: 0755
+        - name: tmp
+          emptyDir: {}
+{{- end }}

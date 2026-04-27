@@ -1,43 +1,79 @@
 # Tasks: Add OpenBao deployment option to `aeterna-prereqs`
 
+## Implementation status (updated 2026-04-27)
+
+**Phase 1 (this commit) — DELIVERED:**
+- ✅ Subchart wiring (Chart.yaml dep on openbao `~0.27.0`, Chart.lock updated)
+- ✅ `openbao:` values block with 3-mode contract (`internal-dev-seal` | `internal-shamir` | `external`)
+- ✅ Dev-seal guardrail helper (`prereqs.openbao.assertSealMode`) — fails render with actionable message on invalid mode or mode/subchart-values mismatch
+- ✅ Bootstrap Job (Helm post-install/post-upgrade hook) — initializes OpenBao per mode, enables kv-v2 at `secret/`, persists `root_token` (+ `unseal_key` for shamir) into a namespace-local Secret
+- ✅ Scoped RBAC (Role + RoleBinding to a single bootstrap Secret + pod read for readiness; no cluster-scoped permissions)
+- ✅ NOTES.txt warning block when dev-seal mode is active
+- ✅ `values-e2e.yaml` overlay for the e2e suite (PR #169)
+- ✅ `helm lint` clean; `helm template` covers all 3 modes; bash syntax check on rendered bootstrap.sh
+
+**Phase 2 (deferred to a follow-up change) — NOT in this PR:**
+- ⏳ Kubernetes auth method enable/configure on OpenBao
+- ⏳ `aeterna-pod` policy + role binding (SA → policy)
+- ⏳ Marker secret `secret/aeterna/.bootstrap-marker` for chart version self-test
+- ⏳ `helm test` smoke pod for bootstrap idempotency
+- ⏳ `charts/aeterna` `vault:` block + deployment env injection (consumer-side wiring)
+
+The Phase 2 scope is intentionally scoped out: it is "aeterna authenticates with bao",
+which is logically separate from "bao is installable as a prereq". Phase 1 alone
+unblocks PR #169 (which only needs OpenBao to exist with a KV mount and a known
+root token in dev-seal mode).
+
 ## 0. Resolve design conflicts (blocking)
 
-- [ ] 0.1 Confirm OpenBao over HashiCorp Vault (per design.md §D1). Operator action: none required if confirmed; this is a license/governance choice, not a technical lock-in.
-- [ ] 0.2 Confirm subchart-in-prereqs (vs main-chart-dep, vs standalone chart) per §D2.
-- [ ] 0.3 Confirm default-off (per §D3) — backwards-compat for every existing consumer of `aeterna-prereqs`.
-- [ ] 0.4 Confirm k8s-SA-only auth for v1 (per §D5) — punts AppRole/JWT/OIDC to follow-ups.
-- [ ] 0.5 Confirm three-mode seal contract with the dev-seal guardrail (per §D6) — production-safety lock-in.
-- [ ] 0.6 Confirm migration tooling is out of scope for v1 (per §D13).
+- [x] 0.1 Confirm OpenBao over HashiCorp Vault (per design.md §D1). Operator action: none required if confirmed; this is a license/governance choice, not a technical lock-in.
+- [x] 0.2 Confirm subchart-in-prereqs (vs main-chart-dep, vs standalone chart) per §D2.
+- [x] 0.3 Confirm default-off (per §D3) — backwards-compat for every existing consumer of `aeterna-prereqs`.
+- [x] 0.4 Confirm k8s-SA-only auth for v1 (per §D5) — punts AppRole/JWT/OIDC to follow-ups. *(Phase 2)*
+- [x] 0.5 Confirm three-mode seal contract with the dev-seal guardrail (per §D6) — production-safety lock-in.
+- [x] 0.6 Confirm migration tooling is out of scope for v1 (per §D13).
 
 ## Phase B1 — Subchart wiring
 
 ### 1. `charts/aeterna-prereqs` dependency declaration
 
-- [ ] 1.1 Add OpenBao to `charts/aeterna-prereqs/Chart.yaml` `dependencies:` block. Pin to a current `0.10.*` minor; record the resolved exact version in a comment.
-- [ ] 1.2 `helm dependency update charts/aeterna-prereqs` — commit the resulting `Chart.lock` and `charts/*.tgz` artifacts (or document the unpacked-vendor approach if preferred).
-- [ ] 1.3 Bump `charts/aeterna-prereqs/Chart.yaml` `version` (minor bump per semver — new optional dependency).
+- [x] 1.1 Add OpenBao to `charts/aeterna-prereqs/Chart.yaml` `dependencies:` block. Pinned to `~0.27.0` (resolved to `0.27.2`, appVersion `v2.5.3`).
+- [x] 1.2 `helm dependency update charts/aeterna-prereqs` — `Chart.lock` and `charts/openbao-0.27.2.tgz` produced.
+- [ ] 1.3 Bump `charts/aeterna-prereqs/Chart.yaml` `version` (deferred — will bump together with merge of this change).
 
 ### 2. `charts/aeterna-prereqs/values.yaml` — bao section
 
-- [ ] 2.1 Add top-level `openbao:` block in `values.yaml` with: `enabled: false`, `allowDevSeal: false`, `seal: { mode: auto-unseal, awsKms: {}, gcpKms: {}, azureKeyVault: {}, k8sSealWrap: {} }`, `server: { ha: { replicas: 1 }, dataStorage: { size: 10Gi, storageClass: "" }, tls: { enabled: false, certManagerIssuer: "" } }`, `bootstrap: { enabled: true, kvMount: "secret", kvPath: "aeterna", policyName: "aeterna-pod", role: "aeterna" }`.
-- [ ] 2.2 Document each value with `## @param` comments matching the prereqs chart's existing convention.
-- [ ] 2.3 Add a `## @section OpenBao` header before the block.
+- [x] 2.1 Added top-level `openbao:` block. Shape **revised vs original tasks.md**: simpler 3-mode contract (`mode: internal-dev-seal | internal-shamir | external`) instead of separate `seal.mode` + `allowDevSeal` flags. Bootstrap config: `enabled`, `image`, `secretName`, `kvPath`, `hookWeight`, `serviceAccount`, `resources`, `securityContext`. Subchart passthrough under `openbao.global/injector/csi/server`.
+- [x] 2.2 Each block has inline `##` doc comments explaining the contract.
+- [x] 2.3 Section header added with mode descriptions and links to upstream chart values.
 
 ### 3. Dev-seal guardrail
 
-- [ ] 3.1 In `charts/aeterna-prereqs/templates/_helpers.tpl`, add `aeterna-prereqs.openbao.assertSealMode` helper that fails the template render if `.Values.openbao.seal.mode == "dev"` and `.Values.openbao.allowDevSeal != true`.
-- [ ] 3.2 Helper also fails if `.Values.openbao.seal.mode == "auto-unseal"` and none of the four provider blocks have any non-empty fields.
-- [ ] 3.3 Call the helper from the bootstrap-job template (Phase B2) so render fails before any resource is created.
-- [ ] 3.4 In `charts/aeterna-prereqs/templates/NOTES.txt`, emit a multi-line WARNING block when `dev` seal is active, including the words "DO NOT USE IN PRODUCTION."
+- [x] 3.1 In `charts/aeterna-prereqs/templates/_helpers.tpl`, added `prereqs.openbao.assertSealMode` helper. Fails render if `mode` is not in the allowed set, or if mode/subchart values are inconsistent (e.g. `mode=internal-shamir` with `server.dev.enabled=true`).
+- [x] 3.2 N/A under revised contract (auto-unseal config validation is the operator's responsibility under `mode=external` — they bring the seal stanza). Documented in NOTES.
+- [x] 3.3 Helper is called from `openbao-bootstrap-rbac.yaml` (the first hook to render), so `helm template/install` fails before any resource is created.
+- [x] 3.4 `templates/NOTES.txt` emits a large multi-line warning block when `mode=internal-dev-seal` (including "DO NOT USE FOR PRODUCTION") and a smaller warning for `mode=internal-shamir`.
 
 ## Phase B2 — Bootstrap Job
 
 ### 4. Job manifest
 
-- [ ] 4.1 New file `charts/aeterna-prereqs/templates/openbao-bootstrap-job.yaml`. Helm hook annotations: `helm.sh/hook: post-install,post-upgrade`, `helm.sh/hook-weight: "5"`, `helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded`.
-- [ ] 4.2 Job spec: `restartPolicy: OnFailure`, `backoffLimit: 3`, `activeDeadlineSeconds: 180`. Service account = a new `aeterna-prereqs-openbao-bootstrap` SA created in the same namespace with minimum RBAC (no cluster-scoped permissions).
-- [ ] 4.3 Container: `openbao/openbao:<pinned>` (same version as the chart dep — derive via `.Chart.Dependencies` lookup or hardcode-with-comment). Mounts the projected SA token from `/var/run/secrets/kubernetes.io/serviceaccount/token` (default mount).
-- [ ] 4.4 Job env: `VAULT_ADDR=http://{{ .Release.Name }}-openbao:8200`, `VAULT_TOKEN` populated from the bootstrap-token Secret (created in Phase B2 §5).
+- [x] 4.1 Created `charts/aeterna-prereqs/templates/openbao-bootstrap-job.yaml` with hooks `helm.sh/hook: post-install,post-upgrade`, configurable `hook-weight` (default `"5"`), `hook-delete-policy: before-hook-creation,hook-succeeded`.
+- [x] 4.2 Job: `restartPolicy: OnFailure`, `backoffLimit: 3`, `ttlSecondsAfterFinished: 600`. SA `<release>-openbao-bootstrap` with namespace-scoped Role limited to (a) get/update/patch on the single bootstrap Secret by `resourceNames`, (b) create on Secrets in the namespace, (c) get/list/watch on Pods (for readiness). NO cluster-scoped permissions.
+- [x] 4.3 Two-container pattern (because `openbao` image lacks `kubectl` and `bitnami/kubectl` lacks `bao`): initContainer copies `/bin/bao` from `openbao/openbao:2.5.3` into a shared emptyDir; main container `bitnami/kubectl:1.30` runs the script with `/shared` prepended to `PATH`. All security context: `runAsNonRoot`, `readOnlyRootFilesystem`, drops ALL caps, seccomp `RuntimeDefault`.
+- [x] 4.4 Job env: `MODE`, `BAO_ADDR=http://<release>-openbao.<ns>.svc:8200`, `KV_PATH`, `SECRET_NAME`, `NAMESPACE`, plus `DEV_ROOT_TOKEN` only when `mode=internal-dev-seal`. The Job authenticates to OpenBao using the dev root token (dev-seal) or freshly-minted root token from `sys/init` (shamir/external).
+
+### 5. Bootstrap script (revised scope — Phase 1 simpler than original §5)
+
+- [x] 5.1 Inline ConfigMap `<release>-openbao-bootstrap-script` containing `bootstrap.sh`. Steps actually implemented (Phase 1):
+  1. Wait for OpenBao `/v1/sys/health` to return 200/429 (60×2s timeout)
+  2. Read `/v1/sys/init` to determine current state
+  3. Per mode: dev-seal uses pre-set root token; shamir initializes 1/1 + unseals; external initializes with recovery 1/1 (assumes auto-unseal is configured by operator)
+  4. Idempotently enable kv-v2 at `$KV_PATH/`
+  5. `kubectl apply` the bootstrap Secret with `bao_addr`, `root_token`, `kv_path`, `mode` (+ `unseal_key` for shamir)
+- [ ] 5.2–5.4 **Deferred to Phase 2** (k8s-auth enable, `aeterna-pod` policy, role binding, marker secret) — see top-of-file status block.
+- [x] 5.b1 `set -euo pipefail`. No `set -x`. Token-bearing curl bodies are `>/dev/null`.
+- [x] 5.b2 Each mutating step preceded by a state check (mounts list, `sys/init.initialized`, `sys/seal-status.sealed`).
 
 ### 5. Bootstrap script
 
