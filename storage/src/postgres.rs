@@ -374,12 +374,34 @@ impl PostgresBackend {
         .await?;
 
         sqlx::query(
+            // Full schema aligned with migration 006 (006_event_streaming.sql).
+            // Both initialize_schema() and migration 006 use CREATE TABLE IF
+            // NOT EXISTS; whichever executes first wins and the other is a
+            // no-op. Having identical column sets here ensures migration 006's
+            // subsequent CREATE INDEX statements (e.g. on idempotency_key)
+            // succeed regardless of execution order.
+            //
+            // event_id and idempotency_key are nullable so that the
+            // log_event() path (INSERT event_type, tenant_id, payload only)
+            // remains compatible. PostgreSQL UNIQUE constraints treat each
+            // NULL as distinct, so multiple NULL idempotency_key rows are
+            // allowed while non-NULL keys are still deduplicated correctly via
+            // ON CONFLICT (idempotency_key).
             "CREATE TABLE IF NOT EXISTS governance_events (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                event_type TEXT NOT NULL,
-                tenant_id TEXT NOT NULL,
+                event_id VARCHAR(255),
+                idempotency_key VARCHAR(255) UNIQUE,
+                event_type VARCHAR(100) NOT NULL,
+                tenant_id VARCHAR(255) NOT NULL,
                 payload JSONB NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                status VARCHAR(50) NOT NULL DEFAULT 'pending',
+                retry_count INTEGER NOT NULL DEFAULT 0,
+                max_retries INTEGER NOT NULL DEFAULT 3,
+                last_error TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                published_at TIMESTAMPTZ,
+                acknowledged_at TIMESTAMPTZ,
+                dead_lettered_at TIMESTAMPTZ
             )",
         )
         .execute(&self.pool)

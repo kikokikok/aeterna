@@ -519,6 +519,23 @@ async fn run_migrate(args: AdminMigrateArgs) -> anyhow::Result<()> {
                     crate::exit_code::ExitCode::Usage.exit();
                 }
             };
+
+            // Initialize the core schema tables (organizational_units, sync_state,
+            // governance_events, etc.) before running migrations. Several migrations
+            // (009, 012, 025) reference tables that only exist after
+            // PostgresBackend::initialize_schema() runs, and the server calls
+            // initialize_schema() at startup. To avoid a chicken-and-egg dependency
+            // on server startup ordering, we run initialize_schema() here so the
+            // migration runner is self-contained on a fresh database.
+            //
+            // initialize_schema() is idempotent (CREATE TABLE IF NOT EXISTS,
+            // CREATE INDEX IF NOT EXISTS), so it is safe to call on both fresh
+            // and already-migrated databases.
+            storage::postgres::PostgresBackend::from_pool(pool.clone())
+                .initialize_schema()
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to initialize core schema tables before running migrations: {e}"))?;
+
             ensure_migration_table(&pool).await?;
             let applied = get_applied_migrations(&pool).await?;
             verify_applied_checksums(&migrations, &applied)?;
