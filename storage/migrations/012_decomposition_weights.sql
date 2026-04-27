@@ -97,47 +97,20 @@ ALTER TABLE decomposition_policy_state ENABLE ROW LEVEL SECURITY;
 ALTER TABLE decomposition_trajectories ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policies
-CREATE POLICY "Users can view decomposition weights in their tenant" 
-ON decomposition_policy_weights FOR SELECT 
-USING (tenant_id IN (
-    SELECT get_accessible_tenant_ids(auth.uid())
-));
+CREATE POLICY decomposition_policy_weights_tenant_isolation
+ON decomposition_policy_weights FOR ALL
+USING (tenant_id = current_setting('app.tenant_id', true)::text)
+WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::text);
 
-CREATE POLICY "Users can modify decomposition weights in their tenant" 
-ON decomposition_policy_weights FOR ALL 
-USING (tenant_id IN (
-    SELECT get_accessible_tenant_ids(auth.uid())
-));
+CREATE POLICY decomposition_policy_state_tenant_isolation
+ON decomposition_policy_state FOR ALL
+USING (tenant_id = current_setting('app.tenant_id', true)::text)
+WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::text);
 
-CREATE POLICY "Users can view decomposition state in their tenant" 
-ON decomposition_policy_state FOR SELECT 
-USING (tenant_id IN (
-    SELECT get_accessible_tenant_ids(auth.uid())
-));
-
-CREATE POLICY "Users can modify decomposition state in their tenant" 
-ON decomposition_policy_state FOR ALL 
-USING (tenant_id IN (
-    SELECT get_accessible_tenant_ids(auth.uid())
-));
-
-CREATE POLICY "Users can view decomposition trajectories in their tenant" 
-ON decomposition_trajectories FOR SELECT 
-USING (tenant_id IN (
-    SELECT get_accessible_tenant_ids(auth.uid())
-));
-
-CREATE POLICY "Users can insert decomposition trajectories in their tenant" 
-ON decomposition_trajectories FOR INSERT 
-WITH CHECK (tenant_id IN (
-    SELECT get_accessible_tenant_ids(auth.uid())
-));
-
-CREATE POLICY "Users can update decomposition trajectories in their tenant" 
-ON decomposition_trajectories FOR UPDATE 
-USING (tenant_id IN (
-    SELECT get_accessible_tenant_ids(auth.uid())
-));
+CREATE POLICY decomposition_trajectories_tenant_isolation
+ON decomposition_trajectories FOR ALL
+USING (tenant_id = current_setting('app.tenant_id', true)::text)
+WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::text);
 
 -- Add comments
 COMMENT ON TABLE decomposition_policy_weights IS 'Stores RLM decomposition policy weights for different action types';
