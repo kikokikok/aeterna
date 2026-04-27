@@ -32,7 +32,7 @@ members = [
 # - `.github/workflows/version-consistency.yml` enforces that all those
 #   surfaces agree on every PR and on every tag push.
 [workspace.package]
-version = "0.8.0-rc.3"
+version = "0.8.0-rc.4"
 
 [workspace.lints.rust]
 unused_imports = "warn"
