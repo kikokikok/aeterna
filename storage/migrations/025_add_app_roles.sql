@@ -123,7 +123,9 @@ TO aeterna_app;
 -- --------------------------------------------------------------------------
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO aeterna_admin;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
+-- Defaults must attach to the table-creating role (aeterna), not whichever
+-- role happens to run this migration (which may be postgres in bootstrap).
+ALTER DEFAULT PRIVILEGES FOR ROLE aeterna IN SCHEMA public
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO aeterna_admin;
 
 -- --------------------------------------------------------------------------
@@ -131,7 +133,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 -- --------------------------------------------------------------------------
 
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO aeterna_app, aeterna_admin;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
+ALTER DEFAULT PRIVILEGES FOR ROLE aeterna IN SCHEMA public
     GRANT USAGE, SELECT ON SEQUENCES TO aeterna_app, aeterna_admin;
 
 -- --------------------------------------------------------------------------

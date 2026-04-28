@@ -141,13 +141,15 @@ SELECT
     current_branch
 FROM codesearch_repositories;
 
+-- Note: tenant_id is not on codesearch_requests; the view is rebuilt with a
+-- JOIN to codesearch_repositories in migration 020. Keep this base view free
+-- of tenant_id so 014 can apply on a fresh DB.
 CREATE OR REPLACE VIEW v_code_search_requests AS
 SELECT
     id,
     repository_id,
     requester_id,
-    status,
-    tenant_id
+    status
 FROM codesearch_requests;
 
 CREATE OR REPLACE VIEW v_code_search_identities AS
