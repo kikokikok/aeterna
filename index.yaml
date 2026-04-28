@@ -1,0 +1,78 @@
+apiVersion: v1
+entries:
+  aeterna:
+  - annotations:
+      artifacthub.io/category: ai-machine-learning
+      artifacthub.io/license: Apache-2.0
+    apiVersion: v2
+    appVersion: 0.8.0-rc.5
+    created: "2026-04-28T00:01:05.200578604Z"
+    description: Aeterna application chart — deploys the Aeterna server, OPAL authorization
+      stack, and supporting jobs. Requires external PostgreSQL, Redis-compatible cache,
+      and vector store. Use the aeterna-prereqs chart for dev/test backends.
+    digest: e436013278565117e4c6e7700661413772b978a62963dd38f774e1591c793b75
+    home: https://github.com/kikokikok/aeterna
+    icon: https://raw.githubusercontent.com/kikokikok/aeterna/main/docs/logo.png
+    keywords:
+    - ai
+    - agents
+    - memory
+    - knowledge
+    - vector-database
+    - enterprise
+    - mcp
+    maintainers:
+    - name: kikokikok
+      url: https://github.com/kikokikok
+    name: aeterna
+    sources:
+    - https://github.com/kikokikok/aeterna
+    type: application
+    urls:
+    - https://kikokikok.github.io/aeterna/aeterna-0.8.0-rc.5.tgz
+    version: 0.8.0-rc.5
+  aeterna-prereqs:
+  - annotations:
+      artifacthub.io/category: ai-machine-learning
+      artifacthub.io/license: Apache-2.0
+    apiVersion: v2
+    appVersion: 0.8.0-rc.5
+    created: "2026-04-28T00:01:05.203756889Z"
+    dependencies:
+    - alias: dragonfly
+      condition: cache.dragonfly.enabled
+      name: dragonfly
+      repository: oci://ghcr.io/dragonflydb/dragonfly/helm
+      version: v1.37.0
+    - alias: qdrant
+      condition: vectorStore.qdrant.enabled
+      name: qdrant
+      repository: https://qdrant.github.io/qdrant-helm
+      version: 0.10.*
+    - alias: valkey
+      condition: cache.valkey.enabled
+      name: valkey
+      repository: https://valkey.io/valkey-helm/
+      version: 0.9.*
+    description: Prerequisites for Aeterna — deploys PostgreSQL (CloudNativePG), Redis-compatible
+      cache (Dragonfly or Valkey), and vector store (Qdrant) for development and testing
+      environments.
+    digest: 7ef2b6a49d410604fb0a5632b04b99bcacb88d227fe09ced349ad0cfeaaa4bb0
+    home: https://github.com/kikokikok/aeterna
+    keywords:
+    - aeterna
+    - prerequisites
+    - postgresql
+    - redis
+    - qdrant
+    maintainers:
+    - name: kikokikok
+      url: https://github.com/kikokikok
+    name: aeterna-prereqs
+    sources:
+    - https://github.com/kikokikok/aeterna
+    type: application
+    urls:
+    - https://kikokikok.github.io/aeterna/aeterna-prereqs-0.8.0-rc.5.tgz
+    version: 0.8.0-rc.5
+generated: "2026-04-28T00:01:05.194313119Z"
