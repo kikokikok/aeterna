@@ -2,8 +2,33 @@ use assert_cmd::{Command, cargo_bin_cmd};
 use wiremock::matchers::{method, path, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+/// Hermetic CLI command builder.
+///
+/// Scrubs the environment so the spawned `aeterna` subprocess cannot discover
+/// the developer's real credentials in the platform config dir
+/// (`~/.config/aeterna/` on Linux, `~/Library/Application Support/aeterna/`
+/// on macOS). Without this scrubbing, any developer who has ever run
+/// `aeterna auth login` will see ~85 e2e tests fail with HTTP 401 because
+/// the CLI under test silently uses their personal token to hit a real
+/// server, instead of taking the "no server configured" code path the tests
+/// are asserting on. CI doesn't catch this because GitHub Actions runners
+/// have no pre-existing aeterna config.
+///
+/// Tests that need a configured (mock) server must opt in via [`aeterna_mock`].
 fn aeterna() -> Command {
-    cargo_bin_cmd!("aeterna")
+    let mut cmd = cargo_bin_cmd!("aeterna");
+    cmd.env_clear()
+        .env("PATH", std::env::var("PATH").unwrap_or_default())
+        // Pin HOME to a sentinel path that has no aeterna config tree under
+        // any platform-specific subpath the `dirs` crate might compute from
+        // it (~/.config/aeterna, ~/Library/Application Support/aeterna,
+        // %APPDATA%/aeterna, …).
+        .env("HOME", "/nonexistent-aeterna-test-home");
+    // Preserve TMPDIR so `tempfile` inside the CLI still works on macOS.
+    if let Ok(v) = std::env::var("TMPDIR") {
+        cmd.env("TMPDIR", v);
+    }
+    cmd
 }
 
 /// Holds the mock server and temp config dir (both must stay alive for the test).
@@ -16,11 +41,10 @@ struct MockEnv {
 
 /// Return a CLI command wired to a mock server with fake credentials.
 fn aeterna_mock(env: &MockEnv) -> Command {
+    // `aeterna()` already env_clear'd and pinned HOME to a sentinel.
+    // Layer the mock-specific overrides on top.
     let mut cmd = aeterna();
-    cmd.env_clear()
-        .env("HOME", std::env::var("HOME").unwrap_or_default())
-        .env("PATH", std::env::var("PATH").unwrap_or_default())
-        .env("AETERNA_SERVER_URL", &env.url)
+    cmd.env("AETERNA_SERVER_URL", &env.url)
         .env("AETERNA_PROFILE", "__mock__")
         .env("AETERNA_CONFIG_DIR", &env.config_path);
     cmd

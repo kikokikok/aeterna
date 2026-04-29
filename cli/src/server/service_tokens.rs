@@ -121,7 +121,7 @@ pub fn router(state: Arc<AppState>) -> Router {
     // under `/api/v1`, so these become `/api/v1/auth/tokens{,/:id}`.
     Router::new()
         .route("/auth/tokens", post(mint_handler).get(list_handler))
-        .route("/auth/tokens/:id", delete(revoke_handler))
+        .route("/auth/tokens/{id}", delete(revoke_handler))
         .with_state(state)
 }
 

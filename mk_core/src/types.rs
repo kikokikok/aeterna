@@ -27,7 +27,6 @@ pub const PROVIDER_KUBERNETES: &str = "kubernetes";
     EnumString,
     Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum Role {
     Viewer,
@@ -48,7 +47,6 @@ pub enum Role {
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 #[derive(Default)]
 pub enum TenantStatus {
@@ -61,7 +59,6 @@ pub enum TenantStatus {
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 #[derive(Default)]
 pub enum RecordSource {
@@ -74,7 +71,6 @@ pub enum RecordSource {
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum RepositoryKind {
     Local,
@@ -86,7 +82,6 @@ pub enum RepositoryKind {
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum BranchPolicy {
     DirectCommit,
@@ -97,7 +92,6 @@ pub enum BranchPolicy {
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum CredentialKind {
     None,
@@ -244,7 +238,6 @@ impl TenantRepositoryBinding {
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum TenantConfigOwnership {
     Platform,
@@ -332,7 +325,6 @@ fn contains_raw_secret_material(field_name: &str, value: &serde_json::Value) -> 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(serialize_all = "camelCase")]
 pub enum UnitType {
     Company,
@@ -739,7 +731,6 @@ impl Role {
 
 /// Knowledge types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
 pub enum KnowledgeType {
     Adr,
     Policy,
@@ -750,7 +741,6 @@ pub enum KnowledgeType {
 
 /// Knowledge status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
 pub enum KnowledgeStatus {
     Draft,
     Proposed,
@@ -775,7 +765,6 @@ pub enum KnowledgeStatus {
     EnumString,
     Default,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum KnowledgeVariantRole {
     #[default]
@@ -818,7 +807,6 @@ impl KnowledgeVariantRole {
     Display,
     EnumString,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum KnowledgeRelationType {
     PromotedFrom,
@@ -861,7 +849,6 @@ pub struct KnowledgeRelation {
     EnumString,
     Default,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum PromotionMode {
     Full,
@@ -884,7 +871,6 @@ pub enum PromotionMode {
     EnumString,
     Default,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum PromotionRequestStatus {
     Draft,
@@ -910,7 +896,6 @@ pub enum PromotionRequestStatus {
     Display,
     EnumString,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum PromotionDecision {
     ApproveAsReplacement,
@@ -963,7 +948,6 @@ pub struct PromotionRequest {
     Ord,
     JsonSchema,
 )]
-#[serde(rename_all = "camelCase")]
 pub enum KnowledgeLayer {
     Company,
     Org,
@@ -1028,7 +1012,6 @@ impl From<MemoryLayer> for Option<KnowledgeLayer> {
     strum::Display,
     strum::EnumString,
 )]
-#[serde(rename_all = "camelCase")]
 pub enum ConstraintSeverity {
     Info,
     Warn,
@@ -1037,7 +1020,6 @@ pub enum ConstraintSeverity {
 
 /// Constraint operators
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
 pub enum ConstraintOperator {
     MustUse,
     MustNotUse,
@@ -1049,7 +1031,6 @@ pub enum ConstraintOperator {
 
 /// Constraint targets
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
 pub enum ConstraintTarget {
     File,
     Code,
@@ -1073,7 +1054,6 @@ pub enum ConstraintTarget {
     strum::Display,
     ToSchema,
 )]
-#[serde(rename_all = "camelCase")]
 pub enum MemoryLayer {
     Agent,
     User,
@@ -1134,7 +1114,6 @@ pub struct LayerIdentifiers {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
 pub enum SummaryDepth {
     Sentence,
     Paragraph,
@@ -1223,7 +1202,6 @@ pub struct HindsightNote {
     Display,
     EnumString,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(serialize_all = "camelCase")]
 pub enum ReasoningStrategy {
     Exhaustive,
@@ -1327,7 +1305,6 @@ pub fn compute_xxhash64(data: &[u8]) -> String {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
-#[serde(rename_all = "camelCase")]
 pub enum MemoryOperation {
     Add,
     Update,
@@ -1352,7 +1329,6 @@ pub enum MemoryOperation {
     Display,
     EnumString,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(serialize_all = "camelCase")]
 pub enum RewardType {
     Helpful,
@@ -1543,7 +1519,6 @@ pub struct KnowledgeQueryResult {
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, Default, ToSchema,
 )]
-#[serde(rename_all = "camelCase")]
 pub enum PolicyMode {
     #[default]
     Optional,
@@ -1553,7 +1528,6 @@ pub enum PolicyMode {
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, Default, ToSchema,
 )]
-#[serde(rename_all = "camelCase")]
 pub enum RuleMergeStrategy {
     #[default]
     Override,
@@ -1564,7 +1538,6 @@ pub enum RuleMergeStrategy {
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, Default, ToSchema,
 )]
-#[serde(rename_all = "camelCase")]
 pub enum RuleType {
     #[default]
     Allow,
@@ -1657,7 +1630,6 @@ pub struct BootstrapStatusSnapshot {
 
 /// Governance event types for auditing and real-time updates
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
 pub enum GovernanceEvent {
     /// New organizational unit created
     UnitCreated {
@@ -4746,7 +4718,6 @@ mod tests {
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum GitProviderKind {
     GitHubApp,

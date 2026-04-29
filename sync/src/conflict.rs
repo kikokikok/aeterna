@@ -17,7 +17,6 @@ pub enum ConflictError {
 pub type ConflictResult<T> = Result<T, ConflictError>;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "camelCase")]
 pub enum ConflictStrategy {
     OperationalTransform,
     LastWriteWins,
@@ -33,7 +32,6 @@ impl std::fmt::Display for ConflictStrategy {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
 pub enum OperationType {
     Insert,
     Update,

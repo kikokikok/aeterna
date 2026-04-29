@@ -2,7 +2,6 @@ use mk_core::types::{MemoryLayer, SummaryDepth};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
 pub enum SummarySyncEvent {
     Created(SummaryCreated),
     Updated(SummaryUpdated),
@@ -35,7 +34,6 @@ pub struct SummaryUpdated {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
 pub enum SummaryUpdateReason {
     SourceContentChanged,
     ConfigurationChanged,
@@ -56,7 +54,6 @@ pub struct SummaryInvalidated {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
 pub enum InvalidationReason {
     SourceContentChanged {
         previous_hash: String,
@@ -84,7 +81,6 @@ pub struct SummaryDeleted {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
 pub enum DeletionReason {
     SourceDeleted,
     LayerPruned,
@@ -101,7 +97,6 @@ pub struct HindsightSyncEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
 pub enum HindsightEventType {
     ErrorSignatureCreated {
         signature_id: String,

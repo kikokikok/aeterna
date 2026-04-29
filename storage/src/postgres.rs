@@ -3172,11 +3172,21 @@ impl StorageBackend for PostgresBackend {
         &self,
         event: mk_core::types::PersistentEvent,
     ) -> Result<(), Self::Error> {
+        // NOTE: `event.id` is a `String` (UUID v4 stringified by
+        // `PersistentEvent::new`) but the `governance_events.id` column is
+        // `uuid NOT NULL`. Postgres does not implicitly cast text → uuid, so
+        // we make the cast explicit with `$1::uuid`. Without this, every
+        // INSERT (e.g. the post-bootstrap `BootstrapCompleted` emission in
+        // `cli/src/commands/serve.rs::emit_bootstrap_completed`) fails with
+        // `column "id" is of type uuid but expression is of type text` and
+        // the event is silently dropped — `/admin/bootstrap/status` is the
+        // primary readout, so the server keeps running, but the durable
+        // governance trail is incomplete. See rc.6 release notes.
         sqlx::query(
             "INSERT INTO governance_events (id, event_id, idempotency_key, tenant_id, event_type, \
              payload, status, retry_count, max_retries, last_error, created_at, published_at, \
              acknowledged_at, dead_lettered_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, to_timestamp($11), $12, $13, $14)
+             VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, to_timestamp($11), $12, $13, $14)
              ON CONFLICT (idempotency_key) DO NOTHING",
         )
         .bind(&event.id)

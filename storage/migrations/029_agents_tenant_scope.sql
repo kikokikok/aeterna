@@ -112,7 +112,9 @@ END $$;
 
 UPDATE agents a SET tenant_id = sub.tenant_id
 FROM (
-    SELECT a.id AS agent_id, MIN(c.tenant_id) AS tenant_id
+    -- Postgres has no min(uuid) aggregate. Step 2's audit guarantees at most
+-- one distinct tenant per agent, so any element of the array is correct.
+SELECT a.id AS agent_id, (array_agg(c.tenant_id))[1] AS tenant_id
     FROM agents a
     JOIN companies c ON c.deleted_at IS NULL AND (
         c.id = ANY(a.allowed_company_ids)

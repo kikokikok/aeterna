@@ -16,13 +16,13 @@
     "fields": {
       "default_embedding_model": {
         "value": "text-embedding-3-small",
-        "ownership": "tenant"
+        "ownership": "Tenant"
       }
     },
     "secretReferences": {
       "webhook-signing-key": {
         "logicalName": "webhook-signing-key",
-        "ownership": "tenant",
+        "ownership": "Tenant",
         "kind": "k8s",
         "name": "acme-webhook-secrets",
         "key": "signing-key",

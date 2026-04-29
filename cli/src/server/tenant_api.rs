@@ -6331,7 +6331,7 @@ mod tests {
         let upsert_config = serde_json::json!({
             "fields": {
                 "runtime.logLevel": {
-                    "ownership": "tenant",
+                    "ownership": "Tenant",
                     "value": "info"
                 }
             },
@@ -6358,7 +6358,7 @@ mod tests {
                 "platformAdmin",
                 Body::from(
                     serde_json::to_vec(&serde_json::json!({
-                        "ownership": "tenant",
+                        "ownership": "Tenant",
                         "secretValue": secret_value
                     }))
                     .unwrap(),
@@ -6433,7 +6433,7 @@ mod tests {
                     serde_json::to_vec(&serde_json::json!({
                         "fields": {
                             "database.password": {
-                                "ownership": "tenant",
+                                "ownership": "Tenant",
                                 "value": "plain-text-secret"
                             }
                         },
@@ -6471,7 +6471,7 @@ mod tests {
             .header("x-target-tenant-id", tenant.id.as_str())
             .body(Body::from(
                 serde_json::to_vec(&serde_json::json!({
-                    "ownership": "platform",
+                    "ownership": "Platform",
                     "secretValue": "secret"
                 }))
                 .unwrap(),
@@ -6496,14 +6496,14 @@ mod tests {
         let request: UpsertTenantConfigRequest = serde_json::from_value(serde_json::json!({
             "fields": {
                 "runtime.logLevel": {
-                    "ownership": "tenant",
+                    "ownership": "Tenant",
                     "value": "info"
                 }
             },
             "secretReferences": {
                 "repo.token": {
                     "logicalName": "repo.token",
-                    "ownership": "tenant",
+                    "ownership": "Tenant",
                     "kind": "postgres",
                     "secretId": "22222222-2222-2222-2222-222222222222"
                 }
@@ -6622,7 +6622,7 @@ mod tests {
             .header("x-tenant-id", "default")
             .body(Body::from(
                 serde_json::to_vec(&serde_json::json!({
-                    "ownership": "platform",
+                    "ownership": "Platform",
                     "secretValue": "platform-secret"
                 }))
                 .unwrap(),
@@ -6668,7 +6668,7 @@ mod tests {
                 serde_json::to_vec(&serde_json::json!({
                     "fields": {
                         "platform.control": {
-                            "ownership": "platform",
+                            "ownership": "Platform",
                             "value": "blocked"
                         }
                     },
@@ -7105,8 +7105,8 @@ mod tests {
         // 1. GlobalAdmin upserts tenant config (deployment materialization step)
         let config_body = serde_json::json!({
             "fields": {
-                "runtime.logLevel": { "ownership": "tenant", "value": "warn" },
-                "deployment.namespace": { "ownership": "platform", "value": "aeterna-prod" }
+                "runtime.logLevel": { "ownership": "Tenant", "value": "warn" },
+                "deployment.namespace": { "ownership": "Platform", "value": "aeterna-prod" }
             },
             "secretReferences": {}
         });
@@ -7135,7 +7135,7 @@ mod tests {
                 "platformAdmin",
                 Body::from(
                     serde_json::to_vec(&serde_json::json!({
-                        "ownership": "platform",
+                        "ownership": "Platform",
                         "secretValue": "ghp_bootstrap_secret_value"
                     }))
                     .unwrap(),
@@ -7757,7 +7757,7 @@ mod tests {
                 "secretReferences": {
                     "openai.key": {
                         "logicalName": "openai.key",
-                        "ownership": "tenant",
+                        "ownership": "Tenant",
                         "kind": "postgres",
                         "secretId": "11111111-1111-1111-1111-111111111111"
                     }
@@ -8243,20 +8243,20 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "inline-ok":   { "logicalName": "a", "ownership": "tenant",
+                    "inline-ok":   { "logicalName": "a", "ownership": "Tenant",
                                      "kind": "inline",   "plaintext": "hunter2" },
-                    "env-ok":      { "logicalName": "b", "ownership": "tenant",
+                    "env-ok":      { "logicalName": "b", "ownership": "Tenant",
                                      "kind": "env",      "var": "DATABASE_PASSWORD" },
-                    "file-ok":     { "logicalName": "c", "ownership": "tenant",
+                    "file-ok":     { "logicalName": "c", "ownership": "Tenant",
                                      "kind": "file",     "path": "/run/secrets/db" },
-                    "k8s-ok":      { "logicalName": "d", "ownership": "tenant",
+                    "k8s-ok":      { "logicalName": "d", "ownership": "Tenant",
                                      "kind": "k8s",      "name": "db-secret",
                                                          "key": "password" },
-                    "k8s-ns-ok":   { "logicalName": "e", "ownership": "tenant",
+                    "k8s-ns-ok":   { "logicalName": "e", "ownership": "Tenant",
                                      "kind": "k8s",      "name": "db-secret",
                                                          "key": "password",
                                                          "namespace": "aeterna" },
-                    "vault-ok":    { "logicalName": "f", "ownership": "tenant",
+                    "vault-ok":    { "logicalName": "f", "ownership": "Tenant",
                                      "kind": "vault",    "mount": "secret",
                                                          "path": "tenants/acme/db",
                                                          "field": "password" }
@@ -8280,7 +8280,7 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "bad": { "logicalName": "a", "ownership": "tenant",
+                    "bad": { "logicalName": "a", "ownership": "Tenant",
                              "kind": "inline", "plaintext": "" }
                 }
             }
@@ -8302,7 +8302,7 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "bad": { "logicalName": "a", "ownership": "tenant",
+                    "bad": { "logicalName": "a", "ownership": "Tenant",
                              "kind": "env", "var": "" }
                 }
             }
@@ -8326,7 +8326,7 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "bad": { "logicalName": "a", "ownership": "tenant",
+                    "bad": { "logicalName": "a", "ownership": "Tenant",
                              "kind": "env", "var": "FOO=BAR" }
                 }
             }
@@ -8348,7 +8348,7 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "bad": { "logicalName": "a", "ownership": "tenant",
+                    "bad": { "logicalName": "a", "ownership": "Tenant",
                              "kind": "file", "path": "relative/path" }
                 }
             }
@@ -8370,7 +8370,7 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "bad": { "logicalName": "a", "ownership": "tenant",
+                    "bad": { "logicalName": "a", "ownership": "Tenant",
                              "kind": "k8s", "name": "", "key": "" }
                 }
             }
@@ -8400,7 +8400,7 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "bad": { "logicalName": "a", "ownership": "tenant",
+                    "bad": { "logicalName": "a", "ownership": "Tenant",
                              "kind": "k8s", "name": "n", "key": "k",
                              "namespace": "   " }
                 }
@@ -8423,7 +8423,7 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "bad": { "logicalName": "a", "ownership": "tenant",
+                    "bad": { "logicalName": "a", "ownership": "Tenant",
                              "kind": "vault", "mount": "secret",
                              "path": "", "field": "" }
                 }
@@ -8458,7 +8458,7 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "bad": { "logicalName": "a", "ownership": "tenant",
+                    "bad": { "logicalName": "a", "ownership": "Tenant",
                              "kind": "mysterybox", "whatever": 1 }
                 }
             }
@@ -8781,7 +8781,7 @@ mod tests {
             "tenant": { "slug": "dryrun-new", "name": "Dryrun New" },
             "config": {
                 "fields": {
-                    "ui.theme": { "ownership": "tenant", "value": "dark" }
+                    "ui.theme": { "ownership": "Tenant", "value": "dark" }
                 },
                 "secretReferences": {}
             }
