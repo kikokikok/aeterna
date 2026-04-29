@@ -2,8 +2,8 @@ apiVersion: v2
 name: aeterna-opal
 description: OPAL Authorization Stack for Aeterna Memory-Knowledge System
 type: application
-version: 0.8.0-rc.7
-appVersion: "0.8.0-rc.7"
+version: 0.8.0-rc.8
+appVersion: "0.8.0-rc.8"
 keywords:
   - opal
   - cedar

@@ -5,8 +5,8 @@ description: >-
   Redis-compatible cache (Dragonfly or Valkey), and vector store (Qdrant)
   for development and testing environments.
 type: application
-version: 0.8.0-rc.7
-appVersion: "0.8.0-rc.7"
+version: 0.8.0-rc.8
+appVersion: "0.8.0-rc.8"
 
 home: https://github.com/kikokikok/aeterna
 sources:
