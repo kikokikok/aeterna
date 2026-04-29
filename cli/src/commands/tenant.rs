@@ -2362,10 +2362,19 @@ async fn run_apply(args: TenantApplyArgs) -> anyhow::Result<()> {
 
     let outcome = classify_apply_response(&body);
 
+    // Exit code semantics for `tenant apply`:
+    //   0 → Applied or Unchanged (success)
+    //   2 → Partial (some steps succeeded, others failed — operator must inspect)
+    //   1 → everything else (generation conflict, validation failed, transport)
+    //
+    // We bypass anyhow's default exit-1 mapping by calling std::process::exit(2)
+    // directly for Partial. Pipelines and shell scripts can `[ $? -eq 2 ]`
+    // instead of treating any non-zero as full failure.
     if args.json {
         println!("{}", serde_json::to_string_pretty(&body)?);
         return match outcome {
             ApplyOutcome::Applied | ApplyOutcome::Unchanged => Ok(()),
+            ApplyOutcome::Partial => std::process::exit(2),
             _ => anyhow::bail!("tenant apply did not succeed: {:?}", outcome),
         };
     }
@@ -2377,7 +2386,8 @@ async fn run_apply(args: TenantApplyArgs) -> anyhow::Result<()> {
         }
         ApplyOutcome::Partial => {
             print!("{}", render_apply_result(&body, &outcome));
-            anyhow::bail!("tenant apply completed with step failures — see output")
+            eprintln!("tenant apply completed with step failures — see output");
+            std::process::exit(2)
         }
         ApplyOutcome::GenerationConflict => {
             print!("{}", render_generation_conflict(&body));
