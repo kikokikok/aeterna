@@ -282,6 +282,9 @@ impl RedisStorage {
         entry_id: &str,
         depth: &mk_core::types::SummaryDepth,
     ) -> String {
+        // Force lowercase on both layer and depth so cache keys stay stable
+        // across the PascalCase wire-format refactor. Cache values are ephemeral
+        // but key collisions across format changes would still flush prematurely.
         format!(
             "summary:{}:{}:{}:{}",
             tenant_id,
@@ -290,6 +293,7 @@ impl RedisStorage {
             serde_json::to_string(depth)
                 .unwrap_or_else(|_| "unknown".to_string())
                 .trim_matches('"')
+                .to_lowercase()
         )
     }
 

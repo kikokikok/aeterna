@@ -529,9 +529,9 @@ mod tests {
         };
 
         let json = serde_json::to_string(&event).unwrap();
-        // GovernanceEvent uses rename_all = "camelCase" so it serializes as
-        // "unitCreated"
-        assert!(json.contains("unitCreated"));
+        // GovernanceEvent uses serde default (PascalCase) so it serializes as
+        // "UnitCreated"
+        assert!(json.contains("UnitCreated"));
         assert!(json.contains("test-tenant"));
         assert!(json.contains("unit-1"));
 
@@ -678,8 +678,8 @@ mod tests {
         };
 
         let json = serde_json::to_string(&event).unwrap();
-        // GovernanceEvent uses rename_all = "camelCase"
-        assert!(json.contains("driftDetected"));
+        // GovernanceEvent uses serde default (PascalCase)
+        assert!(json.contains("DriftDetected"));
         assert!(json.contains("project-123"));
         assert!(json.contains("0.75"));
 

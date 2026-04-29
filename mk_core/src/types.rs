@@ -2552,7 +2552,7 @@ mod tests {
     fn test_knowledge_type_serialization() {
         let adr = KnowledgeType::Adr;
         let json = serde_json::to_string(&adr).unwrap();
-        assert_eq!(json, "\"adr\"");
+        assert_eq!(json, "\"Adr\"");
 
         let deserialized: KnowledgeType = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, KnowledgeType::Adr);
@@ -2562,7 +2562,7 @@ mod tests {
     fn test_knowledge_layer_serialization() {
         let company = KnowledgeLayer::Company;
         let json = serde_json::to_string(&company).unwrap();
-        assert_eq!(json, "\"company\"");
+        assert_eq!(json, "\"Company\"");
 
         let deserialized: KnowledgeLayer = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, KnowledgeLayer::Company);
@@ -2580,7 +2580,7 @@ mod tests {
     fn test_knowledge_status_serialization_includes_rejected() {
         let rejected = KnowledgeStatus::Rejected;
         let json = serde_json::to_string(&rejected).unwrap();
-        assert_eq!(json, "\"rejected\"");
+        assert_eq!(json, "\"Rejected\"");
 
         let deserialized: KnowledgeStatus = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, KnowledgeStatus::Rejected);
@@ -2718,7 +2718,7 @@ mod tests {
     fn test_memory_layer_serialization() {
         let agent = MemoryLayer::Agent;
         let json = serde_json::to_string(&agent).unwrap();
-        assert_eq!(json, "\"agent\"");
+        assert_eq!(json, "\"Agent\"");
 
         let deserialized: MemoryLayer = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, MemoryLayer::Agent);
@@ -2728,7 +2728,7 @@ mod tests {
     fn test_constraint_severity_serialization() {
         let block = ConstraintSeverity::Block;
         let json = serde_json::to_string(&block).unwrap();
-        assert_eq!(json, "\"block\"");
+        assert_eq!(json, "\"Block\"");
 
         let deserialized: ConstraintSeverity = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, ConstraintSeverity::Block);
@@ -2738,7 +2738,7 @@ mod tests {
     fn test_constraint_operator_serialization() {
         let must_use = ConstraintOperator::MustUse;
         let json = serde_json::to_string(&must_use).unwrap();
-        assert_eq!(json, "\"mustUse\"");
+        assert_eq!(json, "\"MustUse\"");
 
         let deserialized: ConstraintOperator = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, ConstraintOperator::MustUse);
@@ -2748,7 +2748,7 @@ mod tests {
     fn test_constraint_target_serialization() {
         let file = ConstraintTarget::File;
         let json = serde_json::to_string(&file).unwrap();
-        assert_eq!(json, "\"file\"");
+        assert_eq!(json, "\"File\"");
 
         let deserialized: ConstraintTarget = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, ConstraintTarget::File);
@@ -3021,7 +3021,7 @@ mod tests {
     fn test_role_serialization() {
         let architect = Role::Architect;
         let json = serde_json::to_string(&architect).unwrap();
-        assert_eq!(json, "\"architect\"");
+        assert_eq!(json, "\"Architect\"");
 
         let deserialized: Role = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, Role::Architect);
@@ -3043,7 +3043,7 @@ mod tests {
     fn test_reasoning_strategy_serialization() {
         let exhaustive = ReasoningStrategy::Exhaustive;
         let json = serde_json::to_string(&exhaustive).unwrap();
-        assert_eq!(json, "\"exhaustive\"");
+        assert_eq!(json, "\"Exhaustive\"");
 
         let deserialized: ReasoningStrategy = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, ReasoningStrategy::Exhaustive);
@@ -3764,26 +3764,26 @@ mod tests {
     fn test_summary_depth_serialization() {
         let sentence = SummaryDepth::Sentence;
         let json = serde_json::to_string(&sentence).unwrap();
-        assert_eq!(json, "\"sentence\"");
+        assert_eq!(json, "\"Sentence\"");
 
         let paragraph = SummaryDepth::Paragraph;
         let json = serde_json::to_string(&paragraph).unwrap();
-        assert_eq!(json, "\"paragraph\"");
+        assert_eq!(json, "\"Paragraph\"");
 
         let detailed = SummaryDepth::Detailed;
         let json = serde_json::to_string(&detailed).unwrap();
-        assert_eq!(json, "\"detailed\"");
+        assert_eq!(json, "\"Detailed\"");
     }
 
     #[test]
     fn test_summary_depth_deserialization() {
-        let sentence: SummaryDepth = serde_json::from_str("\"sentence\"").unwrap();
+        let sentence: SummaryDepth = serde_json::from_str("\"Sentence\"").unwrap();
         assert_eq!(sentence, SummaryDepth::Sentence);
 
-        let paragraph: SummaryDepth = serde_json::from_str("\"paragraph\"").unwrap();
+        let paragraph: SummaryDepth = serde_json::from_str("\"Paragraph\"").unwrap();
         assert_eq!(paragraph, SummaryDepth::Paragraph);
 
-        let detailed: SummaryDepth = serde_json::from_str("\"detailed\"").unwrap();
+        let detailed: SummaryDepth = serde_json::from_str("\"Detailed\"").unwrap();
         assert_eq!(detailed, SummaryDepth::Detailed);
     }
 
@@ -4341,7 +4341,7 @@ mod tests {
     fn test_knowledge_type_hindsight_variant() {
         let hindsight = KnowledgeType::Hindsight;
         let json = serde_json::to_string(&hindsight).unwrap();
-        assert_eq!(json, "\"hindsight\"");
+        assert_eq!(json, "\"Hindsight\"");
 
         let parsed: KnowledgeType = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, KnowledgeType::Hindsight);
@@ -4507,7 +4507,7 @@ mod tests {
         fn test_role_identifier_serde_roundtrip_known_variant_expected() {
             let role = RoleIdentifier::Known(Role::Admin);
             let json = serde_json::to_string(&role).unwrap();
-            assert_eq!(json, "\"admin\"");
+            assert_eq!(json, "\"Admin\"");
 
             let deserialized: RoleIdentifier = serde_json::from_str(&json).unwrap();
             assert_eq!(deserialized, RoleIdentifier::Known(Role::Admin));
