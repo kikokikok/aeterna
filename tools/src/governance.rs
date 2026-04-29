@@ -1815,9 +1815,9 @@ mod tests {
                 "policy": {
                     "id": "pol-1",
                     "name": "Test Policy",
-                    "layer": "team",
-                    "mode": "mandatory",
-                    "merge_strategy": "merge",
+                    "layer": "Team",
+                    "mode": "Mandatory",
+                    "merge_strategy": "Merge",
                     "rules": [],
                     "metadata": {}
                 },
