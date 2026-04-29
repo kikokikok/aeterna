@@ -14,8 +14,19 @@ use predicates::prelude::predicate;
 use std::fs;
 use tempfile::TempDir;
 
+/// Hermetic CLI command builder. See doc on `cli_e2e_test::aeterna` for why
+/// scrubbing HOME matters: without it the spawned subprocess discovers the
+/// developer's real `~/Library/Application Support/aeterna/credentials.toml`
+/// (macOS) or `~/.config/aeterna/credentials.toml` (Linux) and uses it.
 fn aeterna() -> Command {
-    cargo_bin_cmd!("aeterna")
+    let mut cmd = cargo_bin_cmd!("aeterna");
+    cmd.env_clear()
+        .env("PATH", std::env::var("PATH").unwrap_or_default())
+        .env("HOME", "/nonexistent-aeterna-test-home");
+    if let Ok(v) = std::env::var("TMPDIR") {
+        cmd.env("TMPDIR", v);
+    }
+    cmd
 }
 
 // ─── setup ────────────────────────────────────────────────────────────────────
