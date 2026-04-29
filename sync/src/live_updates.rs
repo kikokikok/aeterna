@@ -48,7 +48,6 @@ pub enum UpdateEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
 pub enum KnowledgeChangeType {
     Created,
     Updated,
@@ -57,7 +56,6 @@ pub enum KnowledgeChangeType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
 pub enum PolicyAction {
     Created,
     Updated,

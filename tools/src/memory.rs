@@ -53,7 +53,6 @@ pub struct MemoryDeleteParams {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
-#[serde(rename_all = "camelCase")]
 pub enum CloseTarget {
     Session,
     Agent,

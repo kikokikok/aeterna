@@ -173,12 +173,12 @@ mod tests {
         // hash's input.
         let base = json!({
             "secrets": [
-                {"logicalName": "repo.token", "ownership": "tenant", "secretValue": "aaa"}
+                {"logicalName": "repo.token", "ownership": "Tenant", "secretValue": "aaa"}
             ]
         });
         let rotated = json!({
             "secrets": [
-                {"logicalName": "repo.token", "ownership": "tenant", "secretValue": "bbb"}
+                {"logicalName": "repo.token", "ownership": "Tenant", "secretValue": "bbb"}
             ]
         });
         assert_eq!(

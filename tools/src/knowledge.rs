@@ -314,7 +314,6 @@ pub struct KnowledgeProposal {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub enum KnowledgeProposalStatus {
     Draft,
     Pending,
@@ -337,7 +336,6 @@ pub struct KnowledgeDraft {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub enum KnowledgeDraftStatus {
     Draft,
     Validated,
