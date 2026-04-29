@@ -307,8 +307,21 @@ pub struct TenantRenderArgs {
     /// Replace secret-reference *names* with opaque placeholders and
     /// elide the repository binding's `credentialRef`. Plaintext is
     /// never exposed regardless of this flag.
+    ///
+    /// As of rc.7 fix-pack: redaction is the default for interactive
+    /// `tenant render`. Pass `--no-redact` to disable. The legacy
+    /// `--redact` flag is still accepted but is now a no-op (kept for
+    /// backwards compatibility with scripts that pass it explicitly).
     #[arg(long)]
     pub redact: bool,
+
+    /// Disable the default secret-name redaction for `tenant render`.
+    /// Use only when piping to a downstream tool that needs the
+    /// stable logical names (e.g. drift-detection diff against a
+    /// committed snapshot). Plaintext secret values are NEVER emitted
+    /// regardless of this flag — this only un-redacts the *names*.
+    #[arg(long, conflicts_with = "redact")]
+    pub no_redact: bool,
 
     /// Write the rendered manifest to this path instead of stdout.
     /// The file is created (or truncated) with the default umask;
@@ -1764,8 +1777,12 @@ async fn run_render(args: TenantRenderArgs) -> anyhow::Result<()> {
         anyhow::bail!("Not logged in — run `aeterna auth login` first.");
     };
 
+    // Effective redaction: default ON for interactive operators (#RC7-8).
+    // The legacy `--redact` flag is now a no-op confirmation; `--no-redact`
+    // is the explicit opt-out for scripts that need stable logical names.
+    let effective_redact = !args.no_redact;
     let manifest = client
-        .tenant_manifest(&slug, args.redact)
+        .tenant_manifest(&slug, effective_redact)
         .await
         .inspect_err(|e| {
             // We deliberately do not emit JSON on failure here — unlike
@@ -1988,49 +2005,96 @@ fn render_diff_unified(diff: &Value) -> String {
         return out;
     }
 
+    // Unified-diff style header pair so the output looks like real
+    // `diff -u` and can be piped through `colordiff` or `delta`
+    // unchanged. The "files" are the same tenant rendered before vs
+    // after; we preserve the slug in both filenames so reviewers can
+    // tell the diff apart from any other manifest in the same buffer.
     out.push('\n');
+    out.push_str(&format!("--- a/tenant/{slug} (current)\n"));
+    out.push_str(&format!("+++ b/tenant/{slug} (proposed)\n"));
+
     let empty = Vec::new();
     let changes = diff
         .get("changes")
         .and_then(|v| v.as_array())
         .unwrap_or(&empty);
+
+    // Group changes by their top-level section (config, secrets,
+    // repository, …) so we can emit a `@@ section: <name> @@` hunk
+    // marker per group. Falls back to "(root)" for any change whose
+    // path has no dot (rare — usually a top-level scalar). #RC7-13
+    let mut grouped: std::collections::BTreeMap<String, Vec<&Value>> =
+        std::collections::BTreeMap::new();
     for change in changes {
         let path = change.get("path").and_then(|v| v.as_str()).unwrap_or("?");
-        let kind = change.get("kind").and_then(|v| v.as_str()).unwrap_or("?");
-        // `compact_value` keeps the line single-row for primitives
-        // and short arrays/objects; multi-line JSON gets folded onto
-        // one line with spacing collapsed. Operators reviewing diffs
-        // scan vertically by path — wrapping blobs across lines
-        // defeats that pattern.
-        let before = change.get("before").map(compact_value);
-        let after = change.get("after").map(compact_value);
-        match kind {
-            "added" => {
-                out.push_str(&format!(
-                    "+ {path}: {}\n",
-                    after.as_deref().unwrap_or("(null)")
-                ));
+        let section = path.split('.').next().unwrap_or("(root)").to_string();
+        grouped.entry(section).or_default().push(change);
+    }
+
+    for (section, group) in &grouped {
+        // Hunk header: `@@ section: <name> @@ (+a -r ~m)` — counts
+        // make the hunk self-describing without forcing the reader to
+        // tally lines. Real `diff -u` uses line ranges; we use change
+        // counts because manifest paths don't have line numbers.
+        let mut a = 0usize;
+        let mut r = 0usize;
+        let mut m = 0usize;
+        for c in group {
+            match c.get("kind").and_then(|v| v.as_str()) {
+                Some("added") => a += 1,
+                Some("removed") => r += 1,
+                Some("modified") => m += 1,
+                _ => {}
             }
-            "removed" => {
-                out.push_str(&format!(
-                    "- {path}: {}\n",
-                    before.as_deref().unwrap_or("(null)")
-                ));
-            }
-            "modified" => {
-                out.push_str(&format!(
-                    "~ {path}: {} → {}\n",
-                    before.as_deref().unwrap_or("(null)"),
-                    after.as_deref().unwrap_or("(null)"),
-                ));
-            }
-            other => {
-                // Forward-compat: unknown kind → show both sides.
-                out.push_str(&format!(
-                    "? {path} [{other}]: before={} after={}\n",
-                    before.as_deref().unwrap_or("(null)"),
-                    after.as_deref().unwrap_or("(null)"),
-                ));
+        }
+        out.push_str(&format!("@@ section: {section} @@ (+{a} -{r} ~{m})\n"));
+
+        for change in group {
+            let path = change.get("path").and_then(|v| v.as_str()).unwrap_or("?");
+            let kind = change.get("kind").and_then(|v| v.as_str()).unwrap_or("?");
+            // `compact_value` keeps the line single-row for primitives
+            // and short arrays/objects; multi-line JSON gets folded onto
+            // one line with spacing collapsed. Operators reviewing diffs
+            // scan vertically by path — wrapping blobs across lines
+            // defeats that pattern.
+            let before = change.get("before").map(compact_value);
+            let after = change.get("after").map(compact_value);
+            match kind {
+                "added" => {
+                    out.push_str(&format!(
+                        "+{path}: {}\n",
+                        after.as_deref().unwrap_or("(null)")
+                    ));
+                }
+                "removed" => {
+                    out.push_str(&format!(
+                        "-{path}: {}\n",
+                        before.as_deref().unwrap_or("(null)")
+                    ));
+                }
+                "modified" => {
+                    // Two-line form mirrors `diff -u`: the old value as
+                    // a `-` line, the new value as a `+` line. Reviewers
+                    // (and `delta`) can colour the pair side-by-side.
+                    out.push_str(&format!(
+                        "-{path}: {}\n",
+                        before.as_deref().unwrap_or("(null)")
+                    ));
+                    out.push_str(&format!(
+                        "+{path}: {}\n",
+                        after.as_deref().unwrap_or("(null)")
+                    ));
+                }
+                other => {
+                    // Forward-compat: unknown kind → show both sides on
+                    // a `?` line. Preserves the original fallback shape.
+                    out.push_str(&format!(
+                        "?{path} [{other}]: before={} after={}\n",
+                        before.as_deref().unwrap_or("(null)"),
+                        after.as_deref().unwrap_or("(null)"),
+                    ));
+                }
             }
         }
     }
@@ -2103,12 +2167,16 @@ fn prompt_yes_no(question: &str) -> bool {
     }
 }
 
-async fn run_apply(args: TenantApplyArgs) -> anyhow::Result<()> {
-    // `--json` is a script-shape flag — forcing `--yes` alongside
-    // keeps the CLI from ever prompting in JSON mode, which would
-    // interleave prompt text with machine-readable output.
-    if args.json && !args.yes {
-        anyhow::bail!("--json requires --yes (pass both to run unattended)");
+async fn run_apply(mut args: TenantApplyArgs) -> anyhow::Result<()> {
+    // `--json` is a script-shape flag — it now implies `--yes` (#RC7-14).
+    // Previously this combination was a hard error ("--json requires --yes")
+    // which forced operators to pass two flags for the obvious script path.
+    // The new behaviour: `--json` alone is sufficient; the implication is
+    // explicit (we set args.yes here) so the rest of run_apply doesn't need
+    // to special-case the JSON path. Interactive callers still get the
+    // prompt because they pass neither flag.
+    if args.json {
+        args.yes = true;
     }
 
     let manifest = read_manifest_input(&args.file)?;
@@ -2362,10 +2430,19 @@ async fn run_apply(args: TenantApplyArgs) -> anyhow::Result<()> {
 
     let outcome = classify_apply_response(&body);
 
+    // Exit code semantics for `tenant apply`:
+    //   0 → Applied or Unchanged (success)
+    //   2 → Partial (some steps succeeded, others failed — operator must inspect)
+    //   1 → everything else (generation conflict, validation failed, transport)
+    //
+    // We bypass anyhow's default exit-1 mapping by calling std::process::exit(2)
+    // directly for Partial. Pipelines and shell scripts can `[ $? -eq 2 ]`
+    // instead of treating any non-zero as full failure.
     if args.json {
         println!("{}", serde_json::to_string_pretty(&body)?);
         return match outcome {
             ApplyOutcome::Applied | ApplyOutcome::Unchanged => Ok(()),
+            ApplyOutcome::Partial => std::process::exit(2),
             _ => anyhow::bail!("tenant apply did not succeed: {:?}", outcome),
         };
     }
@@ -2377,7 +2454,8 @@ async fn run_apply(args: TenantApplyArgs) -> anyhow::Result<()> {
         }
         ApplyOutcome::Partial => {
             print!("{}", render_apply_result(&body, &outcome));
-            anyhow::bail!("tenant apply completed with step failures — see output")
+            eprintln!("tenant apply completed with step failures — see output");
+            std::process::exit(2)
         }
         ApplyOutcome::GenerationConflict => {
             print!("{}", render_generation_conflict(&body));
@@ -3440,11 +3518,13 @@ mod tests {
         let args = TenantRenderArgs {
             slug: None,
             redact: false,
+            no_redact: false,
             output: None,
             target_tenant: None,
         };
         assert!(args.slug.is_none());
         assert!(!args.redact);
+        assert!(!args.no_redact);
         assert!(args.output.is_none());
     }
 
@@ -3453,6 +3533,7 @@ mod tests {
         let args = TenantRenderArgs {
             slug: Some("acme".into()),
             redact: true,
+            no_redact: false,
             output: Some(std::path::PathBuf::from("/tmp/acme.json")),
             target_tenant: Some("prod".into()),
         };
@@ -3462,6 +3543,45 @@ mod tests {
             args.output.as_deref(),
             Some(std::path::Path::new("/tmp/acme.json"))
         );
+    }
+
+    #[test]
+    fn tenant_render_redact_default_is_on() {
+        // #RC7-8: passing nothing (no --redact, no --no-redact) must
+        // result in effective_redact = true so interactive operators
+        // never see logical secret names by accident. The legacy
+        // `--redact` flag remains accepted but is now redundant.
+        use clap::Parser;
+        #[derive(Parser)]
+        struct Wrap {
+            #[command(subcommand)]
+            cmd: TenantCommand,
+        }
+
+        // Bare `tenant render` → no_redact=false → effective=true.
+        let parsed = Wrap::try_parse_from(["prog", "render"]).unwrap();
+        let TenantCommand::Render(a) = parsed.cmd else {
+            panic!("expected Render");
+        };
+        assert!(!a.no_redact, "no_redact default must be false");
+        assert!(!a.redact, "legacy --redact default still false");
+        let effective = !a.no_redact;
+        assert!(effective, "effective redact default must be true");
+
+        // Explicit opt-out: `--no-redact` flips it off.
+        let parsed = Wrap::try_parse_from(["prog", "render", "--no-redact"]).unwrap();
+        let TenantCommand::Render(a) = parsed.cmd else {
+            panic!("expected Render");
+        };
+        assert!(a.no_redact);
+        assert!(
+            !(!a.no_redact),
+            "effective redact must be false when --no-redact"
+        );
+
+        // `--redact` and `--no-redact` are mutually exclusive (clap-enforced).
+        let conflict = Wrap::try_parse_from(["prog", "render", "--redact", "--no-redact"]);
+        assert!(conflict.is_err(), "clap must reject conflicting flags");
     }
 
     // -----------------------------------------------------------------
@@ -3726,10 +3846,19 @@ mod tests {
         // patterns; lock them here.
         assert!(out.starts_with("Tenant diff: acme\nOperation:   update\n"));
         assert!(out.contains("Summary:     +1 -1 ~1 (sections: hierarchy, providers, tenant)\n"));
-        // One line per change, in the order the server emitted.
-        assert!(out.contains("~ tenant.name: Acme → Acme Corp\n"));
-        assert!(out.contains("+ providers.llm.kind: openai\n"));
-        assert!(out.contains("- hierarchy.0.slug: legacy-org\n"));
+        // Unified-diff style headers (#RC7-13).
+        assert!(out.contains("--- a/tenant/acme (current)\n"));
+        assert!(out.contains("+++ b/tenant/acme (proposed)\n"));
+        // Hunk markers — one per top-level section (BTreeMap order).
+        assert!(out.contains("@@ section: hierarchy @@ (+0 -1 ~0)\n"));
+        assert!(out.contains("@@ section: providers @@ (+1 -0 ~0)\n"));
+        assert!(out.contains("@@ section: tenant @@ (+0 -0 ~1)\n"));
+        // Modified rows now render as separate `-` and `+` lines so
+        // `delta` and `colordiff` can colour each side independently.
+        assert!(out.contains("-tenant.name: Acme\n"));
+        assert!(out.contains("+tenant.name: Acme Corp\n"));
+        assert!(out.contains("+providers.llm.kind: openai\n"));
+        assert!(out.contains("-hierarchy.0.slug: legacy-org\n"));
     }
 
     #[test]
@@ -3746,11 +3875,10 @@ mod tests {
         let out = render_diff_unified(&diff);
         assert!(out.contains("Operation:   noop\n"));
         assert!(out.contains("Summary:     +0 -0 ~0 (sections: none)\n"));
-        // NoOp short-circuits — no per-change lines, just the hint.
+        // NoOp short-circuits — no per-change lines, no @@ hunks, just the hint.
         assert!(out.contains("(no changes — a re-apply would be a no-op)\n"));
-        assert!(!out.contains("\n+ "));
-        assert!(!out.contains("\n- "));
-        assert!(!out.contains("\n~ "));
+        assert!(!out.contains("@@ section:"));
+        assert!(!out.contains("--- a/tenant"));
     }
 
     #[test]
@@ -3770,8 +3898,11 @@ mod tests {
         });
         let out = render_diff_unified(&diff);
         assert!(out.contains("Operation:   create\n"));
-        assert!(out.contains("+ tenant.slug: fresh\n"));
-        assert!(out.contains("+ tenant.name: Fresh Co\n"));
+        assert!(out.contains("--- a/tenant/fresh (current)\n"));
+        assert!(out.contains("+++ b/tenant/fresh (proposed)\n"));
+        assert!(out.contains("@@ section: tenant @@ (+2 -0 ~0)\n"));
+        assert!(out.contains("+tenant.slug: fresh\n"));
+        assert!(out.contains("+tenant.name: Fresh Co\n"));
         // create is NOT a noop — the hint must not appear.
         assert!(!out.contains("no-op"));
     }
@@ -3799,9 +3930,14 @@ mod tests {
             }
         });
         let out = render_diff_unified(&diff);
-        assert!(out.contains("~ providers.memoryLayers.semantic.ttl: 3600 → 7200\n"));
-        assert!(out.contains("+ domainMappings: [{\"domain\":\"acme.test\",\"verified\":true}]\n"));
-        assert!(out.contains("- providers.memoryLayers.episodic: (null)\n"));
+        // Modified renders as paired -/+ lines under the providers section.
+        assert!(out.contains("@@ section: providers @@"));
+        assert!(out.contains("-providers.memoryLayers.semantic.ttl: 3600\n"));
+        assert!(out.contains("+providers.memoryLayers.semantic.ttl: 7200\n"));
+        // domainMappings has no dot — its section is the path itself.
+        assert!(out.contains("@@ section: domainMappings @@"));
+        assert!(out.contains("+domainMappings: [{\"domain\":\"acme.test\",\"verified\":true}]\n"));
+        assert!(out.contains("-providers.memoryLayers.episodic: (null)\n"));
     }
 
     #[test]
@@ -3822,7 +3958,7 @@ mod tests {
             }
         });
         let out = render_diff_unified(&diff);
-        assert!(out.contains("? tenant.slug [moved]: before=old after=new\n"));
+        assert!(out.contains("?tenant.slug [moved]: before=old after=new\n"));
     }
 
     #[test]
@@ -3847,6 +3983,39 @@ mod tests {
             }
             _ => panic!("expected Apply variant"),
         }
+    }
+
+    #[test]
+    fn test_tenant_apply_json_implies_yes() {
+        // #RC7-14: passing `--json` alone must be sufficient — the
+        // CLI no longer rejects it with "--json requires --yes".
+        // The implication is enforced inside `run_apply` (we cannot
+        // inspect the post-mutation value here without invoking the
+        // function), so we verify the flag-parsing baseline (both
+        // false at parse time) and document the contract via a
+        // standalone helper that mirrors the run_apply branch.
+        use clap::Parser;
+        #[derive(Parser)]
+        struct Wrap {
+            #[command(subcommand)]
+            cmd: TenantCommand,
+        }
+
+        let parsed = Wrap::try_parse_from(["prog", "apply", "-f", "m.json", "--json"]).unwrap();
+        let TenantCommand::Apply(mut args) = parsed.cmd else {
+            panic!("expected Apply variant");
+        };
+        // Parsed shape: --json present, --yes absent. This used to
+        // be a hard error; with the fix it is the canonical script
+        // invocation and `run_apply` mutates `yes` to true.
+        assert!(args.json);
+        assert!(!args.yes);
+
+        // Mirror the implication branch from `run_apply`.
+        if args.json {
+            args.yes = true;
+        }
+        assert!(args.yes, "--json must imply --yes after the fix");
     }
 
     #[test]

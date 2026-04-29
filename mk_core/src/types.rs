@@ -217,14 +217,14 @@ impl TenantRepositoryBinding {
                 let parts: Vec<&str> = credential_ref.splitn(3, ':').collect();
                 if parts.len() != 3 || parts[0].is_empty() || parts[1].is_empty() {
                     return Err(
-                        "credential_ref must use app_id:installation_id:pem_ref format for credential_kind=githubApp"
+                        "credential_ref must use app_id:installation_id:pem_ref format for credential_kind=GitHubApp"
                             .to_string(),
                     );
                 }
 
                 if !Self::is_secret_reference(parts[2]) {
                     return Err(
-                        "credential_ref pem_ref must be a supported secret reference (local/, secret/, arn:aws:) for credential_kind=githubApp"
+                        "credential_ref pem_ref must be a supported secret reference (local/, secret/, arn:aws:) for credential_kind=GitHubApp"
                             .to_string(),
                     );
                 }

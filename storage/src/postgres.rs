@@ -1111,10 +1111,19 @@ impl PostgresBackend {
             )));
         }
 
+        // Idempotent on (tenant_id, COALESCE(parent_id,''), name) — re-applying
+        // a tenant manifest after a partial provisioning failure must not insert
+        // duplicate units. The composite unique index in migration 031 makes
+        // this ON CONFLICT clause a true upsert: metadata + updated_at are
+        // refreshed; the original id, created_at, and parent_id are preserved.
+        // See docs/operations/tenant-provisioning.md for the rationale.
         sqlx::query(
             "INSERT INTO organizational_units (id, name, type, parent_id, tenant_id, metadata, \
              created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             ON CONFLICT (tenant_id, COALESCE(parent_id, ''), name) DO UPDATE SET
+                 metadata   = EXCLUDED.metadata,
+                 updated_at = EXCLUDED.updated_at",
         )
         .bind(&unit.id)
         .bind(&unit.name)
