@@ -83,6 +83,13 @@ impl KmsProvider for AwsKmsProvider {
         &self.key_arn
     }
 
+    /// AWS KMS is the production-grade default: AWS-managed CMK, IRSA-aware
+    /// credential chain, audit trail in CloudTrail. The `build_secret_backend_from_env`
+    /// production gate accepts this provider in `AETERNA_ENV=production`.
+    fn is_production_grade(&self) -> bool {
+        true
+    }
+
     async fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, KmsError> {
         let resp = self
             .client

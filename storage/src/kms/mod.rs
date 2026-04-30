@@ -85,6 +85,25 @@ pub trait KmsProvider: Send + Sync {
     /// decrypts to the right provider instance.
     fn key_id(&self) -> &str;
 
+    /// Whether this provider is safe to use in a production deployment.
+    ///
+    /// Default is `false` — providers must explicitly opt in. The
+    /// [`storage::secret_backend::build_secret_backend_from_env`] factory
+    /// rejects providers that return `false` when
+    /// [`mk_core::Environment::from_env`] reports
+    /// [`mk_core::Environment::Production`].
+    ///
+    /// Override to `true` only on providers that:
+    ///
+    /// - Persist their wrapping key in a managed KMS (AWS KMS, GCP KMS,
+    ///   Vault Transit, etc.) outside the application process;
+    /// - Authenticate via a production-grade credential chain (IRSA,
+    ///   workload identity, SPIFFE, …) — never a static developer key;
+    /// - Have an audit trail at the KMS layer.
+    fn is_production_grade(&self) -> bool {
+        false
+    }
+
     /// Wrap `plaintext` bytes (typically a 32-byte DEK) with the CMK.
     /// Returns the opaque ciphertext to be stored.
     async fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, KmsError>;

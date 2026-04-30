@@ -28,7 +28,7 @@ use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
 };
 use async_trait::async_trait;
-use mk_core::{SecretBytes, SecretReference};
+use mk_core::{Environment, SecretBytes, SecretReference};
 use sqlx::{PgPool, Row};
 use std::sync::Arc;
 use thiserror::Error;
@@ -40,18 +40,27 @@ use crate::kms::{KmsError, KmsProvider};
 ///
 /// The selector lives in `AETERNA_KMS_PROVIDER`:
 ///
-/// - `local` (default) \u2014 [`crate::kms::LocalKmsProvider`] seeded from
+/// - `local` (default) — [`crate::kms::LocalKmsProvider`] seeded from
 ///   `AETERNA_LOCAL_KMS_KEY` (base64-encoded 32 bytes). Logs a WARN on every
 ///   encrypt/decrypt and is intended for dev / CI only.
-/// - `aws` \u2014 [`crate::kms::AwsKmsProvider`] targeting the CMK ARN in
+/// - `aws` — [`crate::kms::AwsKmsProvider`] targeting the CMK ARN in
 ///   `AETERNA_KMS_AWS_KEY_ARN`. Uses the default AWS credential chain
 ///   (static AK/SK, IRSA, or instance profile).
 ///
-/// B2 tightens this (required env, startup self-test). For now the helper
-/// centralises the wiring so the CLI bootstrap call site stays a one-liner.
+/// # Production safety gate (A4)
+///
+/// When [`Environment::from_env`] reports
+/// [`Environment::Production`] (i.e. `AETERNA_ENV=production`), the constructed
+/// KMS provider must report [`KmsProvider::is_production_grade`] = `true`. If
+/// not — for example, a stray `AETERNA_KMS_PROVIDER=local` slipped through into
+/// the prod Helm values — startup fails with
+/// [`SecretBackendError::ProductionSafety`] *before* any tenant-bearing
+/// request can be served. This eliminates the "dev fallback reaching prod"
+/// failure mode flagged in rc.9 §6.
 pub async fn build_secret_backend_from_env(
     pool: PgPool,
 ) -> Result<Arc<dyn SecretBackend>, SecretBackendError> {
+    let env = Environment::from_env();
     let selector = std::env::var("AETERNA_KMS_PROVIDER").unwrap_or_else(|_| "local".to_string());
 
     let kms: Arc<dyn KmsProvider> = match selector.to_ascii_lowercase().as_str() {
@@ -60,12 +69,43 @@ pub async fn build_secret_backend_from_env(
                 .map_err(|_| SecretBackendError::UnsupportedReference("AETERNA_KMS_AWS_KEY_ARN"))?;
             Arc::new(crate::kms::AwsKmsProvider::new(arn).await?)
         }
-        // Anything else falls through to Local \u2014 including the empty string,
+        // Anything else falls through to Local — including the empty string,
         // which is how local-dev unit tests instantiate this.
         _ => Arc::new(crate::kms::LocalKmsProvider::from_env()?),
     };
 
+    // Production safety gate. Refuse to boot a non-production-grade KMS
+    // provider in a production environment. This is a startup-time check
+    // (loud, fail-fast) rather than a per-request guard so the failure
+    // signal surfaces in deployment health checks immediately.
+    let kms = enforce_production_safety_gate(env, &selector, kms)?;
+
     Ok(Arc::new(PostgresSecretBackend::new(pool, kms)))
+}
+
+/// Enforce the production safety gate on a freshly-constructed KMS provider.
+///
+/// Pure function — no env lookups, no I/O — so it can be unit-tested without
+/// a Postgres pool. [`build_secret_backend_from_env`] is the only intended
+/// caller.
+///
+/// Returns the input handle unchanged on success, or
+/// [`SecretBackendError::ProductionSafety`] when:
+///
+/// - `env` is [`Environment::Production`], **and**
+/// - the provider reports [`KmsProvider::is_production_grade`] = `false`.
+fn enforce_production_safety_gate(
+    env: Environment,
+    selector: &str,
+    kms: Arc<dyn KmsProvider>,
+) -> Result<Arc<dyn KmsProvider>, SecretBackendError> {
+    if env.is_production() && !kms.is_production_grade() {
+        return Err(SecretBackendError::ProductionSafety {
+            selector: selector.to_ascii_lowercase(),
+            env: env.to_string(),
+        });
+    }
+    Ok(kms)
 }
 
 /// Errors raised by any [`SecretBackend`] implementation.
@@ -93,6 +133,16 @@ pub enum SecretBackendError {
     /// serve. Added when new variants land ahead of their backends.
     #[error("unsupported reference kind: {0}")]
     UnsupportedReference(&'static str),
+
+    /// `AETERNA_ENV=production` was set, but the configured KMS provider
+    /// reports `is_production_grade() = false`. The startup is aborted to
+    /// prevent a developer key from protecting production tenant secrets.
+    /// Set `AETERNA_KMS_PROVIDER=aws` (or another production-grade backend)
+    /// or change the deployment environment.
+    #[error(
+        "production safety gate tripped: KMS provider '{selector}' is not production-grade but AETERNA_ENV={env}"
+    )]
+    ProductionSafety { selector: String, env: String },
 }
 
 /// Storage-agnostic API for tenant secret material.
@@ -400,5 +450,99 @@ impl SecretBackend for InMemorySecretBackend {
             .collect();
         out.sort_by(|a, b| a.0.cmp(&b.0));
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod gate_tests {
+    //! Unit tests for the A4 production safety gate.
+    //!
+    //! These tests exercise [`enforce_production_safety_gate`] directly and
+    //! therefore need no Postgres pool or live KMS — they use the two
+    //! [`FakeKms`] variants below to model a production-grade and a
+    //! non-production-grade provider.
+
+    use super::*;
+    use async_trait::async_trait;
+    use mk_core::SecretBytes;
+
+    /// Fake KMS that lets the test choose its `is_production_grade()` answer.
+    struct FakeKms {
+        production_grade: bool,
+    }
+
+    #[async_trait]
+    impl KmsProvider for FakeKms {
+        fn key_id(&self) -> &str {
+            "fake-kms-key"
+        }
+        fn is_production_grade(&self) -> bool {
+            self.production_grade
+        }
+        async fn encrypt(&self, _plaintext: &[u8]) -> Result<Vec<u8>, KmsError> {
+            unreachable!("gate tests never call encrypt/decrypt")
+        }
+        async fn decrypt(&self, _ciphertext: &[u8]) -> Result<SecretBytes, KmsError> {
+            unreachable!("gate tests never call encrypt/decrypt")
+        }
+    }
+
+    fn fake(production_grade: bool) -> Arc<dyn KmsProvider> {
+        Arc::new(FakeKms { production_grade })
+    }
+
+    #[test]
+    fn gate_blocks_non_prod_kms_in_production() {
+        // Note: cannot use `expect_err` because Arc<dyn KmsProvider> is !Debug.
+        match enforce_production_safety_gate(Environment::Production, "local", fake(false)) {
+            Err(SecretBackendError::ProductionSafety { selector, env }) => {
+                assert_eq!(selector, "local");
+                assert_eq!(env, "production");
+            }
+            Err(other) => panic!("wrong error variant: {other:?}"),
+            Ok(_) => panic!("gate must reject non-production-grade KMS in production"),
+        }
+    }
+
+    #[test]
+    fn gate_allows_prod_kms_in_production() {
+        let kms = enforce_production_safety_gate(Environment::Production, "aws", fake(true))
+            .expect("production-grade KMS must pass the gate in production");
+        assert!(kms.is_production_grade());
+    }
+
+    #[test]
+    fn gate_allows_non_prod_kms_in_development() {
+        // Default behaviour for local dev workflows: nothing changes.
+        let kms = enforce_production_safety_gate(Environment::Development, "local", fake(false))
+            .expect("non-production-grade KMS is fine in development");
+        assert!(!kms.is_production_grade());
+    }
+
+    #[test]
+    fn gate_allows_non_prod_kms_in_ci_and_staging() {
+        // CI and staging are intentionally permissive — only Production trips the gate.
+        for env in [Environment::Ci, Environment::Staging] {
+            let kms = enforce_production_safety_gate(env, "local", fake(false))
+                .unwrap_or_else(|e| panic!("env={env} should not trip gate: {e}"));
+            assert!(!kms.is_production_grade());
+        }
+    }
+
+    #[test]
+    fn gate_lowercases_selector_in_error_message() {
+        // Operators sometimes set AETERNA_KMS_PROVIDER=LOCAL or =Local; the error
+        // diagnostic should normalise to lowercase so dashboards/log scrapes match.
+        let err = match enforce_production_safety_gate(
+            Environment::Production,
+            "LoCaL",
+            fake(false),
+        ) {
+            Err(e) => e,
+            Ok(_) => panic!("gate must trip on non-production-grade KMS in production"),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("'local'"), "expected lowercased selector in: {msg}");
+        assert!(msg.contains("production"), "expected env in: {msg}");
     }
 }
