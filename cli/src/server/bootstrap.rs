@@ -33,7 +33,7 @@ use storage::git_provider_connection_store::{
 use storage::governance::GovernanceStorage;
 use storage::graph_duckdb::{DuckDbGraphConfig, DuckDbGraphStore};
 use storage::postgres::PostgresBackend;
-use storage::secret_provider::LocalSecretProvider;
+use storage::secret_provider::build_secret_provider_from_env;
 use storage::tenant_config_provider::KubernetesTenantConfigProvider;
 use storage::tenant_store::{TenantRepositoryBindingStore, TenantStore};
 use sync::bridge::SyncManager;
@@ -415,7 +415,17 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
     let tenant_store = Arc::new(TenantStore::new(postgres.pool().clone()));
     let tenant_repository_binding_store =
         Arc::new(TenantRepositoryBindingStore::new(postgres.pool().clone()));
-    let secret_provider = Arc::new(LocalSecretProvider::new(std::collections::HashMap::new()));
+    // Build the SecretProvider used by `TenantRepositoryResolver` to fetch
+    // GitHub App PEM keys and other credential refs stored on per-tenant
+    // bindings. Driven by `AETERNA_SECRET_PROVIDER` (default `local` in
+    // dev/CI; refused in production unless `vault`). Includes a startup
+    // self-test so a misconfigured Vault address fails the deployment
+    // health check rather than the first repo clone. See
+    // `storage::secret_provider::build_secret_provider_from_env` for the
+    // full selector matrix and production safety contract.
+    let secret_provider = build_secret_provider_from_env()
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to build platform secret provider: {e}"))?;
     let git_provider_connection_registry: Arc<
         dyn mk_core::traits::GitProviderConnectionRegistry<
                 Error = storage::git_provider_connection_store::GitProviderConnectionError,
