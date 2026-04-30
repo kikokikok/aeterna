@@ -101,6 +101,11 @@ pub enum CredentialKind {
 }
 
 /// Canonical tenant record as persisted in the database.
+///
+/// Timestamps are RFC 3339 / ISO 8601 strings on the wire (e.g.
+/// `"2026-04-30T15:34:00Z"`) so frontend `new Date(...)` parses them
+/// correctly. Historically these were `i64` epoch *seconds* which
+/// browsers misinterpreted as JS milliseconds → 1970 dates.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TenantRecord {
@@ -109,9 +114,12 @@ pub struct TenantRecord {
     pub name: String,
     pub status: TenantStatus,
     pub source_owner: RecordSource,
-    pub created_at: i64,
-    pub updated_at: i64,
-    pub deactivated_at: Option<i64>,
+    #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    #[schema(value_type = Option<String>, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub deactivated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Canonical per-tenant repository binding record.

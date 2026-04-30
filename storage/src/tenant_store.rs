@@ -41,9 +41,9 @@ impl TryFrom<TenantRow> for TenantRecord {
             name: row.name,
             status,
             source_owner: row.source_owner.parse().unwrap_or(RecordSource::Admin),
-            created_at: row.created_at.timestamp(),
-            updated_at: row.updated_at.timestamp(),
-            deactivated_at: row.deactivated_at.map(|ts| ts.timestamp()),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            deactivated_at: row.deactivated_at,
         })
     }
 }

@@ -541,8 +541,11 @@ pub async fn render_current_manifest(
             name: record.name,
             status: record.status.to_string(),
             source_owner: record.source_owner.to_string(),
-            created_at: record.created_at,
-            updated_at: record.updated_at,
+            // RenderedTenant uses i64 epoch seconds for manifest hash stability.
+            // TenantRecord upgraded to DateTime<Utc> for wire-format correctness;
+            // here we project back to i64 to keep manifest bytes deterministic.
+            created_at: record.created_at.timestamp(),
+            updated_at: record.updated_at.timestamp(),
             domain_mappings,
         },
         config: rendered_config,
