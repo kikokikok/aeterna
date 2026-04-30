@@ -141,10 +141,41 @@ mod tests {
         assert!(matches!(err, KmsError::Config(_)));
     }
 
-    // Live AWS integration tests. Run with:
-    //   AETERNA_KMS_LIVE_TEST_ARN=arn:... cargo test -p storage aws_kms_live -- --ignored
+    // ----------------------------------------------------------------------
+    // live_roundtrip — real-AWS smoke test (currently #[ignore])
+    // ----------------------------------------------------------------------
+    //
+    // This test is the only #[ignore]-marked test in the storage crate.
+    // It exercises the real AWS KMS round-trip end-to-end (network call,
+    // billable). It is gated for two reasons:
+    //
+    //   1. Running it in CI without AWS credentials produces noise on every
+    //      PR.
+    //   2. Running it in CI WITH credentials bills the AWS account on every
+    //      push and requires a long-lived test KMS key in the kyriba
+    //      sandbox account.
+    //
+    // The AwsKmsProvider constructor + error paths are covered by the two
+    // non-ignored tests above (`rejects_empty_key_arn`,
+    // `rejects_whitespace_key_arn`) and by the trait-level production gate
+    // matrix in `storage::secret_backend::gate_tests` (introduced in A4).
+    // So the production code path IS under regression coverage today; this
+    // test is the icing — a real-cloud smoke check that the SDK wiring
+    // actually talks to AWS KMS.
+    //
+    // The `#[ignore]` here is acceptable as long as a tracker exists. The
+    // open work to remove it (LocalStack KMS migration) is documented at:
+    //
+    //   docs/open-issues/2026-04-30-localstack-kms-migration.md
+    //
+    // Once that doc is filed as a GitHub issue, replace the path above
+    // with the issue URL.
+    //
+    // To run manually:
+    //   AETERNA_KMS_LIVE_TEST_ARN=arn:... cargo test -p storage \
+    //     kms::aws::tests::live_roundtrip -- --ignored
     #[tokio::test]
-    #[ignore = "requires live AWS credentials + AETERNA_KMS_LIVE_TEST_ARN"]
+    #[ignore = "live AWS — see docs/open-issues/2026-04-30-localstack-kms-migration.md"]
     async fn live_roundtrip() {
         let arn = std::env::var("AETERNA_KMS_LIVE_TEST_ARN")
             .expect("AETERNA_KMS_LIVE_TEST_ARN must be set for live test");
