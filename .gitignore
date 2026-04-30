@@ -69,3 +69,6 @@ e2e/results/
 
 # Postman backups
 *.json.bak
+
+# Playwright screenshot/artifact scratch dir (per-agent, never committed)
+.playwright-dust/
