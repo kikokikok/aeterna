@@ -50,6 +50,41 @@ const DEFAULT_K8S_NAMESPACE: &str = "default";
 const ENV_AUTH_BACKEND: &str = "AETERNA_AUTH_BACKEND";
 const AUTH_BACKEND_ALLOW_ALL: &str = "allow-all";
 
+/// The version sentinel written into Redis by the
+/// [`storage::redis_version_guard::RedisVersionGuard`] at boot.
+///
+/// Resolution order, most-precise first:
+///
+/// 1. `AETERNA_GIT_SHA` env var if set at build time (set by the CI release
+///    pipeline). A git SHA changes on every commit, so this catches dev
+///    rebuilds that share a Cargo version.
+/// 2. `AETERNA_BUILD_VERSION` env var if set at build time (allows
+///    overriding the version string in tests or hotfix builds without
+///    bumping `Cargo.toml`).
+/// 3. `CARGO_PKG_VERSION` (always available; coarsest — only changes on
+///    explicit version bumps).
+///
+/// Operators can also override at runtime via `AETERNA_RUNTIME_VERSION`
+/// when iterating in dev (e.g. forcing a purge on a known-good binary).
+fn aeterna_runtime_version() -> String {
+    if let Ok(v) = std::env::var("AETERNA_RUNTIME_VERSION") {
+        if !v.is_empty() {
+            return v;
+        }
+    }
+    if let Some(sha) = option_env!("AETERNA_GIT_SHA") {
+        if !sha.is_empty() {
+            return sha.to_string();
+        }
+    }
+    if let Some(v) = option_env!("AETERNA_BUILD_VERSION") {
+        if !v.is_empty() {
+            return v.to_string();
+        }
+    }
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
     // Bootstrap phase tracker (B2 task 6.1). Instrumented across the
     // major phases below; finalized with `mark_ready()` immediately
@@ -382,6 +417,38 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
             }
         }
     };
+
+    // Server-version guard: when this binary's version differs from the
+    // sentinel previously stored in Redis, purge `aeterna:*` keys so we do
+    // not read records whose schema the new binary cannot deserialise. The
+    // canonical example is the rc.8 → rc.9 jump where stale
+    // `git_provider_connections` records carrying camelCase enum tags
+    // failed deserialise on the new code path. Uses a Redis-resident
+    // leader-election lock so only one replica purges during a rolling
+    // deploy. Fail-open: if Redis is unreachable here we let bootstrap
+    // continue rather than refusing to start the pod (the warning is
+    // surfaced in deployment logs and matched by alerting). See
+    // `storage::redis_version_guard` for the full contract.
+    if let Some(conn) = &redis_conn {
+        let guard = storage::redis_version_guard::RedisVersionGuard::new(conn.clone());
+        let expected_version = aeterna_runtime_version();
+        match guard.ensure_version(&expected_version).await {
+            Ok(action) => {
+                tracing::info!(
+                    expected_version = %expected_version,
+                    ?action,
+                    "redis version guard completed"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    expected_version = %expected_version,
+                    error = %e,
+                    "redis version guard failed; continuing with possibly-stale cache state"
+                );
+            }
+        }
+    }
 
     let refresh_store = match &redis_conn {
         Some(conn) => {

@@ -24,6 +24,7 @@ pub mod quota;
 pub mod reconciliation;
 pub mod redis;
 pub mod redis_store;
+pub mod redis_version_guard;
 pub mod remediation_store;
 pub mod repo_manager;
 pub mod retention;
