@@ -80,6 +80,12 @@ pub async fn build_secret_backend_from_env(
     // signal surfaces in deployment health checks immediately.
     let kms = enforce_production_safety_gate(env, &selector, kms)?;
 
+    // B2 startup self-test: probe encrypt+decrypt before the first tenant
+    // secret request lands. Catches wrong ARN / expired creds / unreachable
+    // endpoint at boot rather than at first-use. Cheap (1 encrypt + 1 decrypt)
+    // and surfaces in deployment health checks the same way the prod gate does.
+    kms.self_test().await?;
+
     Ok(Arc::new(PostgresSecretBackend::new(pool, kms)))
 }
 
@@ -467,6 +473,8 @@ mod gate_tests {
     use mk_core::SecretBytes;
 
     /// Fake KMS that lets the test choose its `is_production_grade()` answer.
+    /// `encrypt`/`decrypt` are unreachable so the gate tests assert the
+    /// gate trips *before* any cipher work starts.
     struct FakeKms {
         production_grade: bool,
     }
@@ -489,6 +497,91 @@ mod gate_tests {
 
     fn fake(production_grade: bool) -> Arc<dyn KmsProvider> {
         Arc::new(FakeKms { production_grade })
+    }
+
+    /// B2 self-test fakes: deliberately broken KMS variants so we can
+    /// assert the default `KmsProvider::self_test` impl catches each
+    /// failure mode at boot.
+    enum BrokenMode {
+        EncryptFails,
+        DecryptFails,
+        Mismatches,
+    }
+
+    struct BrokenKms {
+        mode: BrokenMode,
+    }
+
+    #[async_trait]
+    impl KmsProvider for BrokenKms {
+        fn key_id(&self) -> &str {
+            "broken-kms"
+        }
+        async fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, KmsError> {
+            match self.mode {
+                BrokenMode::EncryptFails => Err(KmsError::Encrypt("simulated".into())),
+                BrokenMode::DecryptFails => Ok(plaintext.to_vec()),
+                // Returns a deterministic but wrong payload so decrypt
+                // succeeds yet the round-trip mismatches.
+                BrokenMode::Mismatches => Ok(b"wrong-bytes-from-encrypt".to_vec()),
+            }
+        }
+        async fn decrypt(&self, ciphertext: &[u8]) -> Result<SecretBytes, KmsError> {
+            match self.mode {
+                BrokenMode::DecryptFails => Err(KmsError::Decrypt("simulated".into())),
+                _ => Ok(SecretBytes::from(ciphertext.to_vec())),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn self_test_passes_for_a_correct_kms() {
+        // LocalKmsProvider is the canonical correct provider.
+        let kms = crate::kms::LocalKmsProvider::from_bytes(&[0x55u8; 32], "self-test").unwrap();
+        kms.self_test().await.expect("a correct KMS must self-test");
+    }
+
+    #[tokio::test]
+    async fn self_test_surfaces_encrypt_failure_as_config_error() {
+        let kms = BrokenKms {
+            mode: BrokenMode::EncryptFails,
+        };
+        match kms.self_test().await {
+            Err(KmsError::Config(msg)) => {
+                assert!(msg.contains("self-test encrypt failed"), "msg={msg}");
+                assert!(msg.contains("broken-kms"), "key id missing: {msg}");
+            }
+            other => panic!("expected Config error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn self_test_surfaces_decrypt_failure_as_config_error() {
+        let kms = BrokenKms {
+            mode: BrokenMode::DecryptFails,
+        };
+        match kms.self_test().await {
+            Err(KmsError::Config(msg)) => {
+                assert!(msg.contains("self-test decrypt failed"), "msg={msg}");
+            }
+            other => panic!("expected Config error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn self_test_catches_silent_corruption() {
+        // The most insidious failure: encrypt and decrypt both succeed but
+        // produce different bytes. The probe must catch this — otherwise
+        // a tampered or aliased KMS would only blow up at first real read.
+        let kms = BrokenKms {
+            mode: BrokenMode::Mismatches,
+        };
+        match kms.self_test().await {
+            Err(KmsError::Config(msg)) => {
+                assert!(msg.contains("round-trip mismatch"), "msg={msg}");
+            }
+            other => panic!("expected mismatch error, got {other:?}"),
+        }
     }
 
     #[test]
