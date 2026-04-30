@@ -963,6 +963,15 @@ impl PostgresBackend {
         .execute(&self.pool)
         .await?;
 
+        // Backfill for test databases that pre-date the legal-entity-name
+        // metadata column (production path: migration
+        // 033_tenant_legal_entity.sql). See that migration's header for the
+        // rationale; it's the seed for the add-legal-entity-tenant-grouping
+        // proposal and is intentionally a nullable text column with no FK.
+        sqlx::query("ALTER TABLE tenants ADD COLUMN IF NOT EXISTS legal_entity_name TEXT")
+            .execute(&self.pool)
+            .await?;
+
         // Mirror CHECK constraints from migration 027 so dev/test paths
         // enforce the same invariants. We assemble the end-of-string
         // anchor via chr(36) at SQL-evaluation time so the Rust source

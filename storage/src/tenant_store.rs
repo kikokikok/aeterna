@@ -14,6 +14,10 @@ struct TenantRow {
     name: String,
     status: String,
     source_owner: String,
+    // Nullable. See migration 033_tenant_legal_entity.sql for the
+    // rationale and the intended migration path to a first-class
+    // legal_entities FK.
+    legal_entity_name: Option<String>,
     created_at: chrono::DateTime<Utc>,
     updated_at: chrono::DateTime<Utc>,
     deactivated_at: Option<chrono::DateTime<Utc>>,
@@ -41,6 +45,7 @@ impl TryFrom<TenantRow> for TenantRecord {
             name: row.name,
             status,
             source_owner: row.source_owner.parse().unwrap_or(RecordSource::Admin),
+            legal_entity_name: row.legal_entity_name,
             created_at: row.created_at,
             updated_at: row.updated_at,
             deactivated_at: row.deactivated_at,
@@ -148,7 +153,7 @@ impl TenantStore {
             r#"
             INSERT INTO tenants (slug, name, status, source_owner)
             VALUES ($1, $2, 'active', $3)
-            RETURNING id::text AS id, slug, name, status, source_owner, created_at, updated_at, deactivated_at
+            RETURNING id::text AS id, slug, name, status, source_owner, legal_entity_name, created_at, updated_at, deactivated_at
             "#,
         )
         .bind(slug)
@@ -166,7 +171,7 @@ impl TenantStore {
     ) -> Result<Vec<TenantRecord>, PostgresError> {
         let rows: Vec<TenantRow> = sqlx::query_as(
             r#"
-            SELECT id::text AS id, slug, name, status, source_owner, created_at, updated_at, deactivated_at
+            SELECT id::text AS id, slug, name, status, source_owner, legal_entity_name, created_at, updated_at, deactivated_at
             FROM tenants
             WHERE ($1::bool = true OR status = 'active')
             ORDER BY created_at ASC
@@ -185,7 +190,7 @@ impl TenantStore {
     ) -> Result<Option<TenantRecord>, PostgresError> {
         let row: Option<TenantRow> = sqlx::query_as(
             r#"
-            SELECT id::text AS id, slug, name, status, source_owner, created_at, updated_at, deactivated_at
+            SELECT id::text AS id, slug, name, status, source_owner, legal_entity_name, created_at, updated_at, deactivated_at
             FROM tenants
             WHERE id::text = $1 OR slug = $1 OR name = $1
             LIMIT 1
@@ -198,25 +203,49 @@ impl TenantStore {
         row.map(TryInto::try_into).transpose()
     }
 
+    /// Patch a tenant row.
+    ///
+    /// Each `Option<&str>` field follows the standard "leave alone" /
+    /// "set" pattern via `COALESCE`. The `legal_entity_name` field uses
+    /// the slightly fancier `Option<Option<&str>>` shape so that callers
+    /// can explicitly *clear* the value:
+    ///
+    /// | Caller passes               | Behaviour                                |
+    /// |-----------------------------|------------------------------------------|
+    /// | `None`                      | column is left untouched (`COALESCE`)    |
+    /// | `Some(None)`                | column is explicitly set to `NULL`       |
+    /// | `Some(Some("Acme Holding"))`| column is set to that string             |
+    ///
+    /// This is intentional: silently coercing "absent" to "clear" would
+    /// lose data the moment the API gateway forgot to forward the field.
     pub async fn update_tenant(
         &self,
         tenant_ref: &str,
         slug: Option<&str>,
         name: Option<&str>,
+        legal_entity_name: Option<Option<&str>>,
     ) -> Result<Option<TenantRecord>, PostgresError> {
+        // $4 is "do we touch the column at all", $5 is the new value
+        // (which may itself be NULL when the caller asked to clear it).
+        let touch_legal_entity = legal_entity_name.is_some();
+        let new_legal_entity: Option<&str> = legal_entity_name.flatten();
+
         let row: Option<TenantRow> = sqlx::query_as(
             r#"
             UPDATE tenants
             SET slug = COALESCE($2, slug),
                 name = COALESCE($3, name),
+                legal_entity_name = CASE WHEN $4 THEN $5 ELSE legal_entity_name END,
                 updated_at = NOW()
             WHERE id::text = $1 OR slug = $1 OR name = $1
-            RETURNING id::text AS id, slug, name, status, source_owner, created_at, updated_at, deactivated_at
+            RETURNING id::text AS id, slug, name, status, source_owner, legal_entity_name, created_at, updated_at, deactivated_at
             "#,
         )
         .bind(tenant_ref)
         .bind(slug)
         .bind(name)
+        .bind(touch_legal_entity)
+        .bind(new_legal_entity)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -234,7 +263,7 @@ impl TenantStore {
                 deactivated_at = COALESCE(deactivated_at, NOW()),
                 updated_at = NOW()
             WHERE id::text = $1 OR slug = $1 OR name = $1
-            RETURNING id::text AS id, slug, name, status, source_owner, created_at, updated_at, deactivated_at
+            RETURNING id::text AS id, slug, name, status, source_owner, legal_entity_name, created_at, updated_at, deactivated_at
             "#,
         )
         .bind(tenant_ref)

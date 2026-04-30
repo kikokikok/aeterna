@@ -38,9 +38,25 @@ pub struct CreateTenantRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateTenantRequest {
     pub slug: Option<String>,
     pub name: Option<String>,
+    /// Optional human-readable legal entity name (e.g. "Acme Holding").
+    /// See `mk_core::types::TenantRecord::legal_entity_name` and migration
+    /// 033 for the full rationale.
+    ///
+    /// Wire shape today: `{"legalEntityName": "Acme Holding"}` to set,
+    /// or omit the field entirely to leave the column untouched. There
+    /// is deliberately no way to *clear* the column via this endpoint
+    /// in v1.5.x \u2014 the storage layer supports it
+    /// (`Option<Option<&str>>`) but the API does not yet expose it
+    /// because clearing is a destructive op that should require a more
+    /// explicit gesture (and an audit trail). When the
+    /// `add-legal-entity-tenant-grouping` proposal lands, clearing will
+    /// be handled via `DELETE /tenants/{slug}/legal-entity` against the
+    /// FK relationship rather than via this PATCH.
+    pub legal_entity_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1164,9 +1180,21 @@ async fn update_tenant(
         Err(response) => return response,
     };
 
+    // Map `Option<String>` from the wire to the storage's
+    // `Option<Option<&str>>` "leave alone vs. set vs. clear" shape. In
+    // v1.5.x the API only supports "leave alone" (None) and "set" (Some).
+    // Clearing is intentionally not exposed yet \u2014 see
+    // UpdateTenantRequest::legal_entity_name doc comment.
+    let legal_entity_update: Option<Option<&str>> = req.legal_entity_name.as_deref().map(Some);
+
     match state
         .tenant_store
-        .update_tenant(&tenant, req.slug.as_deref(), req.name.as_deref())
+        .update_tenant(
+            &tenant,
+            req.slug.as_deref(),
+            req.name.as_deref(),
+            legal_entity_update,
+        )
         .await
     {
         Ok(Some(record)) => {
@@ -1182,7 +1210,11 @@ async fn update_tenant(
                 &ctx,
                 "tenant_update",
                 Some(record.id.as_str()),
-                json!({ "slug": record.slug, "name": record.name }),
+                json!({
+                    "slug": record.slug,
+                    "name": record.name,
+                    "legalEntityName": record.legal_entity_name,
+                }),
             )
             .await;
             (

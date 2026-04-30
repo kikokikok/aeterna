@@ -114,6 +114,15 @@ pub struct TenantRecord {
     pub name: String,
     pub status: TenantStatus,
     pub source_owner: RecordSource,
+    /// Optional human-readable name of the corporate legal entity that owns
+    /// this tenant (e.g. `"Acme Holding"`). Pure metadata in v1.5.x \u2014 no
+    /// auth, no RLS, no FK \u2014 surfaced so sales/ops can record customer
+    /// hierarchy today. Promoted to a FK against a first-class
+    /// `legal_entities` table when the
+    /// `add-legal-entity-tenant-grouping` proposal lands.
+    #[schema(example = "Acme Holding")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legal_entity_name: Option<String>,
     #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
     pub created_at: chrono::DateTime<chrono::Utc>,
     #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
