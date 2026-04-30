@@ -128,7 +128,9 @@ pub enum VersionDecision {
 pub fn decide_action(current: Option<&str>, expected: &str) -> VersionDecision {
     match current {
         Some(v) if v == expected => VersionDecision::NoOp,
-        Some(v) => VersionDecision::PurgeRequired { from: v.to_string() },
+        Some(v) => VersionDecision::PurgeRequired {
+            from: v.to_string(),
+        },
         None => VersionDecision::InitialiseSentinel,
     }
 }
@@ -298,7 +300,9 @@ mod tests {
         // surface that as a mismatch (not silently re-initialise).
         assert_eq!(
             decide_action(Some(""), "0.8.0-rc.9"),
-            VersionDecision::PurgeRequired { from: String::new() }
+            VersionDecision::PurgeRequired {
+                from: String::new()
+            }
         );
     }
 

@@ -626,16 +626,16 @@ mod gate_tests {
     fn gate_lowercases_selector_in_error_message() {
         // Operators sometimes set AETERNA_KMS_PROVIDER=LOCAL or =Local; the error
         // diagnostic should normalise to lowercase so dashboards/log scrapes match.
-        let err = match enforce_production_safety_gate(
-            Environment::Production,
-            "LoCaL",
-            fake(false),
-        ) {
-            Err(e) => e,
-            Ok(_) => panic!("gate must trip on non-production-grade KMS in production"),
-        };
+        let err =
+            match enforce_production_safety_gate(Environment::Production, "LoCaL", fake(false)) {
+                Err(e) => e,
+                Ok(_) => panic!("gate must trip on non-production-grade KMS in production"),
+            };
         let msg = err.to_string();
-        assert!(msg.contains("'local'"), "expected lowercased selector in: {msg}");
+        assert!(
+            msg.contains("'local'"),
+            "expected lowercased selector in: {msg}"
+        );
         assert!(msg.contains("production"), "expected env in: {msg}");
     }
 }

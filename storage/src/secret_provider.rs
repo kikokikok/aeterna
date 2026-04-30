@@ -199,8 +199,7 @@ const SELF_TEST_TIMEOUT: Duration = Duration::from_secs(2);
 /// fail-fast signal as the KMS startup self-test (B2).
 pub async fn build_secret_provider_from_env() -> Result<Arc<dyn SecretProvider>, SecretError> {
     let env = Environment::from_env();
-    let selector =
-        std::env::var("AETERNA_SECRET_PROVIDER").unwrap_or_else(|_| "local".to_string());
+    let selector = std::env::var("AETERNA_SECRET_PROVIDER").unwrap_or_else(|_| "local".to_string());
 
     let provider: Arc<dyn SecretProvider> = match selector.to_ascii_lowercase().as_str() {
         "vault" | "hashicorp-vault" => {
@@ -468,8 +467,14 @@ mod tests {
         let provider: Arc<dyn SecretProvider> = Arc::new(LocalSecretProvider::new(HashMap::new()));
         match enforce_production_safety_gate(Environment::Production, "local", provider) {
             Err(SecretError::ConfigError(msg)) => {
-                assert!(msg.contains("production"), "msg should mention production: {msg}");
-                assert!(msg.contains("local"), "msg should mention the bad selector: {msg}");
+                assert!(
+                    msg.contains("production"),
+                    "msg should mention production: {msg}"
+                );
+                assert!(
+                    msg.contains("local"),
+                    "msg should mention the bad selector: {msg}"
+                );
                 assert!(
                     msg.to_ascii_lowercase().contains("vault"),
                     "msg should suggest vault: {msg}"
@@ -482,7 +487,11 @@ mod tests {
 
     #[tokio::test]
     async fn gate_allows_local_provider_outside_production() {
-        for env in [Environment::Development, Environment::Ci, Environment::Staging] {
+        for env in [
+            Environment::Development,
+            Environment::Ci,
+            Environment::Staging,
+        ] {
             let provider: Arc<dyn SecretProvider> =
                 Arc::new(LocalSecretProvider::new(HashMap::new()));
             assert!(
@@ -494,8 +503,10 @@ mod tests {
 
     #[tokio::test]
     async fn gate_allows_vault_provider_in_production() {
-        let provider: Arc<dyn SecretProvider> =
-            Arc::new(VaultSecretProvider::new("http://vault:8200".into(), "t".into()));
+        let provider: Arc<dyn SecretProvider> = Arc::new(VaultSecretProvider::new(
+            "http://vault:8200".into(),
+            "t".into(),
+        ));
         assert!(
             enforce_production_safety_gate(Environment::Production, "vault", provider).is_ok(),
             "gate must allow VaultSecretProvider in production"
@@ -551,8 +562,14 @@ mod tests {
     async fn self_test_surfaces_unavailable_as_connection_failed() {
         match self_test_provider("synthetic", &AlwaysUnavailableProvider).await {
             Err(SecretError::ConnectionFailed(msg)) => {
-                assert!(msg.contains("synthetic"), "selector should leak in msg: {msg}");
-                assert!(msg.contains("unavailable"), "msg should explain reason: {msg}");
+                assert!(
+                    msg.contains("synthetic"),
+                    "selector should leak in msg: {msg}"
+                );
+                assert!(
+                    msg.contains("unavailable"),
+                    "msg should explain reason: {msg}"
+                );
             }
             Err(other) => panic!("wrong error variant: {other}"),
             Ok(()) => panic!("must reject unavailable provider"),
