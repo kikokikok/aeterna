@@ -52,6 +52,8 @@ anyhow.workspace = true
 [dev-dependencies]
 testing.workspace = true
 tokio-test = "0.4"
+# Env-var-mutating tests (B1 onboarding self-test) must run serially.
+serial_test.workspace = true
 walkdir.workspace = true
 adapters.workspace = true
 knowledge.workspace = true
