@@ -1461,8 +1461,10 @@ async fn set_tenant_repository_binding(
             github_repo: req.github_repo.clone(),
             source_owner: req.source_owner.clone(),
             git_provider_connection_id: req.git_provider_connection_id.clone(),
-            created_at: 0,
-            updated_at: 0,
+            // Sentinel timestamps for an unsaved validation candidate; storage
+            // overwrites these on persistence.
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
         };
         if let Err(reason) = candidate_ref.validate_credential_ref() {
             return error_response(
@@ -1612,8 +1614,10 @@ async fn validate_tenant_repository_binding(
         github_repo: req.github_repo,
         source_owner: req.source_owner,
         git_provider_connection_id: None,
-        created_at: 0,
-        updated_at: 0,
+        // Sentinel timestamps for an unsaved validation candidate; storage
+        // overwrites these on persistence.
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
     };
 
     match state
@@ -1700,8 +1704,8 @@ async fn create_hierarchy_unit(
         tenant_id: ctx.tenant_id.clone(),
         metadata: req.metadata,
         source_owner: req.source_owner,
-        created_at: now,
-        updated_at: now,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
     };
 
     match state.postgres.create_unit_scoped(&ctx, &unit).await {
@@ -1808,7 +1812,7 @@ async fn update_hierarchy_unit(
     if let Some(metadata) = req.metadata {
         existing.metadata = metadata;
     }
-    existing.updated_at = chrono::Utc::now().timestamp();
+    existing.updated_at = chrono::Utc::now();
 
     match state.postgres.update_unit_scoped(&ctx, &existing).await {
         Ok(()) => {
@@ -1818,7 +1822,10 @@ async fn update_hierarchy_unit(
                 &GovernanceEvent::UnitUpdated {
                     unit_id: existing.id.clone(),
                     tenant_id: ctx.tenant_id.clone(),
-                    timestamp: existing.updated_at,
+                    // GovernanceEvent.timestamp is i64 epoch (event-bus protocol);
+                    // OrganizationalUnit.updated_at is now DateTime<Utc> so we
+                    // project here at the boundary.
+                    timestamp: existing.updated_at.timestamp(),
                 },
             )
             .await;
@@ -3632,8 +3639,8 @@ async fn create_git_provider_connection(
         pem_secret_ref: req.pem_secret_ref,
         webhook_secret_ref: req.webhook_secret_ref,
         allowed_tenant_ids: Vec::new(),
-        created_at: now,
-        updated_at: now,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
     };
 
     match state
@@ -5099,8 +5106,10 @@ async fn provision_tenant(
             github_repo: repo.github_repo.clone(),
             source_owner: repo.source_owner.clone(),
             git_provider_connection_id: repo.git_provider_connection_id.clone(),
-            created_at: 0,
-            updated_at: 0,
+            // Sentinel timestamps for an unsaved validation candidate; storage
+            // overwrites these on persistence.
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
         };
         let repo_step = if let Err(reason) = candidate.validate_credential_ref() {
             ProvisionStep::fail("repository", format!("invalid_credential_ref: {reason}"))
@@ -5227,8 +5236,8 @@ async fn provision_tenant(
                 tenant_id: tenant_id.clone(),
                 metadata: HashMap::new(),
                 source_owner: RecordSource::Admin,
-                created_at: now,
-                updated_at: now,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
             };
             if let Err(err) = state
                 .postgres
@@ -5263,8 +5272,8 @@ async fn provision_tenant(
                     tenant_id: tenant_id.clone(),
                     metadata: HashMap::new(),
                     source_owner: RecordSource::Admin,
-                    created_at: now,
-                    updated_at: now,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
                 };
                 if let Err(err) = state
                     .postgres
@@ -5336,8 +5345,8 @@ async fn provision_tenant(
                         tenant_id: tenant_id.clone(),
                         metadata: HashMap::new(),
                         source_owner: RecordSource::Admin,
-                        created_at: now,
-                        updated_at: now,
+                        created_at: chrono::Utc::now(),
+                        updated_at: chrono::Utc::now(),
                     };
                     if let Err(err) = state
                         .postgres

@@ -601,8 +601,8 @@ impl TryFrom<TenantRepositoryBindingRow> for TenantRepositoryBinding {
             github_repo: row.github_repo,
             source_owner: row.source_owner.parse().unwrap_or(RecordSource::Admin),
             git_provider_connection_id: row.git_provider_connection_id,
-            created_at: row.created_at.timestamp(),
-            updated_at: row.updated_at.timestamp(),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
         })
     }
 }

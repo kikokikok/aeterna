@@ -648,8 +648,8 @@ mod tests {
                 github_repo: None,
                 source_owner: RecordSource::Admin,
                 git_provider_connection_id: None,
-                created_at: 0,
-                updated_at: 0,
+                created_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+                updated_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
             },
             RepositoryKind::GitHub => TenantRepositoryBinding {
                 id: "2".to_string(),
@@ -665,8 +665,8 @@ mod tests {
                 github_repo: Some("knowledge".to_string()),
                 source_owner: RecordSource::Admin,
                 git_provider_connection_id: None,
-                created_at: 0,
-                updated_at: 0,
+                created_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+                updated_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
             },
             RepositoryKind::GitRemote => TenantRepositoryBinding {
                 id: "3".to_string(),
@@ -682,8 +682,8 @@ mod tests {
                 github_repo: None,
                 source_owner: RecordSource::Admin,
                 git_provider_connection_id: None,
-                created_at: 0,
-                updated_at: 0,
+                created_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+                updated_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
             },
         }
     }

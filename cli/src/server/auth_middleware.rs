@@ -501,8 +501,8 @@ mod tests {
                 parent_id: None,
                 tenant_id: tenant.clone(),
                 metadata: std::collections::HashMap::new(),
-                created_at: now,
-                updated_at: now,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
                 source_owner: RecordSource::Admin,
             })
             .await
@@ -516,8 +516,8 @@ mod tests {
                 parent_id: None,
                 tenant_id: INSTANCE_SCOPE_TENANT_ID.parse().unwrap(),
                 metadata: std::collections::HashMap::new(),
-                created_at: now,
-                updated_at: now,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
                 source_owner: RecordSource::Admin,
             })
             .await

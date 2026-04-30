@@ -142,8 +142,10 @@ pub struct TenantRepositoryBinding {
     /// connection by ID instead of parsing `credential_ref` directly.
     /// Tenant visibility is enforced at resolution time.
     pub git_provider_connection_id: Option<String>,
-    pub created_at: i64,
-    pub updated_at: i64,
+    #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl TenantRepositoryBinding {
@@ -350,8 +352,10 @@ pub struct OrganizationalUnit {
     pub parent_id: Option<String>,
     pub tenant_id: TenantId,
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
-    pub created_at: i64,
-    pub updated_at: i64,
+    #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub updated_at: chrono::DateTime<chrono::Utc>,
     pub source_owner: RecordSource,
 }
 
@@ -4755,8 +4759,10 @@ pub struct GitProviderConnection {
     pub webhook_secret_ref: Option<String>,
     /// Tenants allowed to reference this connection in their repository binding.
     pub allowed_tenant_ids: Vec<TenantId>,
-    pub created_at: i64,
-    pub updated_at: i64,
+    #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl GitProviderConnection {

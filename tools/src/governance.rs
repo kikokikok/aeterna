@@ -89,8 +89,8 @@ impl Tool for UnitCreateTool {
             parent_id: p.parent_id,
             tenant_id: ctx.tenant_id.clone(),
             metadata: p.metadata,
-            created_at: chrono::Utc::now().timestamp(),
-            updated_at: chrono::Utc::now().timestamp(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: mk_core::types::RecordSource::Admin,
         };
 
@@ -1987,8 +1987,8 @@ mod tests {
             parent_id: None,
             tenant_id: mk_core::types::TenantId::new("t".to_string()).unwrap(),
             metadata: std::collections::HashMap::new(),
-            created_at: 0,
-            updated_at: 0,
+            created_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+            updated_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
             source_owner: RecordSource::Admin,
         };
         let parent = mk_core::types::OrganizationalUnit {
@@ -1998,8 +1998,8 @@ mod tests {
             parent_id: Some("gp".to_string()),
             tenant_id: mk_core::types::TenantId::new("t".to_string()).unwrap(),
             metadata: std::collections::HashMap::new(),
-            created_at: 0,
-            updated_at: 0,
+            created_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+            updated_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
             source_owner: RecordSource::Admin,
         };
         let child = mk_core::types::OrganizationalUnit {
@@ -2009,8 +2009,8 @@ mod tests {
             parent_id: Some("parent".to_string()),
             tenant_id: mk_core::types::TenantId::new("t".to_string()).unwrap(),
             metadata: std::collections::HashMap::new(),
-            created_at: 0,
-            updated_at: 0,
+            created_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+            updated_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
             source_owner: RecordSource::Admin,
         };
         backend.create_unit(&gp).await.unwrap();
@@ -2046,8 +2046,8 @@ mod tests {
             parent_id: None,
             tenant_id: mk_core::types::TenantId::new("t".to_string()).unwrap(),
             metadata: std::collections::HashMap::new(),
-            created_at: 0,
-            updated_at: 0,
+            created_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+            updated_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
             source_owner: RecordSource::Admin,
         };
         let child1 = mk_core::types::OrganizationalUnit {
@@ -2057,8 +2057,8 @@ mod tests {
             parent_id: Some("root".to_string()),
             tenant_id: mk_core::types::TenantId::new("t".to_string()).unwrap(),
             metadata: std::collections::HashMap::new(),
-            created_at: 0,
-            updated_at: 0,
+            created_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+            updated_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
             source_owner: RecordSource::Admin,
         };
         let child2 = mk_core::types::OrganizationalUnit {
@@ -2068,8 +2068,8 @@ mod tests {
             parent_id: Some("root".to_string()),
             tenant_id: mk_core::types::TenantId::new("t".to_string()).unwrap(),
             metadata: std::collections::HashMap::new(),
-            created_at: 0,
-            updated_at: 0,
+            created_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+            updated_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
             source_owner: RecordSource::Admin,
         };
         backend.create_unit(&root).await.unwrap();

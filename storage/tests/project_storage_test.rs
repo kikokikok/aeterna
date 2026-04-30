@@ -26,8 +26,8 @@ fn make_unit(
         parent_id,
         tenant_id: tenant_id.clone(),
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     }
 }
