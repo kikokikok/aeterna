@@ -91,6 +91,6 @@
 - [ ] 13.2 New `docs/operations/graph-recovery-runbook.md` covering pod-local corruption, projector stuck, log compaction overdue, full S3 restore.
 - [ ] 13.3 Update `AGENTS.md` (or equivalent) with the new feature flags and metric names so future agents know about them.
 
-## 14. Removal of dead code
+## 14. Disposition of the Postgres `GraphStore` impl
 
-- [ ] 14.1 Remove `impl GraphStore for PostgresBackend` from `storage/src/postgres.rs` (dead code; references non-existent tables). This is a sibling commit but listed here for completeness.
+- [ ] 14.1 Decide disposition of `impl GraphStore for PostgresBackend` in `storage/src/postgres.rs`. Current state: not dead — `graph_nodes`/`graph_edges` are created by `PostgresBackend::initialize_schema()` and the impl is exercised by `memory/tests/graph_integration.rs`. Options: (a) deprecate the secondary backend and delete the integration test, (b) keep as a tested fallback for environments where DuckDB is undesirable, (c) extract behind a `postgres-graph` feature flag so it isn't compiled by default. Decision must precede Phase 2 because the WAL projector design assumes a single canonical backend.

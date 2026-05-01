@@ -2461,6 +2461,215 @@ impl PostgresBackend {
 }
 
 #[async_trait]
+impl crate::graph::GraphStore for PostgresBackend {
+    type Error = Box<dyn std::error::Error + Send + Sync>;
+
+    async fn add_node(
+        &self,
+        ctx: TenantContext,
+        node: crate::graph::GraphNode,
+    ) -> Result<(), Self::Error> {
+        sqlx::query(
+            "INSERT INTO graph_nodes (id, tenant_id, label, properties, created_at)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (id, tenant_id) DO UPDATE SET label = $3, properties = $4",
+        )
+        .bind(&node.id)
+        .bind(ctx.tenant_id.as_str())
+        .bind(&node.label)
+        .bind(&node.properties)
+        .bind(chrono::Utc::now().timestamp())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+        Ok(())
+    }
+
+    async fn add_edge(
+        &self,
+        ctx: TenantContext,
+        edge: crate::graph::GraphEdge,
+    ) -> Result<(), Self::Error> {
+        sqlx::query(
+            "INSERT INTO graph_edges (id, tenant_id, source_id, target_id, relation, properties, \
+             created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             ON CONFLICT (id, tenant_id) DO UPDATE SET relation = $5, properties = $6",
+        )
+        .bind(&edge.id)
+        .bind(ctx.tenant_id.as_str())
+        .bind(&edge.source_id)
+        .bind(&edge.target_id)
+        .bind(&edge.relation)
+        .bind(&edge.properties)
+        .bind(chrono::Utc::now().timestamp())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+        Ok(())
+    }
+
+    async fn get_neighbors(
+        &self,
+        ctx: TenantContext,
+        node_id: &str,
+    ) -> Result<Vec<(crate::graph::GraphEdge, crate::graph::GraphNode)>, Self::Error> {
+        let rows = sqlx::query(
+            "SELECT e.id as edge_id, e.source_id, e.target_id, e.relation, e.properties as \
+             edge_props,
+                    n.id as node_id, n.label, n.properties as node_props
+             FROM graph_edges e
+             JOIN graph_nodes n ON e.target_id = n.id AND e.tenant_id = n.tenant_id
+             WHERE e.source_id = $1 AND e.tenant_id = $2",
+        )
+        .bind(node_id)
+        .bind(ctx.tenant_id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            let edge = crate::graph::GraphEdge {
+                id: row.get("edge_id"),
+                source_id: row.get("source_id"),
+                target_id: row.get("target_id"),
+                relation: row.get("relation"),
+                properties: row.get("edge_props"),
+                tenant_id: ctx.tenant_id.as_str().to_string(),
+            };
+            let node = crate::graph::GraphNode {
+                id: row.get("node_id"),
+                label: row.get("label"),
+                properties: row.get("node_props"),
+                tenant_id: ctx.tenant_id.as_str().to_string(),
+            };
+            results.push((edge, node));
+        }
+        Ok(results)
+    }
+
+    async fn find_path(
+        &self,
+        ctx: TenantContext,
+        start_id: &str,
+        end_id: &str,
+        max_depth: usize,
+    ) -> Result<Vec<crate::graph::GraphEdge>, Self::Error> {
+        let rows = sqlx::query(
+            "WITH RECURSIVE search_path(id, source_id, target_id, relation, properties, depth, \
+             path) AS (
+                SELECT id, source_id, target_id, relation, properties, 1, ARRAY[id]
+                FROM graph_edges
+                WHERE source_id = $1 AND tenant_id = $3
+                UNION ALL
+                SELECT e.id, e.source_id, e.target_id, e.relation, e.properties, sp.depth + 1, \
+             sp.path || e.id
+                FROM graph_edges e
+                JOIN search_path sp ON e.source_id = sp.target_id AND e.tenant_id = $3
+                WHERE sp.depth < $4 AND NOT (e.id = ANY(sp.path))
+            )
+            SELECT id, source_id, target_id, relation, properties
+            FROM search_path
+            WHERE target_id = $2
+            LIMIT 1",
+        )
+        .bind(start_id)
+        .bind(end_id)
+        .bind(ctx.tenant_id.as_str())
+        .bind(max_depth as i32)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+        let mut path = Vec::new();
+        for row in rows {
+            path.push(crate::graph::GraphEdge {
+                id: row.get("id"),
+                source_id: row.get("source_id"),
+                target_id: row.get("target_id"),
+                relation: row.get("relation"),
+                properties: row.get("properties"),
+                tenant_id: ctx.tenant_id.as_str().to_string(),
+            });
+        }
+        Ok(path)
+    }
+
+    async fn search_nodes(
+        &self,
+        ctx: TenantContext,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<crate::graph::GraphNode>, Self::Error> {
+        let rows = sqlx::query(
+            "SELECT id, label, properties FROM graph_nodes
+             WHERE tenant_id = $1 AND (id ILIKE $2 OR label ILIKE $2)
+             LIMIT $3",
+        )
+        .bind(ctx.tenant_id.as_str())
+        .bind(format!("%{}%", query))
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+        let mut nodes = Vec::new();
+        for row in rows {
+            nodes.push(crate::graph::GraphNode {
+                id: row.get("id"),
+                label: row.get("label"),
+                properties: row.get("properties"),
+                tenant_id: ctx.tenant_id.as_str().to_string(),
+            });
+        }
+        Ok(nodes)
+    }
+
+    async fn soft_delete_nodes_by_source_memory_id(
+        &self,
+        ctx: TenantContext,
+        source_memory_id: &str,
+    ) -> Result<usize, Self::Error> {
+        let result = sqlx::query(
+            "UPDATE graph_nodes SET deleted_at = NOW() 
+             WHERE tenant_id = $1 
+             AND deleted_at IS NULL 
+             AND properties->>'source_memory_id' = $2",
+        )
+        .bind(ctx.tenant_id.as_str())
+        .bind(source_memory_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+        let deleted_count = result.rows_affected() as usize;
+
+        sqlx::query(
+            "UPDATE graph_edges SET deleted_at = NOW()
+             WHERE tenant_id = $1 
+             AND deleted_at IS NULL
+             AND (source_id IN (
+                SELECT id FROM graph_nodes 
+                WHERE tenant_id = $1 AND properties->>'source_memory_id' = $2
+             ) OR target_id IN (
+                SELECT id FROM graph_nodes 
+                WHERE tenant_id = $1 AND properties->>'source_memory_id' = $2
+             ))",
+        )
+        .bind(ctx.tenant_id.as_str())
+        .bind(source_memory_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+        Ok(deleted_count)
+    }
+}
+
+#[async_trait]
 impl mk_core::traits::EventPublisher for PostgresBackend {
     type Error = PostgresError;
 
