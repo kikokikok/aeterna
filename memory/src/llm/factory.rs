@@ -88,6 +88,13 @@ impl std::str::FromStr for LlmProviderType {
 pub struct OpenAiLlmConfig {
     pub model: String,
     pub api_key: String,
+    /// Optional override for the OpenAI-compatible API base URL.
+    ///
+    /// When set (via `AETERNA_OPENAI_BASE_URL`), requests are routed there
+    /// instead of `https://api.openai.com/v1`. Used by the e2e suite to
+    /// target ollama, GitHub Models, or a recorded-fixture replay server,
+    /// and by self-hosted users running a local OpenAI-compat gateway.
+    pub base_url: Option<String>,
 }
 
 impl OpenAiLlmConfig {
@@ -96,6 +103,7 @@ impl OpenAiLlmConfig {
             model: std::env::var("AETERNA_OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".to_string()),
             api_key: std::env::var("OPENAI_API_KEY")
                 .map_err(|_| LlmFactoryError::Configuration("OPENAI_API_KEY not set".into()))?,
+            base_url: std::env::var("AETERNA_OPENAI_BASE_URL").ok().filter(|s| !s.is_empty()),
         })
     }
 }
@@ -196,7 +204,11 @@ pub fn create_llm_service(
             #[cfg(feature = "embedding-integration")]
             {
                 let service = AnyhowLlmAdapter {
-                    inner: super::openai::OpenAILlmService::new(openai.api_key, openai.model),
+                    inner: super::openai::OpenAILlmService::new(
+                        openai.api_key,
+                        openai.model,
+                        openai.base_url,
+                    ),
                 };
                 Ok(Some(Arc::new(service)))
             }
@@ -371,5 +383,49 @@ mod tests {
 
         let service = create_llm_service(config).unwrap();
         assert!(service.is_some());
+    }
+
+    /// `AETERNA_OPENAI_BASE_URL` (when set + non-empty) is plumbed through
+    /// `OpenAiLlmConfig::from_env` so e2e adapters and self-hosted users
+    /// can route to OpenAI-compat endpoints (ollama, GitHub Models, etc).
+    /// Empty string is treated as unset to match shell-export ergonomics.
+    ///
+    /// SAFETY: `std::env::{set_var,remove_var}` are unsafe in edition 2024
+    /// because they race other threads. Cargo-test is multithreaded, so
+    /// strictly speaking concurrent tests reading these vars could observe
+    /// torn state. In practice no other test in this crate touches
+    /// `AETERNA_OPENAI_BASE_URL`, and `OPENAI_API_KEY` is read here only
+    /// to satisfy `from_env`'s required-key check. If we add more env-using
+    /// tests later, gate them with a process-wide mutex.
+    #[test]
+    fn openai_config_reads_optional_base_url_from_env() {
+        let prior_key = std::env::var("OPENAI_API_KEY").ok();
+        let prior_url = std::env::var("AETERNA_OPENAI_BASE_URL").ok();
+        // SAFETY: see method-level comment.
+        unsafe {
+            std::env::set_var("OPENAI_API_KEY", "sk-test");
+
+            std::env::remove_var("AETERNA_OPENAI_BASE_URL");
+            let cfg = OpenAiLlmConfig::from_env().expect("config");
+            assert_eq!(cfg.base_url, None, "unset env => None");
+
+            std::env::set_var("AETERNA_OPENAI_BASE_URL", "");
+            let cfg = OpenAiLlmConfig::from_env().expect("config");
+            assert_eq!(cfg.base_url, None, "empty env => None (treat as unset)");
+
+            std::env::set_var("AETERNA_OPENAI_BASE_URL", "http://localhost:11434/v1");
+            let cfg = OpenAiLlmConfig::from_env().expect("config");
+            assert_eq!(cfg.base_url.as_deref(), Some("http://localhost:11434/v1"));
+
+            // Restore.
+            match prior_key {
+                Some(v) => std::env::set_var("OPENAI_API_KEY", v),
+                None => std::env::remove_var("OPENAI_API_KEY"),
+            }
+            match prior_url {
+                Some(v) => std::env::set_var("AETERNA_OPENAI_BASE_URL", v),
+                None => std::env::remove_var("AETERNA_OPENAI_BASE_URL"),
+            }
+        }
     }
 }

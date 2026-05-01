@@ -634,6 +634,10 @@ impl TenantProviderRegistry {
                             model
                         },
                         api_key,
+                        // Per-tenant DB-stored providers always use the public
+                        // OpenAI endpoint; only env-based config plumbs an
+                        // override (used by the e2e suite + self-hosted users).
+                        base_url: None,
                     }),
                     ..Default::default()
                 }
@@ -719,6 +723,10 @@ impl TenantProviderRegistry {
                             model
                         },
                         api_key,
+                        // Per-tenant DB-stored providers always use the public
+                        // OpenAI endpoint; only env-based config plumbs an
+                        // override (used by the e2e suite + self-hosted users).
+                        base_url: None,
                     }),
                     ..Default::default()
                 }

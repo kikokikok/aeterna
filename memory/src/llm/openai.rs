@@ -17,8 +17,16 @@ pub struct OpenAILlmService {
 }
 
 impl OpenAILlmService {
-    pub fn new(api_key: String, model: String) -> Self {
-        let config = async_openai::config::OpenAIConfig::new().with_api_key(api_key);
+    /// Construct a new service against the public OpenAI API.
+    ///
+    /// For OpenAI-compatible endpoints (ollama, GitHub Models, replay
+    /// servers, self-hosted gateways) pass an `Some(_)` `base_url` to
+    /// override the default `https://api.openai.com/v1`.
+    pub fn new(api_key: String, model: String, base_url: Option<String>) -> Self {
+        let mut config = async_openai::config::OpenAIConfig::new().with_api_key(api_key);
+        if let Some(url) = base_url {
+            config = config.with_api_base(url);
+        }
         let client = async_openai::Client::with_config(config);
         let cache = lru::LruCache::new(NonZeroUsize::new(100).unwrap());
 
@@ -107,5 +115,48 @@ impl LlmService for OpenAILlmService {
 
         let result: ValidationResult = serde_json::from_str(&result_json)?;
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rustls::crypto::aws_lc_rs;
+    use wiremock::matchers::{header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn install_crypto_provider() {
+        let _ = aws_lc_rs::default_provider().install_default();
+    }
+
+    #[tokio::test]
+    async fn routes_generate_requests_to_custom_base_url() {
+        install_crypto_provider();
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/chat/completions"))
+            .and(header("authorization", "Bearer sk-test"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": "chatcmpl-test",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "gpt-4o-mini",
+                "choices": [{
+                    "index": 0,
+                    "message": { "role": "assistant", "content": "hello from mock" },
+                    "finish_reason": "stop"
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let service = OpenAILlmService::new(
+            "sk-test".into(),
+            "gpt-4o-mini".into(),
+            Some(format!("{}/v1", server.uri())),
+        );
+
+        let response = service.generate("hello").await.unwrap();
+        assert_eq!(response, "hello from mock");
     }
 }

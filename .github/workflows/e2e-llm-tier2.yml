@@ -1,0 +1,46 @@
+name: e2e LLM tier 2 (live providers — COSTS MONEY)
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend:
+        description: 'Adapter to exercise'
+        required: true
+        type: choice
+        options: [live-openai, live-anthropic]
+      model:
+        description: 'Override model (optional)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  live-smoke:
+    name: Live provider smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provision + health
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AETERNA_E2E_LLM_MODEL: ${{ inputs.model }}
+        run: |
+          mkdir -p .e2e
+          set -euo pipefail
+          {
+            ./e2e/llm/${{ inputs.backend }}.sh provision
+            ./e2e/llm/${{ inputs.backend }}.sh env
+            ./e2e/llm/${{ inputs.backend }}.sh health
+          } 2>&1 | tee .e2e/live-provider-smoke.log
+        shell: bash
+      - name: Upload live-provider logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-llm-tier2-live-provider-logs
+          path: .e2e/live-provider-smoke.log
+          if-no-files-found: warn
+          retention-days: 7

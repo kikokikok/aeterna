@@ -13,8 +13,16 @@ pub struct OpenAIEmbeddingService {
 }
 
 impl OpenAIEmbeddingService {
-    pub fn new(api_key: String, model: &str) -> Self {
-        let config = async_openai::config::OpenAIConfig::new().with_api_key(api_key);
+    /// Construct a new service against the public OpenAI API.
+    ///
+    /// Pass `Some(_)` for `base_url` to target an OpenAI-compatible
+    /// endpoint (ollama, GitHub Models, replay server, self-hosted
+    /// gateway) instead of `https://api.openai.com/v1`.
+    pub fn new(api_key: String, model: &str, base_url: Option<&str>) -> Self {
+        let mut config = async_openai::config::OpenAIConfig::new().with_api_key(api_key);
+        if let Some(url) = base_url {
+            config = config.with_api_base(url.to_string());
+        }
         let client = async_openai::Client::with_config(config);
 
         let dimension = match model {
@@ -63,7 +71,7 @@ impl OpenAIEmbeddingService {
     }
 
     pub fn with_default_model(api_key: String) -> Self {
-        Self::new(api_key, "text-embedding-ada-002")
+        Self::new(api_key, "text-embedding-ada-002", None)
     }
 }
 
@@ -224,21 +232,21 @@ mod tests {
 
     #[test]
     fn test_dimension_configuration() {
-        let service = OpenAIEmbeddingService::new("sk-test".to_string(), "text-embedding-ada-002");
+        let service = OpenAIEmbeddingService::new("sk-test".to_string(), "text-embedding-ada-002", None);
         assert_eq!(
             service.dimension(),
             1536,
             "ada-002 should have 1536 dimensions"
         );
 
-        let service = OpenAIEmbeddingService::new("sk-test".to_string(), "text-embedding-3-small");
+        let service = OpenAIEmbeddingService::new("sk-test".to_string(), "text-embedding-3-small", None);
         assert_eq!(
             service.dimension(),
             1536,
             "3-small should have 1536 dimensions"
         );
 
-        let service = OpenAIEmbeddingService::new("sk-test".to_string(), "text-embedding-3-large");
+        let service = OpenAIEmbeddingService::new("sk-test".to_string(), "text-embedding-3-large", None);
         assert_eq!(
             service.dimension(),
             3072,

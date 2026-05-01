@@ -70,5 +70,9 @@ e2e/results/
 # Postman backups
 *.json.bak
 
+# LLM adapter runtime state
+.e2e/
+__pycache__/
+*.pyc
 # Playwright screenshot/artifact scratch dir (per-agent, never committed)
 .playwright-dust/

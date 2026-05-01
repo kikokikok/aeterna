@@ -1,0 +1,7 @@
+{
+  "hash": "ec487d14d82d",
+  "path": "/v1/chat/completions",
+  "upstream": "hand-authored",
+  "recorded_at": "2026-04-27T10:30:00Z",
+  "note": "example fixture for contract tests; req={messages:[{role:user,content:ping}], model:qwen2.5:0.5b}"
+}
