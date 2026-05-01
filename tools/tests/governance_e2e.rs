@@ -384,8 +384,8 @@ fn create_unit(
         parent_id: parent.map(String::from),
         tenant_id: TenantId::new(tenant.to_string()).unwrap(),
         metadata: HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     }
 }

@@ -232,8 +232,8 @@ async fn seed_platform_admin_user(state: &AppState) {
             tenant_id: TenantId::new(INSTANCE_SCOPE_TENANT_ID.to_string())
                 .expect("INSTANCE_SCOPE_TENANT_ID is a valid TenantId"),
             metadata: HashMap::new(),
-            created_at: now,
-            updated_at: now,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: RecordSource::Admin,
         })
         .await

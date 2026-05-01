@@ -7,7 +7,7 @@ ARG NODE_VERSION=24
 # ---------------------------------------------------------------------------
 FROM node:${NODE_VERSION}-bookworm-slim AS admin-ui-builder
 WORKDIR /ui
-COPY admin-ui/package.json admin-ui/package-lock.json ./
+COPY admin-ui/package.json admin-ui/package-lock.json admin-ui/.npmrc ./
 RUN npm ci --ignore-scripts
 COPY admin-ui/ .
 RUN npm run build

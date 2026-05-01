@@ -78,7 +78,7 @@ impl HierarchicalIndex {
             }
         }
 
-        results.sort_by(|a, b| b.1.cmp(&a.1));
+        results.sort_by_key(|r| std::cmp::Reverse(r.1));
         results
             .into_iter()
             .take(max_results)

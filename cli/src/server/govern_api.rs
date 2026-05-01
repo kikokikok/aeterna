@@ -1002,8 +1002,8 @@ async fn resolve_company_scope(
                 tenant_id: ctx.tenant_id.clone(),
                 metadata: Default::default(),
                 source_owner: RecordSource::Admin,
-                created_at: chrono::Utc::now().timestamp(),
-                updated_at: chrono::Utc::now().timestamp(),
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
             };
             let id = new_unit.id.clone();
             if let Err(err) = state.postgres.create_unit_scoped(ctx, &new_unit).await {

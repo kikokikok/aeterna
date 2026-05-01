@@ -1,6 +1,6 @@
 FROM node:24-alpine AS builder
 WORKDIR /app
-COPY admin-ui/package*.json ./
+COPY admin-ui/package*.json admin-ui/.npmrc ./
 RUN npm ci
 COPY admin-ui/ ./
 RUN npm run build

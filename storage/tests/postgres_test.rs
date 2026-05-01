@@ -281,8 +281,8 @@ async fn test_postgres_backend_role_management() {
         tenant_id: tenant_id.clone(),
         parent_id: None,
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     };
     backend.create_unit(&company).await.unwrap();
@@ -380,8 +380,8 @@ async fn test_get_user_roles_for_auth_includes_instance_scope_and_deduplicates()
             parent_id: None,
             tenant_id: tenant_id.clone(),
             metadata: std::collections::HashMap::new(),
-            created_at: now,
-            updated_at: now,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: RecordSource::Admin,
         })
         .await
@@ -395,8 +395,8 @@ async fn test_get_user_roles_for_auth_includes_instance_scope_and_deduplicates()
             parent_id: None,
             tenant_id: INSTANCE_SCOPE_TENANT_ID.parse().unwrap(),
             metadata: std::collections::HashMap::new(),
-            created_at: now,
-            updated_at: now,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: RecordSource::Admin,
         })
         .await
@@ -473,8 +473,8 @@ async fn test_postgres_backend_unit_policy() {
         tenant_id: tenant_id.clone(),
         parent_id: None,
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     };
     backend.create_unit(&company).await.unwrap();
@@ -631,8 +631,8 @@ async fn test_postgres_backend_unit_operations() {
         tenant_id: tenant_id.clone(),
         parent_id: None,
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     };
     backend.create_unit(&company).await.unwrap();
@@ -643,7 +643,7 @@ async fn test_postgres_backend_unit_operations() {
 
     let mut updated_company = company.clone();
     updated_company.name = "Updated Company".to_string();
-    updated_company.updated_at = chrono::Utc::now().timestamp();
+    updated_company.updated_at = chrono::Utc::now();
     backend
         .update_unit_scoped(&ctx, &updated_company)
         .await
@@ -677,8 +677,8 @@ async fn test_postgres_backend_list_children() {
         tenant_id: tenant_id.clone(),
         parent_id: None,
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     };
     backend.create_unit(&company).await.unwrap();
@@ -690,8 +690,8 @@ async fn test_postgres_backend_list_children() {
         tenant_id: tenant_id.clone(),
         parent_id: Some(comp_id.clone()),
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     };
     backend.create_unit(&org1).await.unwrap();
@@ -703,8 +703,8 @@ async fn test_postgres_backend_list_children() {
         tenant_id: tenant_id.clone(),
         parent_id: Some(comp_id.clone()),
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     };
     backend.create_unit(&org2).await.unwrap();
@@ -731,8 +731,8 @@ async fn test_postgres_backend_list_all_units() {
         tenant_id: tenant_id.clone(),
         parent_id: None,
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     };
     backend.create_unit(&company).await.unwrap();
@@ -744,8 +744,8 @@ async fn test_postgres_backend_list_all_units() {
         tenant_id: tenant_id.clone(),
         parent_id: Some(comp_id),
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     };
     backend.create_unit(&org).await.unwrap();
@@ -778,8 +778,8 @@ async fn test_postgres_backend_hierarchy_validation() {
         tenant_id: tenant_id.clone(),
         parent_id: None,
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     };
     backend.create_unit(&company).await.unwrap();
@@ -791,8 +791,8 @@ async fn test_postgres_backend_hierarchy_validation() {
         tenant_id: tenant_id.clone(),
         parent_id: Some(comp_id.clone()),
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     };
     backend.create_unit(&org).await.unwrap();
@@ -804,8 +804,8 @@ async fn test_postgres_backend_hierarchy_validation() {
         tenant_id: tenant_id.clone(),
         parent_id: Some(org_id.clone()),
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     };
     backend.create_unit(&team).await.unwrap();

@@ -261,7 +261,7 @@ fn create_test_unit(
     unit_type: UnitType,
     parent_id: Option<&str>,
 ) -> OrganizationalUnit {
-    let now = Utc::now().timestamp();
+    let now = Utc::now();
     OrganizationalUnit {
         id: id.to_string(),
         name: name.to_string(),

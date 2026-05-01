@@ -477,8 +477,8 @@ mod tests {
             parent_id: parent.map(|s| s.to_string()),
             tenant_id: TenantId::new(tenant.to_string()).unwrap(),
             metadata: std::collections::HashMap::new(),
-            created_at: 0,
-            updated_at: 0,
+            created_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+            updated_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
             source_owner: RecordSource::Admin,
         }
     }

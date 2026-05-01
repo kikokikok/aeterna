@@ -66,41 +66,87 @@ function OrgNode({ unit, children, allUnits, onSelect, selectedId }: OrgNodeProp
   )
 }
 
-function CreateOrgDialog({
+// Hierarchy contract — kept in lock-step with `expected_parent_type`
+// in `cli/src/server/org_api.rs` and `storage::postgres::create_unit_scoped`.
+// Company is the only root; everything else has a single required parent type.
+type UnitTypeT = "Company" | "Organization" | "Team" | "Project"
+
+const UNIT_TYPES: UnitTypeT[] = ["Company", "Organization", "Team", "Project"]
+
+const PARENT_OF: Record<UnitTypeT, UnitTypeT | null> = {
+  Company: null,
+  Organization: "Company",
+  Team: "Organization",
+  Project: "Team",
+}
+
+// Indefinite article for a unit-type label. Tiny — but "A Organization" in
+// the helper text reads as broken English so it's worth getting right.
+function article(word: string): "An" | "A" {
+  return /^[aeiou]/i.test(word) ? "An" : "A"
+}
+
+function CreateUnitDialog({
   open,
   onClose,
-  companies,
+  allUnits,
+  defaultUnitType = "Organization",
 }: {
   open: boolean
   onClose: () => void
-  companies: OrganizationalUnit[]
+  allUnits: OrganizationalUnit[]
+  defaultUnitType?: UnitTypeT
 }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  // User-overridden companyId. Empty string means "let the component pick the
-  // default". The actual value used at submit time is `companyId` below, which
-  // is derived (not synced) from `selectedCompanyId` + the available companies
-  // so we don't run into the `react-hooks/set-state-in-effect` anti-pattern.
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string>("")
+  const [unitType, setUnitType] = useState<UnitTypeT>(defaultUnitType)
+  // Empty string means "let the component pick the default", which is the
+  // first eligible parent in `eligibleParents` below. We avoid syncing the
+  // selection in a useEffect (set-state-in-effect anti-pattern) by deriving
+  // the effective parentId on every render from the user choice + the list.
+  const [selectedParentId, setSelectedParentId] = useState<string>("")
 
-  // Effective companyId: user choice if set, otherwise first available company.
-  // The backend requires `companyId` to reference an existing Company unit in
-  // the target tenant (see cli/src/server/org_api.rs::CreateOrgRequest).
-  const companyId =
-    selectedCompanyId || (companies.length > 0 ? companies[0].id : "")
+  const requiredParentType = PARENT_OF[unitType]
+  const eligibleParents = requiredParentType
+    ? allUnits.filter((u) => u.unitType === requiredParentType)
+    : []
 
-  // Backend contract (cli/src/server/org_api.rs::CreateOrgRequest):
-  //   { name: string, description?: string, companyId: string }
-  // The endpoint hardcodes `UnitType::Organization`, so we do NOT send a
-  // `unit_type` field. See issue #86 for the original schema-drift bug.
+  // Effective parentId: user choice if still in the eligible set, otherwise
+  // first eligible parent. If the unit type is Company there is no parent.
+  const parentIsValid =
+    selectedParentId !== "" &&
+    eligibleParents.some((u) => u.id === selectedParentId)
+  const parentId =
+    requiredParentType === null
+      ? null
+      : parentIsValid
+        ? selectedParentId
+        : eligibleParents.length > 0
+          ? eligibleParents[0].id
+          : ""
+
+  // Backend contract (cli/src/server/org_api.rs::CreateOrgRequest, post the
+  // generalisation in commit e44bbd21):
+  //   { name, description?, unitType, parentId? }
+  // - `unitType` is the new wire field; backend defaults to Organization
+  //   when omitted but we always send it explicitly now.
+  // - `parentId` is required for Organization/Team/Project, MUST be absent
+  //   for Company. The deprecated `companyId` alias is intentionally not
+  //   sent by this dialog.
   const create = useMutation({
-    mutationFn: (data: { name: string; description?: string; companyId: string }) =>
-      apiClient.post("/api/v1/org", data),
+    mutationFn: (data: {
+      name: string
+      description?: string
+      unitType: UnitTypeT
+      parentId?: string
+    }) => apiClient.post("/api/v1/org", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["organizations"] })
       setName("")
       setDescription("")
+      setSelectedParentId("")
+      setUnitType(defaultUnitType)
       onClose()
     },
   })
@@ -108,14 +154,17 @@ function CreateOrgDialog({
   if (!open) return null
 
   const errorMessage = create.error instanceof Error ? create.error.message : null
-  const noCompanies = companies.length === 0
+  const needsParent = requiredParentType !== null
+  const noEligibleParent = needsParent && eligibleParents.length === 0
+  const submitDisabled =
+    create.isPending || (needsParent && (noEligibleParent || !parentId))
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div role="dialog" aria-modal="true" aria-labelledby="create-unit-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            Create Organization
+          <h2 id="create-unit-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Create Unit
           </h2>
           <button
             onClick={onClose}
@@ -128,56 +177,100 @@ function CreateOrgDialog({
         <form
           onSubmit={(e) => {
             e.preventDefault()
-            if (!companyId) return
-            create.mutate({
+            if (needsParent && !parentId) return
+            const payload: {
+              name: string
+              description?: string
+              unitType: UnitTypeT
+              parentId?: string
+            } = {
               name,
-              description: description.trim() ? description.trim() : undefined,
-              companyId,
-            })
+              unitType,
+            }
+            if (description.trim()) {
+              payload.description = description.trim()
+            }
+            if (needsParent && parentId) {
+              payload.parentId = parentId
+            }
+            create.mutate(payload)
           }}
         >
           <div className="space-y-4">
             <div>
               <label
-                htmlFor="org-company"
+                htmlFor="unit-type"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
-                Parent Company
+                Type
               </label>
               <select
-                id="org-company"
-                value={companyId}
-                onChange={(e) => setSelectedCompanyId(e.target.value)}
-                required
-                disabled={noCompanies}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:disabled:bg-gray-800"
+                id="unit-type"
+                value={unitType}
+                onChange={(e) => {
+                  setUnitType(e.target.value as UnitTypeT)
+                  // Reset parent selection — different type, different
+                  // eligible-parents pool.
+                  setSelectedParentId("")
+                }}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
               >
-                {noCompanies ? (
-                  <option value="">No companies available — create a Company unit first</option>
-                ) : (
-                  companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))
-                )}
+                {UNIT_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
               </select>
-              {noCompanies && (
-                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                  An Organization must be attached to a Company. Ask a platform admin to
-                  provision a Company unit for this tenant first.
-                </p>
-              )}
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {requiredParentType === null
+                  ? "Companies are root-level — they have no parent."
+                  : `${article(unitType)} ${unitType} must be attached to a ${requiredParentType}.`}
+              </p>
             </div>
+
+            {needsParent && (
+              <div>
+                <label
+                  htmlFor="unit-parent"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {`Parent ${requiredParentType}`}
+                </label>
+                <select
+                  id="unit-parent"
+                  value={parentId ?? ""}
+                  onChange={(e) => setSelectedParentId(e.target.value)}
+                  required
+                  disabled={noEligibleParent}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:disabled:bg-gray-800"
+                >
+                  {noEligibleParent ? (
+                    <option value="">{`No ${requiredParentType} units available — create one first`}</option>
+                  ) : (
+                    eligibleParents.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+                {noEligibleParent && (
+                  <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                    {`${article(unitType)} ${unitType} must be attached to a ${requiredParentType}. Create a ${requiredParentType} unit for this tenant first.`}
+                  </p>
+                )}
+              </div>
+            )}
+
             <div>
               <label
-                htmlFor="org-name"
+                htmlFor="unit-name"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
                 Name
               </label>
               <input
-                id="org-name"
+                id="unit-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -187,13 +280,13 @@ function CreateOrgDialog({
             </div>
             <div>
               <label
-                htmlFor="org-description"
+                htmlFor="unit-description"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
                 Description <span className="text-gray-400">(optional)</span>
               </label>
               <textarea
-                id="org-description"
+                id="unit-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
@@ -216,7 +309,7 @@ function CreateOrgDialog({
             </button>
             <button
               type="submit"
-              disabled={create.isPending || noCompanies}
+              disabled={submitDisabled}
               className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -290,9 +383,6 @@ export default function OrgTreePage() {
 
   const units: OrganizationalUnit[] = Array.isArray(data) ? data : (data?.items ?? [])
   const roots = units.filter((u) => !u.parentId)
-  // Backend requires `companyId` on org creation. Collect companies from the
-  // already-loaded tree instead of issuing a second request.
-  const companies = units.filter((u) => u.unitType === "Company")
 
   return (
     <div>
@@ -306,7 +396,7 @@ export default function OrgTreePage() {
           className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
         >
           <Plus className="h-4 w-4" />
-          Create Org
+          Create Unit
         </button>
       </div>
 
@@ -356,10 +446,10 @@ export default function OrgTreePage() {
         </div>
       )}
 
-      <CreateOrgDialog
+      <CreateUnitDialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
-        companies={companies}
+        allUnits={units}
       />
     </div>
   )

@@ -306,8 +306,8 @@ async fn create_project(
         parent_id: Some(req.team_id),
         tenant_id: ctx.tenant_id.clone(),
         metadata,
-        created_at: now,
-        updated_at: now,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: mk_core::types::RecordSource::Admin,
     };
 

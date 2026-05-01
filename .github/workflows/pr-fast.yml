@@ -173,3 +173,39 @@ jobs:
             -kubernetes-version 1.29.0 \
             -summary \
             /tmp/manifest.yaml
+
+  openapi-types-drift:
+    name: openapi-types-drift
+    runs-on: ubuntu-latest
+    # C1 — OpenAPI → TypeScript codegen drift gate.
+    #
+    # admin-ui/src/api/generated-types.ts is produced from
+    # aeterna-openapi-spec.yaml by `npm run gen:api-types`. The hand-curated
+    # client surface (admin-ui/src/api/types.ts, client.ts) imports from this
+    # generated file, so drift between the Rust API contract and the React UI
+    # surfaces at compile time. This job re-runs the codegen and fails the
+    # PR if the working tree differs from what is committed — forcing
+    # contributors to regenerate in the same commit that touches the YAML.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: admin-ui/package-lock.json
+      - name: Install admin-ui devDependencies
+        working-directory: admin-ui
+        # --legacy-peer-deps matches the local workflow used at install time;
+        # the existing react 19 / @types/react ecosystem still has a few
+        # transitive peer warnings that are not actionable for this job.
+        run: npm ci --legacy-peer-deps
+      - name: Regenerate types from OpenAPI spec
+        working-directory: admin-ui
+        run: npm run gen:api-types
+      - name: Fail on drift
+        run: |
+          if ! git diff --exit-code admin-ui/src/api/generated-types.ts; then
+            echo "::error::generated-types.ts is out of sync with aeterna-openapi-spec.yaml."
+            echo "::error::Run 'npm run gen:api-types' from admin-ui/ and commit the result."
+            exit 1
+          fi

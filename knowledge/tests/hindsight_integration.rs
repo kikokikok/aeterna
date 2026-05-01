@@ -58,8 +58,8 @@ async fn create_tenant(storage: &PostgresBackend, tenant_id: &str) -> Result<(),
         parent_id: None,
         tenant_id: TenantId::new(tenant_id.to_string()).unwrap(),
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     };
     storage.create_unit(&unit).await?;

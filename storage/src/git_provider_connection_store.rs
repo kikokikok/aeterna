@@ -314,8 +314,8 @@ mod tests {
             pem_secret_ref: "local/test-pem".to_string(),
             webhook_secret_ref: None,
             allowed_tenant_ids: allowed,
-            created_at: 0,
-            updated_at: 0,
+            created_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+            updated_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
         }
     }
 

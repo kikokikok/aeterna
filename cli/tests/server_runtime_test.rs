@@ -373,7 +373,6 @@ async fn test_app_state() -> Option<(Arc<AppState>, TempDir)> {
 
 async fn seed_company_unit(state: &Arc<AppState>, tenant_id: &TenantId) -> String {
     let unit_id = uuid::Uuid::new_v4().to_string();
-    let now = chrono::Utc::now().timestamp();
     state
         .postgres
         .create_unit(&mk_core::types::OrganizationalUnit {
@@ -383,8 +382,8 @@ async fn seed_company_unit(state: &Arc<AppState>, tenant_id: &TenantId) -> Strin
             parent_id: None,
             tenant_id: tenant_id.clone(),
             metadata: HashMap::new(),
-            created_at: now,
-            updated_at: now,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: mk_core::types::RecordSource::Admin,
         })
         .await
@@ -401,7 +400,6 @@ async fn seed_unit_of_type(
     name: &str,
 ) -> String {
     let unit_id = uuid::Uuid::new_v4().to_string();
-    let now = chrono::Utc::now().timestamp();
     state
         .postgres
         .create_unit(&mk_core::types::OrganizationalUnit {
@@ -411,8 +409,8 @@ async fn seed_unit_of_type(
             parent_id: None,
             tenant_id: tenant_id.clone(),
             metadata: HashMap::new(),
-            created_at: now,
-            updated_at: now,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: mk_core::types::RecordSource::Admin,
         })
         .await
@@ -1127,7 +1125,6 @@ async fn user_role_revoke_fails_closed_when_assignment_scope_is_ambiguous() {
     let company_unit_id = "11111111-1111-1111-1111-111111111111".to_string();
     let org_unit_id = "22222222-2222-2222-2222-222222222222".to_string();
     let team_unit_id = "33333333-3333-3333-3333-333333333333".to_string();
-    let now = chrono::Utc::now().timestamp();
 
     state
         .postgres
@@ -1138,8 +1135,8 @@ async fn user_role_revoke_fails_closed_when_assignment_scope_is_ambiguous() {
             parent_id: None,
             tenant_id: tenant_id.clone(),
             metadata: HashMap::new(),
-            created_at: now,
-            updated_at: now,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: mk_core::types::RecordSource::Admin,
         })
         .await
@@ -1153,8 +1150,8 @@ async fn user_role_revoke_fails_closed_when_assignment_scope_is_ambiguous() {
             parent_id: Some(company_unit_id.clone()),
             tenant_id: tenant_id.clone(),
             metadata: HashMap::new(),
-            created_at: now,
-            updated_at: now,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: mk_core::types::RecordSource::Admin,
         })
         .await
@@ -1168,8 +1165,8 @@ async fn user_role_revoke_fails_closed_when_assignment_scope_is_ambiguous() {
             parent_id: Some(org_unit_id.clone()),
             tenant_id: tenant_id.clone(),
             metadata: HashMap::new(),
-            created_at: now,
-            updated_at: now,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: mk_core::types::RecordSource::Admin,
         })
         .await
