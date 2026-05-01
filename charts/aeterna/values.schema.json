@@ -152,6 +152,17 @@
         }
       }
     },
+    "vault": {
+      "type": "object",
+      "description": "Vault/OpenBao secret resolution configuration",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "address": { "type": "string", "default": "" },
+        "kubernetesAuthPath": { "type": "string", "default": "auth/kubernetes" },
+        "kubernetesAuthRole": { "type": "string", "default": "aeterna" },
+        "aeternaServiceAccount": { "type": "string", "default": "" }
+      }
+    },
     "vectorBackend": {
       "type": "object",
       "description": "Vector backend configuration",

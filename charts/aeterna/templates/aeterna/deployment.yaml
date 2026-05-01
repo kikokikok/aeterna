@@ -272,6 +272,14 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            {{- if .Values.vault.enabled }}
+            - name: VAULT_ADDR
+              value: {{ include "aeterna.vault.address" . | quote }}
+            - name: VAULT_K8S_AUTH_PATH
+              value: {{ .Values.vault.kubernetesAuthPath | quote }}
+            - name: VAULT_K8S_AUTH_ROLE
+              value: {{ .Values.vault.kubernetesAuthRole | quote }}
+            {{- end }}
             {{- if .Values.githubOrgSync.enabled }}
             - name: AETERNA_GITHUB_ORG_NAME
               value: {{ .Values.githubOrgSync.orgName | quote }}

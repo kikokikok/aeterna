@@ -41,6 +41,12 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
+  # Issue TokenRequest JWTs for the Aeterna ServiceAccount when it already exists.
+  - apiGroups: [""]
+    resources: ["serviceaccounts/token"]
+    resourceNames:
+      - {{ .Values.openbao.bootstrap.aeternaServiceAccountName | quote }}
+    verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

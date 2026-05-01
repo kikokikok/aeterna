@@ -48,7 +48,9 @@ The bootstrap Job runs as a Helm post-install/post-upgrade hook and stores
 connection credentials (root_token, kv_path{{ if eq .Values.openbao.mode "internal-shamir" }}, unseal_key{{ end }})
 into the Secret above. Wire the Aeterna chart to it with:
 
-  --set vault.bootstrapSecretName={{ include "prereqs.openbao.bootstrapSecretName" . }}
+  --set vault.enabled=true \
+  --set vault.kubernetesAuthPath={{ .Values.openbao.bootstrap.kubernetesAuthPath }} \
+  --set vault.kubernetesAuthRole={{ .Values.openbao.bootstrap.kubernetesAuthRole }}
 
   {{- if eq .Values.openbao.mode "internal-dev-seal" }}
 

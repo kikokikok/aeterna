@@ -148,6 +148,13 @@ OpenBao bootstrap ServiceAccount name.
 {{- end }}
 
 {{/*
+OpenBao Kubernetes auth subject namespace for the Aeterna workload.
+*/}}
+{{- define "prereqs.openbao.aeternaServiceAccountNamespace" -}}
+{{- .Values.openbao.bootstrap.aeternaServiceAccountNamespace | default .Release.Namespace -}}
+{{- end }}
+
+{{/*
 In-cluster OpenBao address. Upstream chart names its service `<release>-openbao`
 where `<release>` is the *subchart* release — i.e. parent .Release.Name.
 */}}

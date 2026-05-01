@@ -60,10 +60,20 @@ spec:
               value: {{ include "prereqs.openbao.addr" . | quote }}
             - name: KV_PATH
               value: {{ .Values.openbao.bootstrap.kvPath | quote }}
+            - name: KUBERNETES_AUTH_PATH
+              value: {{ .Values.openbao.bootstrap.kubernetesAuthPath | quote }}
+            - name: KUBERNETES_AUTH_ROLE
+              value: {{ .Values.openbao.bootstrap.kubernetesAuthRole | quote }}
+            - name: AETERNA_SERVICE_ACCOUNT_NAME
+              value: {{ .Values.openbao.bootstrap.aeternaServiceAccountName | quote }}
+            - name: AETERNA_SERVICE_ACCOUNT_NAMESPACE
+              value: {{ include "prereqs.openbao.aeternaServiceAccountNamespace" . | quote }}
             - name: SECRET_NAME
               value: {{ include "prereqs.openbao.bootstrapSecretName" . | quote }}
             - name: NAMESPACE
               value: {{ .Release.Namespace | quote }}
+            - name: CHART_VERSION
+              value: {{ .Chart.Version | quote }}
             - name: PATH
               # Prepend /shared so `bao` from the initContainer is on PATH.
               value: "/shared:/opt/bitnami/kubectl/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"

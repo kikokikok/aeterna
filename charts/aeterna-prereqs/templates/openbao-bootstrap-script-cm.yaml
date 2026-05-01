@@ -24,9 +24,24 @@ data:
     : "${MODE:?MODE is required}"
     : "${BAO_ADDR:?BAO_ADDR is required}"
     : "${KV_PATH:?KV_PATH is required}"
+    : "${KUBERNETES_AUTH_PATH:?KUBERNETES_AUTH_PATH is required}"
+    : "${KUBERNETES_AUTH_ROLE:?KUBERNETES_AUTH_ROLE is required}"
+    : "${AETERNA_SERVICE_ACCOUNT_NAME:?AETERNA_SERVICE_ACCOUNT_NAME is required}"
+    : "${AETERNA_SERVICE_ACCOUNT_NAMESPACE:?AETERNA_SERVICE_ACCOUNT_NAMESPACE is required}"
     : "${SECRET_NAME:?SECRET_NAME is required}"
     : "${NAMESPACE:?NAMESPACE is required}"
+    : "${CHART_VERSION:?CHART_VERSION is required}"
     export VAULT_ADDR="$BAO_ADDR"  # bao CLI honours both
+
+    marker_path="${KV_PATH}/aeterna/.bootstrap-marker"
+    auth_mount="${KUBERNETES_AUTH_PATH%/}/"
+    policy_name="aeterna-pod"
+
+    have_cmd() { command -v "$1" >/dev/null 2>&1; }
+    bao_json() { bao "$@" -format=json; }
+    sa_exists() {
+      kubectl -n "$AETERNA_SERVICE_ACCOUNT_NAMESPACE" get serviceaccount "$AETERNA_SERVICE_ACCOUNT_NAME" >/dev/null 2>&1
+    }
 
     # ---------- Wait for OpenBao to respond on /v1/sys/health ----------
     log "Waiting for OpenBao at $BAO_ADDR ..."
@@ -119,16 +134,87 @@ data:
     done
     [ "$code" = "200" ] || die "OpenBao not active after unseal (HTTP $code)"
 
+    export VAULT_TOKEN="$ROOT_TOKEN"
+
     # ---------- Enable kv-v2 at $KV_PATH if not already mounted ----------
     log "ensuring kv-v2 mount at $KV_PATH/"
-    mounts=$(curl -ksS -H "X-Vault-Token: $ROOT_TOKEN" "$BAO_ADDR/v1/sys/mounts")
+    mounts=$(bao_json secrets list)
     if echo "$mounts" | jq -e --arg p "${KV_PATH}/" '.[$p]' >/dev/null 2>&1; then
       log "  $KV_PATH/ already mounted — skipping"
     else
-      curl -ksS -X POST -H "X-Vault-Token: $ROOT_TOKEN" \
-        -d '{"type":"kv","options":{"version":"2"}}' \
-        "$BAO_ADDR/v1/sys/mounts/$KV_PATH" >/dev/null
+      bao secrets enable -path="$KV_PATH" -version=2 kv >/dev/null
       log "  mounted kv-v2 at $KV_PATH/"
+    fi
+
+    # ---------- Enable and configure Kubernetes auth ----------
+    log "ensuring Kubernetes auth at $KUBERNETES_AUTH_PATH/"
+    auths=$(bao_json auth list)
+    if echo "$auths" | jq -e --arg p "$auth_mount" '.[$p]' >/dev/null 2>&1; then
+      log "  $KUBERNETES_AUTH_PATH already enabled — skipping"
+    else
+      bao auth enable -path="$KUBERNETES_AUTH_PATH" kubernetes >/dev/null
+      log "  enabled kubernetes auth at $KUBERNETES_AUTH_PATH/"
+    fi
+
+    log "configuring Kubernetes auth"
+    bao write "$KUBERNETES_AUTH_PATH/config" \
+      kubernetes_host="https://kubernetes.default.svc" \
+      kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
+      token_reviewer_jwt=@/var/run/secrets/kubernetes.io/serviceaccount/token >/dev/null
+
+    # ---------- Policy + role for Aeterna ----------
+    log "ensuring policy $policy_name"
+    policy_file="$(mktemp)"
+    cat > "$policy_file" <<EOF
+    path "${KV_PATH}/data/aeterna/*" {
+      capabilities = ["read"]
+    }
+    path "${KV_PATH}/metadata/aeterna/*" {
+      capabilities = ["read", "list"]
+    }
+    EOF
+    bao policy write "$policy_name" "$policy_file" >/dev/null
+    rm -f "$policy_file"
+
+    log "ensuring Kubernetes auth role $KUBERNETES_AUTH_ROLE"
+    bao write "$KUBERNETES_AUTH_PATH/role/$KUBERNETES_AUTH_ROLE" \
+      bound_service_account_names="$AETERNA_SERVICE_ACCOUNT_NAME" \
+      bound_service_account_namespaces="$AETERNA_SERVICE_ACCOUNT_NAMESPACE" \
+      policies="$policy_name" \
+      ttl="1h" >/dev/null
+
+    # ---------- Marker secret for startup self-test ----------
+    log "ensuring marker secret at $marker_path"
+    existing_marker=""
+    if bao kv get "$marker_path" >/dev/null 2>&1; then
+      existing_marker="$(bao kv get "$marker_path" -format=json | jq -r '.data.data.chart_version // empty')"
+    fi
+    if [ "$existing_marker" = "$CHART_VERSION" ]; then
+      log "  marker already at chart_version=$CHART_VERSION — skipping"
+    else
+      timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      bao kv put "$marker_path" chart_version="$CHART_VERSION" timestamp="$timestamp" >/dev/null
+      log "  marker updated to chart_version=$CHART_VERSION"
+    fi
+
+    # ---------- Best-effort auth verification ----------
+    if sa_exists; then
+      log "verifying Kubernetes auth using serviceaccount $AETERNA_SERVICE_ACCOUNT_NAMESPACE/$AETERNA_SERVICE_ACCOUNT_NAME"
+      sa_jwt="$(kubectl -n "$AETERNA_SERVICE_ACCOUNT_NAMESPACE" create token "$AETERNA_SERVICE_ACCOUNT_NAME" --duration=10m)"
+      login_out="$(curl -ksS -X POST \
+        -H 'Content-Type: application/json' \
+        -d "{\"role\":\"$KUBERNETES_AUTH_ROLE\",\"jwt\":\"$sa_jwt\"}" \
+        "$BAO_ADDR/v1/${KUBERNETES_AUTH_PATH}/login")"
+      client_token="$(echo "$login_out" | jq -r '.auth.client_token // empty')"
+      if [ -z "$client_token" ]; then
+        die "kubernetes auth verification failed for role=$KUBERNETES_AUTH_ROLE"
+      fi
+      role_policies="$(echo "$login_out" | jq -r '.auth.policies[]?' | sort | tr '\n' ' ')"
+      echo "$role_policies" | grep -q 'aeterna-pod' || die "kubernetes auth verification token missing aeterna-pod policy"
+      unset sa_jwt client_token role_policies login_out
+      log "  kubernetes auth verified"
+    else
+      log "Aeterna serviceaccount $AETERNA_SERVICE_ACCOUNT_NAMESPACE/$AETERNA_SERVICE_ACCOUNT_NAME not found yet — skipping auth verification"
     fi
 
     # ---------- Persist credentials into Secret ----------

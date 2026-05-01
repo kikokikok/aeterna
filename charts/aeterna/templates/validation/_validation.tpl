@@ -123,6 +123,17 @@ Validate Okta-backed auth boundary configuration.
 {{- end -}}
 
 {{/*
+Validate Vault/OpenBao secret-resolution configuration.
+*/}}
+{{- define "aeterna.validate.vault" -}}
+{{- if .Values.vault.enabled -}}
+  {{- if not .Values.aeterna.serviceAccount.automount -}}
+{{- fail "Invalid configuration: vault.enabled requires aeterna.serviceAccount.automount=true so the workload can use Kubernetes auth with Vault/OpenBao." -}}
+  {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Run all validations. Include this once in a rendered resource.
 */}}
 {{- define "aeterna.validate.all" -}}
@@ -133,4 +144,5 @@ Run all validations. Include this once in a rendered resource.
 {{- include "aeterna.validate.codesearch" . -}}
 {{- include "aeterna.validate.secrets" . -}}
 {{- include "aeterna.validate.okta" . -}}
+{{- include "aeterna.validate.vault" . -}}
 {{- end -}}

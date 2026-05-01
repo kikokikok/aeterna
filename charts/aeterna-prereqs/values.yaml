@@ -209,6 +209,14 @@ openbao:
     secretName: ""
     ## KV-v2 mount path to enable post-init.
     kvPath: "secret"
+    ## Kubernetes auth path configured for the Aeterna workload.
+    kubernetesAuthPath: "auth/kubernetes"
+    ## Kubernetes auth role bound to the Aeterna ServiceAccount.
+    kubernetesAuthRole: "aeterna"
+    ## ServiceAccount name expected to authenticate from the Aeterna chart.
+    aeternaServiceAccountName: "aeterna"
+    ## Namespace of the Aeterna ServiceAccount. Empty = this release namespace.
+    aeternaServiceAccountNamespace: ""
     ## Helm hook weight + delete-policy. Default: hook on post-install,post-upgrade.
     hookWeight: 5
     ## ServiceAccount + RBAC scope (namespace-local).

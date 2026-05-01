@@ -166,6 +166,23 @@ cnpg:
   enabled: false
 ```
 
+## Vault / OpenBao Secret Resolution
+
+When you deploy OpenBao via the `aeterna-prereqs` chart, enable Vault wiring in
+the main chart so `SecretReference::Vault` values resolve from the application:
+
+```yaml
+vault:
+  enabled: true
+  # Empty = assume the sibling prereqs chart service name
+  address: ""
+  kubernetesAuthPath: "auth/kubernetes"
+  kubernetesAuthRole: "aeterna"
+```
+
+If `vault.address` is left blank, the chart assumes OpenBao is reachable at
+`http://<release>-prereqs-openbao:8200`.
+
 ## LLM Provider Configuration
 
 ```yaml
