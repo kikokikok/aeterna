@@ -576,12 +576,12 @@ async fn vault_marker_self_test(registry: &TenantProviderRegistry) {
         .expect("hard-coded zero uuid is a valid TenantId");
     let chart_version_ref = SecretReference::Vault {
         mount: "secret".to_string(),
-        path: "aeterna/.bootstrap-marker".to_string(),
+        path: "global/aeterna/.bootstrap-marker".to_string(),
         field: "chart_version".to_string(),
     };
     let timestamp_ref = SecretReference::Vault {
         mount: "secret".to_string(),
-        path: "aeterna/.bootstrap-marker".to_string(),
+        path: "global/aeterna/.bootstrap-marker".to_string(),
         field: "timestamp".to_string(),
     };
 

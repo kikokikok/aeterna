@@ -209,6 +209,12 @@ openbao:
     secretName: ""
     ## KV-v2 mount path to enable post-init.
     kvPath: "secret"
+    ## Global/shared secret prefix under the KV-v2 mount.
+    ## Example: secret/global/github/app
+    globalSecretsPathPrefix: "global"
+    ## Tenant-scoped secret prefix under the KV-v2 mount.
+    ## Example: secret/tenants/<tenant-id>/llm/openai
+    tenantSecretsPathPrefix: "tenants"
     ## Kubernetes auth path configured for the Aeterna workload.
     kubernetesAuthPath: "auth/kubernetes"
     ## Kubernetes auth role bound to the Aeterna ServiceAccount.

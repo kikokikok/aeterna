@@ -10,6 +10,14 @@
 //!   `VAULT_K8S_AUTH_ROLE` plus the pod's projected service-account JWT to
 //!   log in at `VAULT_K8S_AUTH_PATH` (default: `auth/kubernetes`).
 //!
+//! Path conventions:
+//!
+//! * Global/shared secrets can live under a stable path such as
+//!   `global/<domain>/<name>`.
+//! * Tenant-scoped secrets can use `tenants/{tenant_id}/...`; the resolver
+//!   substitutes `{tenant_id}` (and the aliases `{tenant}` / `{tenantId}`)
+//!   from the current [`TenantId`] before issuing the KV read.
+//!
 //! Security notes:
 //!
 //! * Secret values and tokens are carried as [`mk_core::SecretBytes`] and
@@ -293,6 +301,13 @@ impl VaultRefResolver {
             field.as_str(),
         ))
     }
+
+    fn expand_path(path: &str, tenant: &TenantId) -> String {
+        let tenant_id = tenant.as_str();
+        path.replace("{tenant_id}", tenant_id)
+            .replace("{tenantId}", tenant_id)
+            .replace("{tenant}", tenant_id)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -331,6 +346,7 @@ impl SecretRefResolver for VaultRefResolver {
                 kind: "vault",
                 reason: "Vault token is not valid UTF-8".to_string(),
             })?;
+        let path = Self::expand_path(path, tenant);
         let url = format!("{}/v1/{}/data/{}", config.address, mount, path);
 
         let response = self
@@ -514,6 +530,43 @@ mod tests {
         let second = resolver.resolve(&tid(), &vault_ref()).await.unwrap();
         assert_eq!(first.expose(), b"hunter2");
         assert_eq!(second.expose(), b"hunter2");
+
+        clear_vault_env();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn expands_tenant_placeholders_in_secret_path() {
+        let _guard = ENV_LOCK.lock().await;
+        clear_vault_env();
+
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/secret/data/tenants/11111111-1111-1111-1111-111111111111/llm/openai"))
+            .and(header("x-vault-token", "root-token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": { "data": { "api_key": "tenant-token" } }
+            })))
+            .mount(&server)
+            .await;
+
+        unsafe {
+            std::env::set_var("VAULT_ADDR", server.uri());
+            std::env::set_var("VAULT_TOKEN", "root-token");
+        }
+
+        let resolver = VaultRefResolver::new();
+        let out = resolver
+            .resolve(
+                &tid(),
+                &SecretReference::Vault {
+                    mount: "secret".to_string(),
+                    path: "tenants/{tenant_id}/llm/openai".to_string(),
+                    field: "api_key".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.expose(), b"tenant-token");
 
         clear_vault_env();
     }

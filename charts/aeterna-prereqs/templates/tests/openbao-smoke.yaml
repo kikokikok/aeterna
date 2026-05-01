@@ -47,7 +47,7 @@ spec:
           bash /scripts/bootstrap.sh
           export VAULT_ADDR="$BAO_ADDR"
           export VAULT_TOKEN="$(kubectl -n "$NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.root_token}' | base64 -d)"
-          test "$(bao kv get "${KV_PATH}/aeterna/.bootstrap-marker" -format=json | jq -r '.data.data.chart_version')" = "$CHART_VERSION"
+          test "$(bao kv get "${KV_PATH}/${GLOBAL_SECRETS_PREFIX}/aeterna/.bootstrap-marker" -format=json | jq -r '.data.data.chart_version')" = "$CHART_VERSION"
       env:
         - name: MODE
           value: {{ .Values.openbao.mode | quote }}
@@ -55,6 +55,10 @@ spec:
           value: {{ include "prereqs.openbao.addr" . | quote }}
         - name: KV_PATH
           value: {{ .Values.openbao.bootstrap.kvPath | quote }}
+        - name: GLOBAL_SECRETS_PREFIX
+          value: {{ .Values.openbao.bootstrap.globalSecretsPathPrefix | quote }}
+        - name: TENANT_SECRETS_PREFIX
+          value: {{ .Values.openbao.bootstrap.tenantSecretsPathPrefix | quote }}
         - name: KUBERNETES_AUTH_PATH
           value: {{ .Values.openbao.bootstrap.kubernetesAuthPath | quote }}
         - name: KUBERNETES_AUTH_ROLE

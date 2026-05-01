@@ -72,6 +72,44 @@ For tenant-scoped repository bindings and shared Git provider connections, publi
 - shared Git provider connections store `pemSecretRef` / `webhookSecretRef`, never raw PEM or webhook values
 - tenant config stores logical secret references only
 
+### Vault / OpenBao Multi-Tenant Layout
+
+When using `SecretReference::Vault`, prefer a fixed two-tree layout inside the
+KV-v2 mount:
+
+- global/shared secrets: `secret/global/<domain>/<name>`
+- tenant secrets: `secret/tenants/<tenant-id>/<domain>/<name>`
+
+Examples:
+
+```json
+{
+  "kind": "vault",
+  "mount": "secret",
+  "path": "global/github/app",
+  "field": "private_key"
+}
+```
+
+```json
+{
+  "kind": "vault",
+  "mount": "secret",
+  "path": "tenants/{tenant_id}/llm/openai",
+  "field": "api_key"
+}
+```
+
+`{tenant_id}` is expanded by the server when the secret is resolved for a
+tenant. This keeps shared secrets explicit and tenant-scoped secrets uniform.
+
+:::warning
+With a single shared Aeterna deployment, Vault/OpenBao still authenticates the
+server pod via one Kubernetes service account. The `global/` and `tenants/`
+layout gives you clean organization and app-level tenant separation, but not
+hard per-tenant Vault auth boundaries by itself.
+:::
+
 Supported reference shapes include:
 
 - `local/<name>`

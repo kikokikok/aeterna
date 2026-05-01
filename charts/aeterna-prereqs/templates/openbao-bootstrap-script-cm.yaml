@@ -24,6 +24,8 @@ data:
     : "${MODE:?MODE is required}"
     : "${BAO_ADDR:?BAO_ADDR is required}"
     : "${KV_PATH:?KV_PATH is required}"
+    : "${GLOBAL_SECRETS_PREFIX:?GLOBAL_SECRETS_PREFIX is required}"
+    : "${TENANT_SECRETS_PREFIX:?TENANT_SECRETS_PREFIX is required}"
     : "${KUBERNETES_AUTH_PATH:?KUBERNETES_AUTH_PATH is required}"
     : "${KUBERNETES_AUTH_ROLE:?KUBERNETES_AUTH_ROLE is required}"
     : "${AETERNA_SERVICE_ACCOUNT_NAME:?AETERNA_SERVICE_ACCOUNT_NAME is required}"
@@ -33,7 +35,14 @@ data:
     : "${CHART_VERSION:?CHART_VERSION is required}"
     export VAULT_ADDR="$BAO_ADDR"  # bao CLI honours both
 
-    marker_path="${KV_PATH}/aeterna/.bootstrap-marker"
+    global_prefix="${GLOBAL_SECRETS_PREFIX#/}"
+    global_prefix="${global_prefix%/}"
+    tenant_prefix="${TENANT_SECRETS_PREFIX#/}"
+    tenant_prefix="${tenant_prefix%/}"
+    [ -n "$global_prefix" ] || die "GLOBAL_SECRETS_PREFIX must not normalize to empty"
+    [ -n "$tenant_prefix" ] || die "TENANT_SECRETS_PREFIX must not normalize to empty"
+
+    marker_path="${KV_PATH}/${global_prefix}/aeterna/.bootstrap-marker"
     auth_mount="${KUBERNETES_AUTH_PATH%/}/"
     policy_name="aeterna-pod"
 
@@ -166,10 +175,16 @@ data:
     log "ensuring policy $policy_name"
     policy_file="$(mktemp)"
     cat > "$policy_file" <<EOF
-    path "${KV_PATH}/data/aeterna/*" {
+    path "${KV_PATH}/data/${global_prefix}/*" {
       capabilities = ["read"]
     }
-    path "${KV_PATH}/metadata/aeterna/*" {
+    path "${KV_PATH}/metadata/${global_prefix}/*" {
+      capabilities = ["read", "list"]
+    }
+    path "${KV_PATH}/data/${tenant_prefix}/*" {
+      capabilities = ["read"]
+    }
+    path "${KV_PATH}/metadata/${tenant_prefix}/*" {
       capabilities = ["read", "list"]
     }
     EOF

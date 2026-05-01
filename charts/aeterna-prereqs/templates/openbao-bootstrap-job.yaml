@@ -60,6 +60,10 @@ spec:
               value: {{ include "prereqs.openbao.addr" . | quote }}
             - name: KV_PATH
               value: {{ .Values.openbao.bootstrap.kvPath | quote }}
+            - name: GLOBAL_SECRETS_PREFIX
+              value: {{ .Values.openbao.bootstrap.globalSecretsPathPrefix | quote }}
+            - name: TENANT_SECRETS_PREFIX
+              value: {{ .Values.openbao.bootstrap.tenantSecretsPathPrefix | quote }}
             - name: KUBERNETES_AUTH_PATH
               value: {{ .Values.openbao.bootstrap.kubernetesAuthPath | quote }}
             - name: KUBERNETES_AUTH_ROLE
