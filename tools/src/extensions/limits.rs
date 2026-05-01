@@ -160,7 +160,7 @@ impl ExtensionStateLimiter {
         let mut evicted: Vec<String> = Vec::new();
 
         if total_size + incoming_bytes > self.tenant_total_limit_bytes {
-            entries.sort_by(|a, b| b.last_access_at.cmp(&a.last_access_at));
+            entries.sort_by_key(|e| std::cmp::Reverse(e.last_access_at));
 
             let mut current_total = total_size;
             for entry in entries {

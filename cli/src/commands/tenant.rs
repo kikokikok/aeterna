@@ -2612,10 +2612,7 @@ impl SseParser {
         // (but not including) the next `\n`; `\r\n` is normalised by
         // trimming trailing `\r`. Anything after the last `\n` stays
         // in `buf` for the next call.
-        loop {
-            let Some(nl) = self.buf.find('\n') else {
-                break;
-            };
+        while let Some(nl) = self.buf.find('\n') {
             // `drain(..=nl)` removes the newline too; strip the `\r`
             // before measuring length so CRLF survives untouched.
             let line: String = {

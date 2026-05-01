@@ -161,7 +161,7 @@ impl ExtensionRegistry {
 
     pub fn list_ordered(&self) -> Vec<ExtensionRegistration> {
         let mut extensions: Vec<_> = self.extensions.values().cloned().collect();
-        extensions.sort_by(|a, b| b.priority.cmp(&a.priority));
+        extensions.sort_by_key(|e| std::cmp::Reverse(e.priority));
         extensions
     }
 
