@@ -39,8 +39,8 @@ data:
     global_prefix="${global_prefix%/}"
     tenant_prefix="${TENANT_SECRETS_PREFIX#/}"
     tenant_prefix="${tenant_prefix%/}"
-    [ -n "$global_prefix" ] || die "GLOBAL_SECRETS_PREFIX must not normalize to empty"
-    [ -n "$tenant_prefix" ] || die "TENANT_SECRETS_PREFIX must not normalize to empty"
+    [ -n "$global_prefix" ] || die "GLOBAL_SECRETS_PREFIX cannot be empty or contain only slashes"
+    [ -n "$tenant_prefix" ] || die "TENANT_SECRETS_PREFIX cannot be empty or contain only slashes"
 
     marker_path="${KV_PATH}/${global_prefix}/aeterna/.bootstrap-marker"
     auth_mount="${KUBERNETES_AUTH_PATH%/}/"
@@ -175,6 +175,10 @@ data:
     log "ensuring policy $policy_name"
     policy_file="$(mktemp)"
     cat > "$policy_file" <<EOF
+    # Warning: this role is for a shared multi-tenant Aeterna workload.
+    # It can read both the global tree and any tenant tree beneath the
+    # configured prefixes. Hard per-tenant Vault/OpenBao isolation requires
+    # distinct workloads/auth roles per tenant, not a single shared role.
     path "${KV_PATH}/data/${global_prefix}/*" {
       capabilities = ["read"]
     }

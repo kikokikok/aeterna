@@ -574,6 +574,47 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn expands_all_supported_tenant_placeholder_aliases() {
+        let _guard = ENV_LOCK.lock().await;
+        clear_vault_env();
+
+        let server = MockServer::start().await;
+        for suffix in ["{tenant_id}", "{tenantId}", "{tenant}"] {
+            Mock::given(method("GET"))
+                .and(path(
+                    "/v1/secret/data/tenants/11111111-1111-1111-1111-111111111111/shared/key",
+                ))
+                .and(header("x-vault-token", "root-token"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                    "data": { "data": { "value": "ok" } }
+                })))
+                .up_to_n_times(1)
+                .mount(&server)
+                .await;
+
+            unsafe {
+                std::env::set_var("VAULT_ADDR", server.uri());
+                std::env::set_var("VAULT_TOKEN", "root-token");
+            }
+
+            let resolver = VaultRefResolver::new();
+            let out = resolver
+                .resolve(
+                    &tid(),
+                    &SecretReference::Vault {
+                        mount: "secret".to_string(),
+                        path: format!("tenants/{suffix}/shared/key"),
+                        field: "value".to_string(),
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(out.expose(), b"ok");
+            clear_vault_env();
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn missing_field_is_not_found() {
         let _guard = ENV_LOCK.lock().await;
         clear_vault_env();
