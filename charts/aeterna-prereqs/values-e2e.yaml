@@ -1,0 +1,41 @@
+# values-e2e.yaml — prereqs overlay for the Aeterna e2e suite.
+#
+# Used by `aeterna-e2e` (PR #169). Activates OpenBao in dev-seal mode for
+# ephemeral KinD/k3d clusters. Data is in-memory and root token is well-known.
+# DO NOT use this overlay against any cluster carrying real data.
+#
+# Usage (from .github/workflows/e2e-conformance.yaml):
+#   helm install aeterna-prereqs ./charts/aeterna-prereqs \
+#     -n aeterna --create-namespace \
+#     -f ./charts/aeterna-prereqs/values-e2e.yaml
+
+openbao:
+  enabled: true
+  mode: internal-dev-seal
+  bootstrap:
+    enabled: true
+    kvPath: "secret"
+  server:
+    dev:
+      enabled: true
+      devRootToken: "root"
+    # Keep resources tiny for CI runners.
+    resources:
+      limits:
+        cpu: 200m
+        memory: 128Mi
+      requests:
+        cpu: 25m
+        memory: 64Mi
+
+# Slim down sibling components for CI as well.
+postgresql:
+  enabled: true
+
+cache:
+  dragonfly:
+    enabled: true
+
+vectorStore:
+  qdrant:
+    enabled: true

@@ -357,6 +357,24 @@ k8sAuth:
   # Format: "system:serviceaccount:<namespace>:<name>"
   syncSaSubject: ""
 
+## Vault / OpenBao secret-resolution configuration.
+## When enabled, the Aeterna server resolves `SecretReference::Vault`
+## values against the configured Vault-compatible endpoint using
+## Kubernetes auth from its ServiceAccount token.
+vault:
+  ## Enable Vault/OpenBao runtime wiring in the Aeterna deployment.
+  enabled: false
+  ## Explicit Vault/OpenBao address. Empty = assume the prereqs chart
+  ## was installed alongside this chart as `<release>-prereqs-openbao`.
+  address: ""
+  ## Kubernetes auth mount path configured in Vault/OpenBao.
+  kubernetesAuthPath: "auth/kubernetes"
+  ## Kubernetes auth role for the Aeterna workload.
+  kubernetesAuthRole: "aeterna"
+  ## Override the ServiceAccount name expected by the prereqs bootstrap role.
+  ## Empty = use the chart's own ServiceAccount name.
+  aeternaServiceAccount: ""
+
 tenantConfigProvider:
   enabled: true
   seedTenants: []

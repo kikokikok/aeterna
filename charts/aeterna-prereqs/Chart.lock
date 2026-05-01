@@ -1,0 +1,15 @@
+dependencies:
+- name: dragonfly
+  repository: oci://ghcr.io/dragonflydb/dragonfly/helm
+  version: v1.37.0
+- name: qdrant
+  repository: https://qdrant.github.io/qdrant-helm
+  version: 0.10.1
+- name: valkey
+  repository: https://valkey.io/valkey-helm/
+  version: 0.9.4
+- name: openbao
+  repository: https://openbao.github.io/openbao-helm
+  version: 0.27.2
+digest: sha256:3e21a7d984b9b499947c5f2dd9ea9d757515fdfaab954d3e73c81219a7dc62e8
+generated: "2026-04-27T09:53:10.499946+02:00"

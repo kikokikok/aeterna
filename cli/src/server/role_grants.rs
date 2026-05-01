@@ -445,6 +445,8 @@ mod tests {
 
     #[test]
     fn test_resource_type_serialization() {
+        // Note: ResourceType deliberately uses #[serde(rename_all = "lowercase")] —
+        // a separate convention from the workspace-wide PascalCase enum default.
         let serialized = serde_json::to_string(&ResourceType::Organization).unwrap();
         assert_eq!(serialized, "\"organization\"");
 

@@ -373,7 +373,6 @@ async fn test_app_state() -> Option<(Arc<AppState>, TempDir)> {
 
 async fn seed_company_unit(state: &Arc<AppState>, tenant_id: &TenantId) -> String {
     let unit_id = uuid::Uuid::new_v4().to_string();
-    let now = chrono::Utc::now().timestamp();
     state
         .postgres
         .create_unit(&mk_core::types::OrganizationalUnit {
@@ -383,8 +382,8 @@ async fn seed_company_unit(state: &Arc<AppState>, tenant_id: &TenantId) -> Strin
             parent_id: None,
             tenant_id: tenant_id.clone(),
             metadata: HashMap::new(),
-            created_at: now,
-            updated_at: now,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: mk_core::types::RecordSource::Admin,
         })
         .await
@@ -401,7 +400,6 @@ async fn seed_unit_of_type(
     name: &str,
 ) -> String {
     let unit_id = uuid::Uuid::new_v4().to_string();
-    let now = chrono::Utc::now().timestamp();
     state
         .postgres
         .create_unit(&mk_core::types::OrganizationalUnit {
@@ -411,8 +409,8 @@ async fn seed_unit_of_type(
             parent_id: None,
             tenant_id: tenant_id.clone(),
             metadata: HashMap::new(),
-            created_at: now,
-            updated_at: now,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: mk_core::types::RecordSource::Admin,
         })
         .await
@@ -1127,7 +1125,6 @@ async fn user_role_revoke_fails_closed_when_assignment_scope_is_ambiguous() {
     let company_unit_id = "11111111-1111-1111-1111-111111111111".to_string();
     let org_unit_id = "22222222-2222-2222-2222-222222222222".to_string();
     let team_unit_id = "33333333-3333-3333-3333-333333333333".to_string();
-    let now = chrono::Utc::now().timestamp();
 
     state
         .postgres
@@ -1138,8 +1135,8 @@ async fn user_role_revoke_fails_closed_when_assignment_scope_is_ambiguous() {
             parent_id: None,
             tenant_id: tenant_id.clone(),
             metadata: HashMap::new(),
-            created_at: now,
-            updated_at: now,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: mk_core::types::RecordSource::Admin,
         })
         .await
@@ -1153,8 +1150,8 @@ async fn user_role_revoke_fails_closed_when_assignment_scope_is_ambiguous() {
             parent_id: Some(company_unit_id.clone()),
             tenant_id: tenant_id.clone(),
             metadata: HashMap::new(),
-            created_at: now,
-            updated_at: now,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: mk_core::types::RecordSource::Admin,
         })
         .await
@@ -1168,8 +1165,8 @@ async fn user_role_revoke_fails_closed_when_assignment_scope_is_ambiguous() {
             parent_id: Some(org_unit_id.clone()),
             tenant_id: tenant_id.clone(),
             metadata: HashMap::new(),
-            created_at: now,
-            updated_at: now,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: mk_core::types::RecordSource::Admin,
         })
         .await
@@ -1275,7 +1272,7 @@ async fn tenant_admin_hierarchy_role_crud_via_rest_api() {
                 .body(Body::from(
                     serde_json::to_vec(&json!({
                         "user_id": "tenant-member",
-                        "role": "developer"
+                        "role": "Developer"
                     }))
                     .unwrap(),
                 ))
@@ -1429,7 +1426,7 @@ async fn tenant_admin_hierarchy_rejects_platform_admin_role_assignment() {
                 .body(Body::from(
                     serde_json::to_vec(&json!({
                         "user_id": "tenant-member",
-                        "role": "platformAdmin"
+                        "role": "PlatformAdmin"
                     }))
                     .unwrap(),
                 ))
@@ -1472,7 +1469,7 @@ async fn govern_roles_assign_and_revoke_via_rest_api() {
                     serde_json::to_vec(&json!({
                         "principal": principal,
                         "principalType": "user",
-                        "role": "architect",
+                        "role": "Architect",
                         "scope": "company"
                     }))
                     .unwrap(),
@@ -2001,7 +1998,7 @@ async fn git_provider_connection_lifecycle_and_binding_visibility_work() {
                         "kind": "github",
                         "remoteUrl": "https://github.com/acme/knowledge.git",
                         "branch": "main",
-                        "branchPolicy": "requirePullRequest",
+                        "branchPolicy": "RequirePullRequest",
                         "credentialKind": "githubApp",
                         "credentialRef": null,
                         "githubOwner": "acme",
@@ -2077,7 +2074,7 @@ async fn git_provider_connection_lifecycle_and_binding_visibility_work() {
                         "kind": "github",
                         "remoteUrl": "https://github.com/acme/knowledge.git",
                         "branch": "main",
-                        "branchPolicy": "requirePullRequest",
+                        "branchPolicy": "RequirePullRequest",
                         "credentialKind": "githubApp",
                         "credentialRef": null,
                         "githubOwner": "acme",
@@ -2358,7 +2355,7 @@ async fn hierarchy_update_ancestors_descendants_memberships() {
                 .body(Body::from(
                     serde_json::to_vec(&json!({
                         "name": "Engineering Org",
-                        "unitType": "organization",
+                        "unitType": "Organization",
                         "parentId": company_id,
                     }))
                     .unwrap(),
@@ -2498,7 +2495,7 @@ async fn hierarchy_update_ancestors_descendants_memberships() {
                 .header("x-tenant-id", "default")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    serde_json::to_vec(&json!({ "userId": "alice", "role": "developer" })).unwrap(),
+                    serde_json::to_vec(&json!({ "userId": "alice", "role": "Developer" })).unwrap(),
                 ))
                 .unwrap(),
         )
@@ -2732,7 +2729,7 @@ async fn org_crud_and_member_lifecycle() {
                 .header("x-tenant-id", "default")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    serde_json::to_vec(&json!({ "userId": "alice", "role": "developer" })).unwrap(),
+                    serde_json::to_vec(&json!({ "userId": "alice", "role": "Developer" })).unwrap(),
                 ))
                 .unwrap(),
         )
@@ -3008,7 +3005,7 @@ async fn team_crud_and_member_lifecycle() {
                 .header("x-tenant-id", "default")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    serde_json::to_vec(&json!({ "userId": "bob", "role": "developer" })).unwrap(),
+                    serde_json::to_vec(&json!({ "userId": "bob", "role": "Developer" })).unwrap(),
                 ))
                 .unwrap(),
         )
@@ -3160,7 +3157,7 @@ async fn user_roles_grant_revoke_and_unsupported_schema() {
                 .header("x-tenant-id", "default")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    serde_json::to_vec(&json!({ "role": "developer", "scope": "company" }))
+                    serde_json::to_vec(&json!({ "role": "Developer", "scope": "company" }))
                         .unwrap(),
                 ))
                 .unwrap(),

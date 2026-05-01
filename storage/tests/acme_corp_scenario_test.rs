@@ -91,7 +91,7 @@ impl AcmeCorpHierarchy {
     }
 
     async fn setup(&self, storage: &PostgresBackend) -> Result<(), anyhow::Error> {
-        let now = Utc::now().timestamp();
+        let now = Utc::now();
 
         let company = OrganizationalUnit {
             id: self.company_id.to_string(),

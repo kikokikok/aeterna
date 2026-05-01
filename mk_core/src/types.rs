@@ -27,7 +27,6 @@ pub const PROVIDER_KUBERNETES: &str = "kubernetes";
     EnumString,
     Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum Role {
     Viewer,
@@ -48,7 +47,6 @@ pub enum Role {
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 #[derive(Default)]
 pub enum TenantStatus {
@@ -61,7 +59,6 @@ pub enum TenantStatus {
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 #[derive(Default)]
 pub enum RecordSource {
@@ -74,7 +71,6 @@ pub enum RecordSource {
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum RepositoryKind {
     Local,
@@ -86,7 +82,6 @@ pub enum RepositoryKind {
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum BranchPolicy {
     DirectCommit,
@@ -97,7 +92,6 @@ pub enum BranchPolicy {
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum CredentialKind {
     None,
@@ -107,6 +101,11 @@ pub enum CredentialKind {
 }
 
 /// Canonical tenant record as persisted in the database.
+///
+/// Timestamps are RFC 3339 / ISO 8601 strings on the wire (e.g.
+/// `"2026-04-30T15:34:00Z"`) so frontend `new Date(...)` parses them
+/// correctly. Historically these were `i64` epoch *seconds* which
+/// browsers misinterpreted as JS milliseconds → 1970 dates.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TenantRecord {
@@ -115,9 +114,21 @@ pub struct TenantRecord {
     pub name: String,
     pub status: TenantStatus,
     pub source_owner: RecordSource,
-    pub created_at: i64,
-    pub updated_at: i64,
-    pub deactivated_at: Option<i64>,
+    /// Optional human-readable name of the corporate legal entity that owns
+    /// this tenant (e.g. `"Acme Holding"`). Pure metadata in v1.5.x \u2014 no
+    /// auth, no RLS, no FK \u2014 surfaced so sales/ops can record customer
+    /// hierarchy today. Promoted to a FK against a first-class
+    /// `legal_entities` table when the
+    /// `add-legal-entity-tenant-grouping` proposal lands.
+    #[schema(example = "Acme Holding")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legal_entity_name: Option<String>,
+    #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    #[schema(value_type = Option<String>, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub deactivated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Canonical per-tenant repository binding record.
@@ -140,8 +151,10 @@ pub struct TenantRepositoryBinding {
     /// connection by ID instead of parsing `credential_ref` directly.
     /// Tenant visibility is enforced at resolution time.
     pub git_provider_connection_id: Option<String>,
-    pub created_at: i64,
-    pub updated_at: i64,
+    #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl TenantRepositoryBinding {
@@ -223,14 +236,14 @@ impl TenantRepositoryBinding {
                 let parts: Vec<&str> = credential_ref.splitn(3, ':').collect();
                 if parts.len() != 3 || parts[0].is_empty() || parts[1].is_empty() {
                     return Err(
-                        "credential_ref must use app_id:installation_id:pem_ref format for credential_kind=githubApp"
+                        "credential_ref must use app_id:installation_id:pem_ref format for credential_kind=GitHubApp"
                             .to_string(),
                     );
                 }
 
                 if !Self::is_secret_reference(parts[2]) {
                     return Err(
-                        "credential_ref pem_ref must be a supported secret reference (local/, secret/, arn:aws:) for credential_kind=githubApp"
+                        "credential_ref pem_ref must be a supported secret reference (local/, secret/, arn:aws:) for credential_kind=GitHubApp"
                             .to_string(),
                     );
                 }
@@ -244,7 +257,6 @@ impl TenantRepositoryBinding {
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum TenantConfigOwnership {
     Platform,
@@ -332,7 +344,6 @@ fn contains_raw_secret_material(field_name: &str, value: &serde_json::Value) -> 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(serialize_all = "camelCase")]
 pub enum UnitType {
     Company,
@@ -350,8 +361,10 @@ pub struct OrganizationalUnit {
     pub parent_id: Option<String>,
     pub tenant_id: TenantId,
     pub metadata: std::collections::HashMap<String, serde_json::Value>,
-    pub created_at: i64,
-    pub updated_at: i64,
+    #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub updated_at: chrono::DateTime<chrono::Utc>,
     pub source_owner: RecordSource,
 }
 
@@ -739,7 +752,6 @@ impl Role {
 
 /// Knowledge types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
 pub enum KnowledgeType {
     Adr,
     Policy,
@@ -750,7 +762,6 @@ pub enum KnowledgeType {
 
 /// Knowledge status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
 pub enum KnowledgeStatus {
     Draft,
     Proposed,
@@ -775,7 +786,6 @@ pub enum KnowledgeStatus {
     EnumString,
     Default,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum KnowledgeVariantRole {
     #[default]
@@ -818,7 +828,6 @@ impl KnowledgeVariantRole {
     Display,
     EnumString,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum KnowledgeRelationType {
     PromotedFrom,
@@ -861,7 +870,6 @@ pub struct KnowledgeRelation {
     EnumString,
     Default,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum PromotionMode {
     Full,
@@ -884,7 +892,6 @@ pub enum PromotionMode {
     EnumString,
     Default,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum PromotionRequestStatus {
     Draft,
@@ -910,7 +917,6 @@ pub enum PromotionRequestStatus {
     Display,
     EnumString,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum PromotionDecision {
     ApproveAsReplacement,
@@ -963,7 +969,6 @@ pub struct PromotionRequest {
     Ord,
     JsonSchema,
 )]
-#[serde(rename_all = "camelCase")]
 pub enum KnowledgeLayer {
     Company,
     Org,
@@ -1028,7 +1033,6 @@ impl From<MemoryLayer> for Option<KnowledgeLayer> {
     strum::Display,
     strum::EnumString,
 )]
-#[serde(rename_all = "camelCase")]
 pub enum ConstraintSeverity {
     Info,
     Warn,
@@ -1037,7 +1041,6 @@ pub enum ConstraintSeverity {
 
 /// Constraint operators
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
 pub enum ConstraintOperator {
     MustUse,
     MustNotUse,
@@ -1049,7 +1052,6 @@ pub enum ConstraintOperator {
 
 /// Constraint targets
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
 pub enum ConstraintTarget {
     File,
     Code,
@@ -1073,7 +1075,6 @@ pub enum ConstraintTarget {
     strum::Display,
     ToSchema,
 )]
-#[serde(rename_all = "camelCase")]
 pub enum MemoryLayer {
     Agent,
     User,
@@ -1134,7 +1135,6 @@ pub struct LayerIdentifiers {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
 pub enum SummaryDepth {
     Sentence,
     Paragraph,
@@ -1223,7 +1223,6 @@ pub struct HindsightNote {
     Display,
     EnumString,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(serialize_all = "camelCase")]
 pub enum ReasoningStrategy {
     Exhaustive,
@@ -1327,7 +1326,6 @@ pub fn compute_xxhash64(data: &[u8]) -> String {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, JsonSchema)]
-#[serde(rename_all = "camelCase")]
 pub enum MemoryOperation {
     Add,
     Update,
@@ -1352,7 +1350,6 @@ pub enum MemoryOperation {
     Display,
     EnumString,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(serialize_all = "camelCase")]
 pub enum RewardType {
     Helpful,
@@ -1543,7 +1540,6 @@ pub struct KnowledgeQueryResult {
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, Default, ToSchema,
 )]
-#[serde(rename_all = "camelCase")]
 pub enum PolicyMode {
     #[default]
     Optional,
@@ -1553,7 +1549,6 @@ pub enum PolicyMode {
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, Default, ToSchema,
 )]
-#[serde(rename_all = "camelCase")]
 pub enum RuleMergeStrategy {
     #[default]
     Override,
@@ -1564,7 +1559,6 @@ pub enum RuleMergeStrategy {
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, Default, ToSchema,
 )]
-#[serde(rename_all = "camelCase")]
 pub enum RuleType {
     #[default]
     Allow,
@@ -1657,7 +1651,6 @@ pub struct BootstrapStatusSnapshot {
 
 /// Governance event types for auditing and real-time updates
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
 pub enum GovernanceEvent {
     /// New organizational unit created
     UnitCreated {
@@ -2580,7 +2573,7 @@ mod tests {
     fn test_knowledge_type_serialization() {
         let adr = KnowledgeType::Adr;
         let json = serde_json::to_string(&adr).unwrap();
-        assert_eq!(json, "\"adr\"");
+        assert_eq!(json, "\"Adr\"");
 
         let deserialized: KnowledgeType = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, KnowledgeType::Adr);
@@ -2590,7 +2583,7 @@ mod tests {
     fn test_knowledge_layer_serialization() {
         let company = KnowledgeLayer::Company;
         let json = serde_json::to_string(&company).unwrap();
-        assert_eq!(json, "\"company\"");
+        assert_eq!(json, "\"Company\"");
 
         let deserialized: KnowledgeLayer = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, KnowledgeLayer::Company);
@@ -2608,7 +2601,7 @@ mod tests {
     fn test_knowledge_status_serialization_includes_rejected() {
         let rejected = KnowledgeStatus::Rejected;
         let json = serde_json::to_string(&rejected).unwrap();
-        assert_eq!(json, "\"rejected\"");
+        assert_eq!(json, "\"Rejected\"");
 
         let deserialized: KnowledgeStatus = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, KnowledgeStatus::Rejected);
@@ -2746,7 +2739,7 @@ mod tests {
     fn test_memory_layer_serialization() {
         let agent = MemoryLayer::Agent;
         let json = serde_json::to_string(&agent).unwrap();
-        assert_eq!(json, "\"agent\"");
+        assert_eq!(json, "\"Agent\"");
 
         let deserialized: MemoryLayer = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, MemoryLayer::Agent);
@@ -2756,7 +2749,7 @@ mod tests {
     fn test_constraint_severity_serialization() {
         let block = ConstraintSeverity::Block;
         let json = serde_json::to_string(&block).unwrap();
-        assert_eq!(json, "\"block\"");
+        assert_eq!(json, "\"Block\"");
 
         let deserialized: ConstraintSeverity = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, ConstraintSeverity::Block);
@@ -2766,7 +2759,7 @@ mod tests {
     fn test_constraint_operator_serialization() {
         let must_use = ConstraintOperator::MustUse;
         let json = serde_json::to_string(&must_use).unwrap();
-        assert_eq!(json, "\"mustUse\"");
+        assert_eq!(json, "\"MustUse\"");
 
         let deserialized: ConstraintOperator = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, ConstraintOperator::MustUse);
@@ -2776,7 +2769,7 @@ mod tests {
     fn test_constraint_target_serialization() {
         let file = ConstraintTarget::File;
         let json = serde_json::to_string(&file).unwrap();
-        assert_eq!(json, "\"file\"");
+        assert_eq!(json, "\"File\"");
 
         let deserialized: ConstraintTarget = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, ConstraintTarget::File);
@@ -3049,7 +3042,7 @@ mod tests {
     fn test_role_serialization() {
         let architect = Role::Architect;
         let json = serde_json::to_string(&architect).unwrap();
-        assert_eq!(json, "\"architect\"");
+        assert_eq!(json, "\"Architect\"");
 
         let deserialized: Role = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, Role::Architect);
@@ -3071,7 +3064,7 @@ mod tests {
     fn test_reasoning_strategy_serialization() {
         let exhaustive = ReasoningStrategy::Exhaustive;
         let json = serde_json::to_string(&exhaustive).unwrap();
-        assert_eq!(json, "\"exhaustive\"");
+        assert_eq!(json, "\"Exhaustive\"");
 
         let deserialized: ReasoningStrategy = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, ReasoningStrategy::Exhaustive);
@@ -3792,26 +3785,26 @@ mod tests {
     fn test_summary_depth_serialization() {
         let sentence = SummaryDepth::Sentence;
         let json = serde_json::to_string(&sentence).unwrap();
-        assert_eq!(json, "\"sentence\"");
+        assert_eq!(json, "\"Sentence\"");
 
         let paragraph = SummaryDepth::Paragraph;
         let json = serde_json::to_string(&paragraph).unwrap();
-        assert_eq!(json, "\"paragraph\"");
+        assert_eq!(json, "\"Paragraph\"");
 
         let detailed = SummaryDepth::Detailed;
         let json = serde_json::to_string(&detailed).unwrap();
-        assert_eq!(json, "\"detailed\"");
+        assert_eq!(json, "\"Detailed\"");
     }
 
     #[test]
     fn test_summary_depth_deserialization() {
-        let sentence: SummaryDepth = serde_json::from_str("\"sentence\"").unwrap();
+        let sentence: SummaryDepth = serde_json::from_str("\"Sentence\"").unwrap();
         assert_eq!(sentence, SummaryDepth::Sentence);
 
-        let paragraph: SummaryDepth = serde_json::from_str("\"paragraph\"").unwrap();
+        let paragraph: SummaryDepth = serde_json::from_str("\"Paragraph\"").unwrap();
         assert_eq!(paragraph, SummaryDepth::Paragraph);
 
-        let detailed: SummaryDepth = serde_json::from_str("\"detailed\"").unwrap();
+        let detailed: SummaryDepth = serde_json::from_str("\"Detailed\"").unwrap();
         assert_eq!(detailed, SummaryDepth::Detailed);
     }
 
@@ -4369,7 +4362,7 @@ mod tests {
     fn test_knowledge_type_hindsight_variant() {
         let hindsight = KnowledgeType::Hindsight;
         let json = serde_json::to_string(&hindsight).unwrap();
-        assert_eq!(json, "\"hindsight\"");
+        assert_eq!(json, "\"Hindsight\"");
 
         let parsed: KnowledgeType = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, KnowledgeType::Hindsight);
@@ -4535,7 +4528,7 @@ mod tests {
         fn test_role_identifier_serde_roundtrip_known_variant_expected() {
             let role = RoleIdentifier::Known(Role::Admin);
             let json = serde_json::to_string(&role).unwrap();
-            assert_eq!(json, "\"admin\"");
+            assert_eq!(json, "\"Admin\"");
 
             let deserialized: RoleIdentifier = serde_json::from_str(&json).unwrap();
             assert_eq!(deserialized, RoleIdentifier::Known(Role::Admin));
@@ -4746,7 +4739,6 @@ mod tests {
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
-#[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive)]
 pub enum GitProviderKind {
     GitHubApp,
@@ -4776,8 +4768,10 @@ pub struct GitProviderConnection {
     pub webhook_secret_ref: Option<String>,
     /// Tenants allowed to reference this connection in their repository binding.
     pub allowed_tenant_ids: Vec<TenantId>,
-    pub created_at: i64,
-    pub updated_at: i64,
+    #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    #[schema(value_type = String, format = DateTime, example = "2026-04-30T15:34:00Z")]
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl GitProviderConnection {

@@ -16,12 +16,14 @@
 //! - Comprehensive error handling with `thiserror`
 //! - M-CANONICAL-DOCS documentation format
 
+pub mod env;
 pub mod hints;
 pub mod secret;
 pub mod traits;
 pub mod types;
 
 // Re-export commonly used types for convenience
+pub use env::Environment;
 pub use hints::{HintPreset, HintsConfig, OperationHints};
 pub use secret::{SecretBytes, SecretReference};
 pub use types::{

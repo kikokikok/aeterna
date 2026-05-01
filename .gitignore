@@ -74,3 +74,5 @@ e2e/results/
 .e2e/
 __pycache__/
 *.pyc
+# Playwright screenshot/artifact scratch dir (per-agent, never committed)
+.playwright-dust/

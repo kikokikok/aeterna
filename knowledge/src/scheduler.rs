@@ -1022,8 +1022,8 @@ mod tests {
             tenant_id,
             parent_id: Some("org-1".to_string()),
             metadata: HashMap::new(),
-            created_at: chrono::Utc::now().timestamp(),
-            updated_at: chrono::Utc::now().timestamp(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: mk_core::types::RecordSource::Admin,
         }
     }
@@ -1036,8 +1036,8 @@ mod tests {
             tenant_id,
             parent_id: None,
             metadata: HashMap::new(),
-            created_at: chrono::Utc::now().timestamp(),
-            updated_at: chrono::Utc::now().timestamp(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: mk_core::types::RecordSource::Admin,
         }
     }
@@ -1484,8 +1484,8 @@ mod tests {
             tenant_id,
             parent_id: None,
             metadata: HashMap::new(),
-            created_at: chrono::Utc::now().timestamp(),
-            updated_at: chrono::Utc::now().timestamp(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
             source_owner: mk_core::types::RecordSource::Admin,
         }
     }

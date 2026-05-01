@@ -76,8 +76,8 @@ async fn test_full_governance_workflow() {
         parent_id: None,
         tenant_id: tenant_id.clone(),
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     };
     pg_backend.create_unit(&company).await.unwrap();
@@ -89,8 +89,8 @@ async fn test_full_governance_workflow() {
         parent_id: Some(comp_id.clone()),
         tenant_id: tenant_id.clone(),
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     };
     pg_backend.create_unit(&org).await.unwrap();
@@ -102,8 +102,8 @@ async fn test_full_governance_workflow() {
         parent_id: Some(org_id.clone()),
         tenant_id: tenant_id.clone(),
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     };
     pg_backend.create_unit(&team).await.unwrap();
@@ -115,8 +115,8 @@ async fn test_full_governance_workflow() {
         parent_id: Some(team_id.clone()),
         tenant_id: tenant_id.clone(),
         metadata: std::collections::HashMap::new(),
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
         source_owner: RecordSource::Admin,
     };
     pg_backend.create_unit(&project).await.unwrap();

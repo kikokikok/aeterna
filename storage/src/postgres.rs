@@ -374,12 +374,34 @@ impl PostgresBackend {
         .await?;
 
         sqlx::query(
+            // Full schema aligned with migration 006 (006_event_streaming.sql).
+            // Both initialize_schema() and migration 006 use CREATE TABLE IF
+            // NOT EXISTS; whichever executes first wins and the other is a
+            // no-op. Having identical column sets here ensures migration 006's
+            // subsequent CREATE INDEX statements (e.g. on idempotency_key)
+            // succeed regardless of execution order.
+            //
+            // event_id and idempotency_key are nullable so that the
+            // log_event() path (INSERT event_type, tenant_id, payload only)
+            // remains compatible. PostgreSQL UNIQUE constraints treat each
+            // NULL as distinct, so multiple NULL idempotency_key rows are
+            // allowed while non-NULL keys are still deduplicated correctly via
+            // ON CONFLICT (idempotency_key).
             "CREATE TABLE IF NOT EXISTS governance_events (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                event_type TEXT NOT NULL,
-                tenant_id TEXT NOT NULL,
+                event_id VARCHAR(255),
+                idempotency_key VARCHAR(255) UNIQUE,
+                event_type VARCHAR(100) NOT NULL,
+                tenant_id VARCHAR(255) NOT NULL,
                 payload JSONB NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                status VARCHAR(50) NOT NULL DEFAULT 'pending',
+                retry_count INTEGER NOT NULL DEFAULT 0,
+                max_retries INTEGER NOT NULL DEFAULT 3,
+                last_error TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                published_at TIMESTAMPTZ,
+                acknowledged_at TIMESTAMPTZ,
+                dead_lettered_at TIMESTAMPTZ
             )",
         )
         .execute(&self.pool)
@@ -941,6 +963,15 @@ impl PostgresBackend {
         .execute(&self.pool)
         .await?;
 
+        // Backfill for test databases that pre-date the legal-entity-name
+        // metadata column (production path: migration
+        // 033_tenant_legal_entity.sql). See that migration's header for the
+        // rationale; it's the seed for the add-legal-entity-tenant-grouping
+        // proposal and is intentionally a nullable text column with no FK.
+        sqlx::query("ALTER TABLE tenants ADD COLUMN IF NOT EXISTS legal_entity_name TEXT")
+            .execute(&self.pool)
+            .await?;
+
         // Mirror CHECK constraints from migration 027 so dev/test paths
         // enforce the same invariants. We assemble the end-of-string
         // anchor via chr(36) at SQL-evaluation time so the Rust source
@@ -1060,39 +1091,114 @@ impl PostgresBackend {
         Ok(())
     }
 
+    /// Pure matrix check. Returns Ok iff `child` is allowed to live directly
+    /// under `parent`. Mirrored on the API side by
+    /// `cli::server::org_api::expected_parent_type` — keep them in sync.
+    ///
+    /// History: this used to be inlined in `create_unit` and was *missing*
+    /// entirely from `update_unit`, which meant updates could move a Project
+    /// directly under a Company, silently violating the contract. The
+    /// extraction in v1.5.0 closes that gap by routing both paths through
+    /// `validate_unit_invariants` below.
+    fn validate_parent_child_types(parent: UnitType, child: UnitType) -> Result<(), PostgresError> {
+        match (parent, child) {
+            (UnitType::Company, UnitType::Organization) => Ok(()),
+            (UnitType::Organization, UnitType::Team) => Ok(()),
+            (UnitType::Team, UnitType::Project) => Ok(()),
+            _ => Err(PostgresError::Database(sqlx::Error::Decode(
+                format!("Invalid hierarchy: cannot place {child:?} under {parent:?}").into(),
+            ))),
+        }
+    }
+
+    /// Validates the contract invariants of a unit row before persisting it
+    /// (whether on insert or on update):
+    ///
+    ///  1. **Root rule** — only `Company` may have `parent_id = None`. Any
+    ///     other type with no parent is rejected.
+    ///  2. **Matrix rule** — if `parent_id` is set, the parent must exist in
+    ///     the same tenant and `(parent.type, unit.type)` must satisfy
+    ///     [`Self::validate_parent_child_types`].
+    ///  3. **Cycle rule** — `unit.id` must not appear in the ancestor chain
+    ///     of the new `parent_id`, and `parent_id` must not equal `unit.id`.
+    ///     With the strict-by-type matrix today, cycles are structurally
+    ///     impossible (Project can't have Project descendants etc.), so this
+    ///     check is *defensive* — it documents the invariant and survives
+    ///     any future relaxation of the matrix (e.g. recursive same-type
+    ///     parenting for the legal-entity epic). Costs one recursive CTE
+    ///     query per write; acceptable on the admin write path.
+    ///
+    /// `existing_id` is `None` on create (the row doesn't exist yet, so the
+    /// cycle check has nothing to compare against) and `Some(unit.id)` on
+    /// update.
+    async fn validate_unit_invariants(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        unit: &OrganizationalUnit,
+        existing_id: Option<&str>,
+    ) -> Result<(), PostgresError> {
+        let Some(ref parent_id) = unit.parent_id else {
+            // Rule 1 — only Company may be a root.
+            if unit.unit_type != UnitType::Company {
+                return Err(PostgresError::Database(sqlx::Error::Decode(
+                    "Only Company units can be root units (no parent)".into(),
+                )));
+            }
+            return Ok(());
+        };
+
+        // Rule 3a — trivial self-cycle. Cheap and gives a clearer error
+        // than waiting for the ancestor walk to discover it.
+        if let Some(id) = existing_id
+            && id == parent_id
+        {
+            return Err(PostgresError::Database(sqlx::Error::Decode(
+                format!("Cycle detected: unit {id:?} cannot be its own parent").into(),
+            )));
+        }
+
+        // Rule 2 — parent must exist in the same tenant; matrix must hold.
+        let parent = Self::get_unit_by_id_tx(tx, parent_id, &unit.tenant_id.to_string())
+            .await?
+            .ok_or_else(|| PostgresError::NotFound(parent_id.clone()))?;
+        Self::validate_parent_child_types(parent.unit_type, unit.unit_type)?;
+
+        // Rule 3b — non-trivial cycle (only meaningful on update; on create
+        // the row doesn't exist yet so it can't be in any ancestor chain).
+        if let Some(id) = existing_id {
+            let ancestors = Self::get_ancestors(tx, &unit.tenant_id, parent_id).await?;
+            if ancestors.iter().any(|a| a.id == id) {
+                return Err(PostgresError::Database(sqlx::Error::Decode(
+                    format!(
+                        "Cycle detected: cannot set parent of {id:?} to {parent_id:?} \
+                         because {id:?} is already an ancestor of {parent_id:?}"
+                    )
+                    .into(),
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn create_unit(
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         unit: &OrganizationalUnit,
     ) -> Result<(), PostgresError> {
-        if let Some(ref parent_id) = unit.parent_id {
-            let parent = Self::get_unit_by_id_tx(tx, parent_id, &unit.tenant_id.to_string())
-                .await?
-                .ok_or_else(|| PostgresError::NotFound(parent_id.clone()))?;
+        Self::validate_unit_invariants(tx, unit, None).await?;
 
-            match (parent.unit_type, unit.unit_type) {
-                (UnitType::Company, UnitType::Organization) => {}
-                (UnitType::Organization, UnitType::Team) => {}
-                (UnitType::Team, UnitType::Project) => {}
-                _ => {
-                    return Err(PostgresError::Database(sqlx::Error::Decode(
-                        format!(
-                            "Invalid hierarchy: cannot create {:?} under {:?}",
-                            unit.unit_type, parent.unit_type
-                        )
-                        .into(),
-                    )));
-                }
-            }
-        } else if unit.unit_type != UnitType::Company {
-            return Err(PostgresError::Database(sqlx::Error::Decode(
-                "Only Company units can be root units (no parent)".into(),
-            )));
-        }
-
+        // Idempotent on (tenant_id, COALESCE(parent_id,''), name) — re-applying
+        // a tenant manifest after a partial provisioning failure must not insert
+        // duplicate units. The composite unique index in migration 031 makes
+        // this ON CONFLICT clause a true upsert: metadata + updated_at are
+        // refreshed; the original id, created_at, and parent_id are preserved.
+        // See docs/operations/tenant-provisioning.md for the rationale.
         sqlx::query(
             "INSERT INTO organizational_units (id, name, type, parent_id, tenant_id, metadata, \
              created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             ON CONFLICT (tenant_id, COALESCE(parent_id, ''), name) DO UPDATE SET
+                 metadata   = EXCLUDED.metadata,
+                 updated_at = EXCLUDED.updated_at",
         )
         .bind(&unit.id)
         .bind(&unit.name)
@@ -1403,11 +1509,32 @@ impl PostgresBackend {
         Ok(units)
     }
 
+    /// Updates an organisational unit. Pre-v1.5.0 this skipped *all*
+    /// hierarchy validation, so it was possible to e.g. move a Project to
+    /// directly under a Company via update — a silent contract violation
+    /// surfaced during the rc.9 triage. Now routes through
+    /// [`Self::validate_unit_invariants`], the same pre-flight that
+    /// [`Self::create_unit`] uses, which:
+    ///
+    ///  - rejects making a non-Company a root,
+    ///  - rejects parent/child pairs not in the matrix,
+    ///  - rejects self-parenting and ancestor-cycle parenting.
+    ///
+    /// The `tenant_id` argument is preserved for the SQL `WHERE` clause and
+    /// must equal `unit.tenant_id` (callers always pass them aligned today;
+    /// we assert it as a debug invariant).
     pub async fn update_unit(
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         tenant_id: &mk_core::types::TenantId,
         unit: &OrganizationalUnit,
     ) -> Result<(), PostgresError> {
+        debug_assert_eq!(
+            tenant_id, &unit.tenant_id,
+            "update_unit: tenant_id arg must match unit.tenant_id"
+        );
+
+        Self::validate_unit_invariants(tx, unit, Some(&unit.id)).await?;
+
         sqlx::query(
             "UPDATE organizational_units 
              SET name = $3, type = $4, parent_id = $5, metadata = $6, updated_at = $7
@@ -3150,11 +3277,21 @@ impl StorageBackend for PostgresBackend {
         &self,
         event: mk_core::types::PersistentEvent,
     ) -> Result<(), Self::Error> {
+        // NOTE: `event.id` is a `String` (UUID v4 stringified by
+        // `PersistentEvent::new`) but the `governance_events.id` column is
+        // `uuid NOT NULL`. Postgres does not implicitly cast text → uuid, so
+        // we make the cast explicit with `$1::uuid`. Without this, every
+        // INSERT (e.g. the post-bootstrap `BootstrapCompleted` emission in
+        // `cli/src/commands/serve.rs::emit_bootstrap_completed`) fails with
+        // `column "id" is of type uuid but expression is of type text` and
+        // the event is silently dropped — `/admin/bootstrap/status` is the
+        // primary readout, so the server keeps running, but the durable
+        // governance trail is incomplete. See rc.6 release notes.
         sqlx::query(
             "INSERT INTO governance_events (id, event_id, idempotency_key, tenant_id, event_type, \
              payload, status, retry_count, max_retries, last_error, created_at, published_at, \
              acknowledged_at, dead_lettered_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, to_timestamp($11), $12, $13, $14)
+             VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, to_timestamp($11), $12, $13, $14)
              ON CONFLICT (idempotency_key) DO NOTHING",
         )
         .bind(&event.id)

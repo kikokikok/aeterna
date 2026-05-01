@@ -93,7 +93,7 @@ mod tests {
     #[tokio::test]
     async fn test_reasoning_logic() {
         let mut mock_llm = MockLlmService::new();
-        let plan_json = "{\"strategy\": \"exhaustive\", \"refined_query\": \"deep search for \
+        let plan_json = "{\"strategy\": \"Exhaustive\", \"refined_query\": \"deep search for \
                          memory-r1 architecture\", \"reasoning\": \"The query is specific and \
                          complex, requiring cross-layer verification.\"}";
         mock_llm.set_response(plan_json).await;

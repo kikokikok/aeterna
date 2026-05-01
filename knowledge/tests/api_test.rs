@@ -126,8 +126,8 @@ async fn test_governance_dashboard_api_get_org_report() {
         tenant_id: tenant_id.clone(),
         parent_id: None,
         metadata: std::collections::HashMap::new(),
-        created_at: 1000,
-        updated_at: 1000,
+        created_at: chrono::DateTime::from_timestamp(1000, 0).unwrap(),
+        updated_at: chrono::DateTime::from_timestamp(1000, 0).unwrap(),
         source_owner: RecordSource::Admin,
     };
     storage.create_unit(&company_unit).await.unwrap();
@@ -139,8 +139,8 @@ async fn test_governance_dashboard_api_get_org_report() {
         tenant_id: tenant_id.clone(),
         parent_id: Some(company_id.clone()),
         metadata: std::collections::HashMap::new(),
-        created_at: 1000,
-        updated_at: 1000,
+        created_at: chrono::DateTime::from_timestamp(1000, 0).unwrap(),
+        updated_at: chrono::DateTime::from_timestamp(1000, 0).unwrap(),
         source_owner: RecordSource::Admin,
     };
     storage.create_unit(&org_unit).await.unwrap();
@@ -152,8 +152,8 @@ async fn test_governance_dashboard_api_get_org_report() {
         tenant_id: tenant_id.clone(),
         parent_id: Some(org_id.clone()),
         metadata: std::collections::HashMap::new(),
-        created_at: 1000,
-        updated_at: 1000,
+        created_at: chrono::DateTime::from_timestamp(1000, 0).unwrap(),
+        updated_at: chrono::DateTime::from_timestamp(1000, 0).unwrap(),
         source_owner: RecordSource::Admin,
     };
     storage.create_unit(&team_unit).await.unwrap();
@@ -165,8 +165,8 @@ async fn test_governance_dashboard_api_get_org_report() {
         tenant_id: tenant_id.clone(),
         parent_id: Some(team_id.clone()),
         metadata: std::collections::HashMap::new(),
-        created_at: 1000,
-        updated_at: 1000,
+        created_at: chrono::DateTime::from_timestamp(1000, 0).unwrap(),
+        updated_at: chrono::DateTime::from_timestamp(1000, 0).unwrap(),
         source_owner: RecordSource::Admin,
     };
     storage.create_unit(&project_unit).await.unwrap();

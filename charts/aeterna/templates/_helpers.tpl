@@ -60,6 +60,24 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
+Vault address for the Aeterna workload.
+*/}}
+{{- define "aeterna.vault.address" -}}
+{{- if .Values.vault.address -}}
+{{- .Values.vault.address -}}
+{{- else -}}
+{{- printf "http://%s-prereqs-openbao:8200" .Release.Name -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+ServiceAccount name used for Vault/OpenBao Kubernetes auth.
+*/}}
+{{- define "aeterna.vault.serviceAccountName" -}}
+{{- .Values.vault.aeternaServiceAccount | default (include "aeterna.serviceAccountName" .) -}}
+{{- end }}
+
+{{/*
 Return the image reference
 */}}
 {{- define "aeterna.image" -}}

@@ -1,0 +1,265 @@
+{{- if and .Values.openbao.enabled .Values.openbao.bootstrap.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-openbao-bootstrap-script" (include "prereqs.fullname" .) | trunc 63 | trimSuffix "-" }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "prereqs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: openbao-bootstrap
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  bootstrap.sh: |
+    #!/usr/bin/env bash
+    # OpenBao bootstrap — idempotent.
+    # Modes: internal-dev-seal | internal-shamir | external
+    set -euo pipefail
+
+    log() { printf '[bootstrap] %s\n' "$*" >&2; }
+    die() { log "FATAL: $*"; exit 1; }
+
+    : "${MODE:?MODE is required}"
+    : "${BAO_ADDR:?BAO_ADDR is required}"
+    : "${KV_PATH:?KV_PATH is required}"
+    : "${GLOBAL_SECRETS_PREFIX:?GLOBAL_SECRETS_PREFIX is required}"
+    : "${TENANT_SECRETS_PREFIX:?TENANT_SECRETS_PREFIX is required}"
+    : "${KUBERNETES_AUTH_PATH:?KUBERNETES_AUTH_PATH is required}"
+    : "${KUBERNETES_AUTH_ROLE:?KUBERNETES_AUTH_ROLE is required}"
+    : "${AETERNA_SERVICE_ACCOUNT_NAME:?AETERNA_SERVICE_ACCOUNT_NAME is required}"
+    : "${AETERNA_SERVICE_ACCOUNT_NAMESPACE:?AETERNA_SERVICE_ACCOUNT_NAMESPACE is required}"
+    : "${SECRET_NAME:?SECRET_NAME is required}"
+    : "${NAMESPACE:?NAMESPACE is required}"
+    : "${CHART_VERSION:?CHART_VERSION is required}"
+    export VAULT_ADDR="$BAO_ADDR"  # bao CLI honours both
+
+    global_prefix="${GLOBAL_SECRETS_PREFIX#/}"
+    global_prefix="${global_prefix%/}"
+    tenant_prefix="${TENANT_SECRETS_PREFIX#/}"
+    tenant_prefix="${tenant_prefix%/}"
+    [ -n "$global_prefix" ] || die "GLOBAL_SECRETS_PREFIX cannot be empty or contain only slashes"
+    [ -n "$tenant_prefix" ] || die "TENANT_SECRETS_PREFIX cannot be empty or contain only slashes"
+
+    marker_path="${KV_PATH}/${global_prefix}/aeterna/.bootstrap-marker"
+    auth_mount="${KUBERNETES_AUTH_PATH%/}/"
+    policy_name="aeterna-pod"
+
+    have_cmd() { command -v "$1" >/dev/null 2>&1; }
+    bao_json() { bao "$@" -format=json; }
+    sa_exists() {
+      kubectl -n "$AETERNA_SERVICE_ACCOUNT_NAMESPACE" get serviceaccount "$AETERNA_SERVICE_ACCOUNT_NAME" >/dev/null 2>&1
+    }
+
+    # ---------- Wait for OpenBao to respond on /v1/sys/health ----------
+    log "Waiting for OpenBao at $BAO_ADDR ..."
+    for i in $(seq 1 60); do
+      # /sys/health returns:
+      #  200 = initialized + unsealed + active
+      #  429 = unsealed + standby
+      #  472 = data recovery mode
+      #  473 = performance standby
+      #  501 = not initialized
+      #  503 = sealed
+      code=$(curl -ksS -o /dev/null -w '%{http_code}' "$BAO_ADDR/v1/sys/health?standbyok=true&sealedcode=200&uninitcode=200" || echo "000")
+      if [ "$code" = "200" ] || [ "$code" = "429" ]; then
+        log "OpenBao reachable (HTTP $code)"
+        break
+      fi
+      log "  ...not ready yet (HTTP $code), retry $i/60"
+      sleep 2
+    done
+    [ "$code" = "200" ] || [ "$code" = "429" ] || die "OpenBao did not become reachable"
+
+    # ---------- Initialize / unseal per mode ----------
+    ROOT_TOKEN=""
+    UNSEAL_KEY=""
+
+    init_status=$(curl -ksS "$BAO_ADDR/v1/sys/init" | jq -r '.initialized')
+    log "sys/init.initialized = $init_status"
+
+    case "$MODE" in
+      internal-dev-seal)
+        # Dev mode: server is auto-initialized, auto-unsealed, root token comes from chart values.
+        # We expect VAULT_DEV_ROOT_TOKEN to be passed in env.
+        : "${DEV_ROOT_TOKEN:?DEV_ROOT_TOKEN required for internal-dev-seal}"
+        ROOT_TOKEN="$DEV_ROOT_TOKEN"
+        log "dev-seal mode: using configured dev root token"
+        ;;
+
+      internal-shamir)
+        if [ "$init_status" = "true" ]; then
+          log "already initialized — reading existing root token from Secret"
+          # Re-fetch from existing Secret if present
+          existing=$(kubectl -n "$NAMESPACE" get secret "$SECRET_NAME" -o json 2>/dev/null || echo "")
+          if [ -n "$existing" ]; then
+            ROOT_TOKEN=$(echo "$existing" | jq -r '.data.root_token // empty' | base64 -d || true)
+            UNSEAL_KEY=$(echo "$existing" | jq -r '.data.unseal_key // empty' | base64 -d || true)
+          fi
+          [ -n "$ROOT_TOKEN" ] || die "OpenBao initialized but no Secret with root_token found — manual recovery required"
+        else
+          log "initializing OpenBao with shamir (1/1)"
+          init_resp=$(curl -ksS -X POST -d '{"secret_shares":1,"secret_threshold":1}' "$BAO_ADDR/v1/sys/init")
+          ROOT_TOKEN=$(echo "$init_resp" | jq -r '.root_token')
+          UNSEAL_KEY=$(echo "$init_resp" | jq -r '.keys[0]')
+          [ "$ROOT_TOKEN" != "null" ] && [ -n "$ROOT_TOKEN" ] || die "init failed: $init_resp"
+        fi
+        # Unseal if currently sealed
+        sealed=$(curl -ksS "$BAO_ADDR/v1/sys/seal-status" | jq -r '.sealed')
+        if [ "$sealed" = "true" ]; then
+          log "unsealing"
+          curl -ksS -X POST -d "{\"key\":\"$UNSEAL_KEY\"}" "$BAO_ADDR/v1/sys/unseal" >/dev/null
+        fi
+        ;;
+
+      external)
+        if [ "$init_status" = "true" ]; then
+          log "already initialized — reading existing root token from Secret"
+          existing=$(kubectl -n "$NAMESPACE" get secret "$SECRET_NAME" -o json 2>/dev/null || echo "")
+          if [ -n "$existing" ]; then
+            ROOT_TOKEN=$(echo "$existing" | jq -r '.data.root_token // empty' | base64 -d || true)
+          fi
+          [ -n "$ROOT_TOKEN" ] || die "OpenBao initialized but no Secret with root_token found — manual recovery required"
+        else
+          log "initializing OpenBao with auto-unseal (recovery 1/1)"
+          init_resp=$(curl -ksS -X POST -d '{"recovery_shares":1,"recovery_threshold":1}' "$BAO_ADDR/v1/sys/init")
+          ROOT_TOKEN=$(echo "$init_resp" | jq -r '.root_token')
+          [ "$ROOT_TOKEN" != "null" ] && [ -n "$ROOT_TOKEN" ] || die "init failed: $init_resp"
+        fi
+        ;;
+
+      *)
+        die "unknown MODE=$MODE"
+        ;;
+    esac
+
+    # ---------- Wait for active (unsealed) status ----------
+    log "waiting for active status"
+    for i in $(seq 1 30); do
+      code=$(curl -ksS -o /dev/null -w '%{http_code}' "$BAO_ADDR/v1/sys/health" || echo "000")
+      [ "$code" = "200" ] && break
+      sleep 2
+    done
+    [ "$code" = "200" ] || die "OpenBao not active after unseal (HTTP $code)"
+
+    export VAULT_TOKEN="$ROOT_TOKEN"
+
+    # ---------- Enable kv-v2 at $KV_PATH if not already mounted ----------
+    log "ensuring kv-v2 mount at $KV_PATH/"
+    mounts=$(bao_json secrets list)
+    if echo "$mounts" | jq -e --arg p "${KV_PATH}/" '.[$p]' >/dev/null 2>&1; then
+      log "  $KV_PATH/ already mounted — skipping"
+    else
+      bao secrets enable -path="$KV_PATH" -version=2 kv >/dev/null
+      log "  mounted kv-v2 at $KV_PATH/"
+    fi
+
+    # ---------- Enable and configure Kubernetes auth ----------
+    log "ensuring Kubernetes auth at $KUBERNETES_AUTH_PATH/"
+    auths=$(bao_json auth list)
+    if echo "$auths" | jq -e --arg p "$auth_mount" '.[$p]' >/dev/null 2>&1; then
+      log "  $KUBERNETES_AUTH_PATH already enabled — skipping"
+    else
+      bao auth enable -path="$KUBERNETES_AUTH_PATH" kubernetes >/dev/null
+      log "  enabled kubernetes auth at $KUBERNETES_AUTH_PATH/"
+    fi
+
+    log "configuring Kubernetes auth"
+    bao write "$KUBERNETES_AUTH_PATH/config" \
+      kubernetes_host="https://kubernetes.default.svc" \
+      kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
+      token_reviewer_jwt=@/var/run/secrets/kubernetes.io/serviceaccount/token >/dev/null
+
+    # ---------- Policy + role for Aeterna ----------
+    log "ensuring policy $policy_name"
+    policy_file="$(mktemp)"
+    cat > "$policy_file" <<EOF
+    # Warning: this role is for a shared multi-tenant Aeterna workload.
+    # It can read both the global tree and any tenant tree beneath the
+    # configured prefixes. Hard per-tenant Vault/OpenBao isolation requires
+    # distinct workloads/auth roles per tenant, not a single shared role.
+    path "${KV_PATH}/data/${global_prefix}/*" {
+      capabilities = ["read"]
+    }
+    path "${KV_PATH}/metadata/${global_prefix}/*" {
+      capabilities = ["read", "list"]
+    }
+    path "${KV_PATH}/data/${tenant_prefix}/*" {
+      capabilities = ["read"]
+    }
+    path "${KV_PATH}/metadata/${tenant_prefix}/*" {
+      capabilities = ["read", "list"]
+    }
+    EOF
+    bao policy write "$policy_name" "$policy_file" >/dev/null
+    rm -f "$policy_file"
+
+    log "ensuring Kubernetes auth role $KUBERNETES_AUTH_ROLE"
+    bao write "$KUBERNETES_AUTH_PATH/role/$KUBERNETES_AUTH_ROLE" \
+      bound_service_account_names="$AETERNA_SERVICE_ACCOUNT_NAME" \
+      bound_service_account_namespaces="$AETERNA_SERVICE_ACCOUNT_NAMESPACE" \
+      policies="$policy_name" \
+      ttl="1h" >/dev/null
+
+    # ---------- Marker secret for startup self-test ----------
+    log "ensuring marker secret at $marker_path"
+    existing_marker=""
+    if bao kv get "$marker_path" >/dev/null 2>&1; then
+      existing_marker="$(bao kv get "$marker_path" -format=json | jq -r '.data.data.chart_version // empty')"
+    fi
+    if [ "$existing_marker" = "$CHART_VERSION" ]; then
+      log "  marker already at chart_version=$CHART_VERSION — skipping"
+    else
+      timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      bao kv put "$marker_path" chart_version="$CHART_VERSION" timestamp="$timestamp" >/dev/null
+      log "  marker updated to chart_version=$CHART_VERSION"
+    fi
+
+    # ---------- Best-effort auth verification ----------
+    if sa_exists; then
+      log "verifying Kubernetes auth using serviceaccount $AETERNA_SERVICE_ACCOUNT_NAMESPACE/$AETERNA_SERVICE_ACCOUNT_NAME"
+      sa_jwt="$(kubectl -n "$AETERNA_SERVICE_ACCOUNT_NAMESPACE" create token "$AETERNA_SERVICE_ACCOUNT_NAME" --duration=10m)"
+      login_out="$(curl -ksS -X POST \
+        -H 'Content-Type: application/json' \
+        -d "{\"role\":\"$KUBERNETES_AUTH_ROLE\",\"jwt\":\"$sa_jwt\"}" \
+        "$BAO_ADDR/v1/${KUBERNETES_AUTH_PATH}/login")"
+      client_token="$(echo "$login_out" | jq -r '.auth.client_token // empty')"
+      if [ -z "$client_token" ]; then
+        die "kubernetes auth verification failed for role=$KUBERNETES_AUTH_ROLE"
+      fi
+      role_policies="$(echo "$login_out" | jq -r '.auth.policies[]?' | sort | tr '\n' ' ')"
+      echo "$role_policies" | grep -qw 'aeterna-pod' || die "kubernetes auth verification token missing aeterna-pod policy"
+      unset sa_jwt client_token role_policies login_out
+      log "  kubernetes auth verified"
+    else
+      log "Aeterna serviceaccount $AETERNA_SERVICE_ACCOUNT_NAMESPACE/$AETERNA_SERVICE_ACCOUNT_NAME not found yet — skipping auth verification"
+    fi
+
+    # ---------- Persist credentials into Secret ----------
+    log "writing Secret $NAMESPACE/$SECRET_NAME"
+    tmp=$(mktemp)
+    cat > "$tmp" <<EOF
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: $SECRET_NAME
+      namespace: $NAMESPACE
+      labels:
+        app.kubernetes.io/component: openbao-bootstrap
+        app.kubernetes.io/managed-by: aeterna-prereqs
+    type: Opaque
+    stringData:
+      bao_addr: "$BAO_ADDR"
+      root_token: "$ROOT_TOKEN"
+      kv_path: "$KV_PATH"
+      mode: "$MODE"
+    EOF
+    if [ -n "$UNSEAL_KEY" ]; then
+      printf '  unseal_key: "%s"\n' "$UNSEAL_KEY" >> "$tmp"
+    fi
+    kubectl apply -f "$tmp"
+    rm -f "$tmp"
+
+    log "bootstrap complete — mode=$MODE secret=$NAMESPACE/$SECRET_NAME"
+{{- end }}

@@ -1,7 +1,7 @@
 {
   "name": "admin-ui",
   "private": true,
-  "version": "0.8.0-rc.3",
+  "version": "0.8.0-rc.8",
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -13,7 +13,9 @@
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:install": "playwright install chromium --with-deps"
+    "test:e2e:install": "playwright install chromium --with-deps",
+    "gen:api-types": "openapi-typescript ../aeterna-openapi-spec.yaml -o src/api/generated-types.ts",
+    "check:api-types": "npm run gen:api-types && git diff --exit-code src/api/generated-types.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.0",
@@ -37,6 +39,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
+    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4.1.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.0",

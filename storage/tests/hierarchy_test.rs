@@ -38,8 +38,8 @@ async fn test_recursive_hierarchy_queries() {
         tenant_id: tenant_id.clone(),
         parent_id: None,
         metadata: std::collections::HashMap::new(),
-        created_at: 1000,
-        updated_at: 1000,
+        created_at: chrono::DateTime::from_timestamp(1000, 0).unwrap(),
+        updated_at: chrono::DateTime::from_timestamp(1000, 0).unwrap(),
         source_owner: RecordSource::Admin,
     };
     storage.create_unit(&company).await.unwrap();
@@ -51,8 +51,8 @@ async fn test_recursive_hierarchy_queries() {
         tenant_id: tenant_id.clone(),
         parent_id: Some(comp_id.clone()),
         metadata: std::collections::HashMap::new(),
-        created_at: 1000,
-        updated_at: 1000,
+        created_at: chrono::DateTime::from_timestamp(1000, 0).unwrap(),
+        updated_at: chrono::DateTime::from_timestamp(1000, 0).unwrap(),
         source_owner: RecordSource::Admin,
     };
     storage.create_unit(&org1).await.unwrap();
@@ -64,8 +64,8 @@ async fn test_recursive_hierarchy_queries() {
         tenant_id: tenant_id.clone(),
         parent_id: Some(org_id.clone()),
         metadata: std::collections::HashMap::new(),
-        created_at: 1000,
-        updated_at: 1000,
+        created_at: chrono::DateTime::from_timestamp(1000, 0).unwrap(),
+        updated_at: chrono::DateTime::from_timestamp(1000, 0).unwrap(),
         source_owner: RecordSource::Admin,
     };
     storage.create_unit(&team1).await.unwrap();
@@ -77,8 +77,8 @@ async fn test_recursive_hierarchy_queries() {
         tenant_id: tenant_id.clone(),
         parent_id: Some(team_id.clone()),
         metadata: std::collections::HashMap::new(),
-        created_at: 1000,
-        updated_at: 1000,
+        created_at: chrono::DateTime::from_timestamp(1000, 0).unwrap(),
+        updated_at: chrono::DateTime::from_timestamp(1000, 0).unwrap(),
         source_owner: RecordSource::Admin,
     };
     storage.create_unit(&project1).await.unwrap();

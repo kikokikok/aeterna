@@ -38,9 +38,25 @@ pub struct CreateTenantRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateTenantRequest {
     pub slug: Option<String>,
     pub name: Option<String>,
+    /// Optional human-readable legal entity name (e.g. "Acme Holding").
+    /// See `mk_core::types::TenantRecord::legal_entity_name` and migration
+    /// 033 for the full rationale.
+    ///
+    /// Wire shape today: `{"legalEntityName": "Acme Holding"}` to set,
+    /// or omit the field entirely to leave the column untouched. There
+    /// is deliberately no way to *clear* the column via this endpoint
+    /// in v1.5.x \u2014 the storage layer supports it
+    /// (`Option<Option<&str>>`) but the API does not yet expose it
+    /// because clearing is a destructive op that should require a more
+    /// explicit gesture (and an audit trail). When the
+    /// `add-legal-entity-tenant-grouping` proposal lands, clearing will
+    /// be handled via `DELETE /tenants/{slug}/legal-entity` against the
+    /// FK relationship rather than via this PATCH.
+    pub legal_entity_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1164,9 +1180,21 @@ async fn update_tenant(
         Err(response) => return response,
     };
 
+    // Map `Option<String>` from the wire to the storage's
+    // `Option<Option<&str>>` "leave alone vs. set vs. clear" shape. In
+    // v1.5.x the API only supports "leave alone" (None) and "set" (Some).
+    // Clearing is intentionally not exposed yet \u2014 see
+    // UpdateTenantRequest::legal_entity_name doc comment.
+    let legal_entity_update: Option<Option<&str>> = req.legal_entity_name.as_deref().map(Some);
+
     match state
         .tenant_store
-        .update_tenant(&tenant, req.slug.as_deref(), req.name.as_deref())
+        .update_tenant(
+            &tenant,
+            req.slug.as_deref(),
+            req.name.as_deref(),
+            legal_entity_update,
+        )
         .await
     {
         Ok(Some(record)) => {
@@ -1182,7 +1210,11 @@ async fn update_tenant(
                 &ctx,
                 "tenant_update",
                 Some(record.id.as_str()),
-                json!({ "slug": record.slug, "name": record.name }),
+                json!({
+                    "slug": record.slug,
+                    "name": record.name,
+                    "legalEntityName": record.legal_entity_name,
+                }),
             )
             .await;
             (
@@ -1461,8 +1493,10 @@ async fn set_tenant_repository_binding(
             github_repo: req.github_repo.clone(),
             source_owner: req.source_owner.clone(),
             git_provider_connection_id: req.git_provider_connection_id.clone(),
-            created_at: 0,
-            updated_at: 0,
+            // Sentinel timestamps for an unsaved validation candidate; storage
+            // overwrites these on persistence.
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
         };
         if let Err(reason) = candidate_ref.validate_credential_ref() {
             return error_response(
@@ -1612,8 +1646,10 @@ async fn validate_tenant_repository_binding(
         github_repo: req.github_repo,
         source_owner: req.source_owner,
         git_provider_connection_id: None,
-        created_at: 0,
-        updated_at: 0,
+        // Sentinel timestamps for an unsaved validation candidate; storage
+        // overwrites these on persistence.
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
     };
 
     match state
@@ -1700,8 +1736,8 @@ async fn create_hierarchy_unit(
         tenant_id: ctx.tenant_id.clone(),
         metadata: req.metadata,
         source_owner: req.source_owner,
-        created_at: now,
-        updated_at: now,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
     };
 
     match state.postgres.create_unit_scoped(&ctx, &unit).await {
@@ -1808,7 +1844,7 @@ async fn update_hierarchy_unit(
     if let Some(metadata) = req.metadata {
         existing.metadata = metadata;
     }
-    existing.updated_at = chrono::Utc::now().timestamp();
+    existing.updated_at = chrono::Utc::now();
 
     match state.postgres.update_unit_scoped(&ctx, &existing).await {
         Ok(()) => {
@@ -1818,7 +1854,10 @@ async fn update_hierarchy_unit(
                 &GovernanceEvent::UnitUpdated {
                     unit_id: existing.id.clone(),
                     tenant_id: ctx.tenant_id.clone(),
-                    timestamp: existing.updated_at,
+                    // GovernanceEvent.timestamp is i64 epoch (event-bus protocol);
+                    // OrganizationalUnit.updated_at is now DateTime<Utc> so we
+                    // project here at the boundary.
+                    timestamp: existing.updated_at.timestamp(),
                 },
             )
             .await;
@@ -3632,8 +3671,8 @@ async fn create_git_provider_connection(
         pem_secret_ref: req.pem_secret_ref,
         webhook_secret_ref: req.webhook_secret_ref,
         allowed_tenant_ids: Vec::new(),
-        created_at: now,
-        updated_at: now,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
     };
 
     match state
@@ -5099,8 +5138,10 @@ async fn provision_tenant(
             github_repo: repo.github_repo.clone(),
             source_owner: repo.source_owner.clone(),
             git_provider_connection_id: repo.git_provider_connection_id.clone(),
-            created_at: 0,
-            updated_at: 0,
+            // Sentinel timestamps for an unsaved validation candidate; storage
+            // overwrites these on persistence.
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
         };
         let repo_step = if let Err(reason) = candidate.validate_credential_ref() {
             ProvisionStep::fail("repository", format!("invalid_credential_ref: {reason}"))
@@ -5227,8 +5268,8 @@ async fn provision_tenant(
                 tenant_id: tenant_id.clone(),
                 metadata: HashMap::new(),
                 source_owner: RecordSource::Admin,
-                created_at: now,
-                updated_at: now,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
             };
             if let Err(err) = state
                 .postgres
@@ -5263,8 +5304,8 @@ async fn provision_tenant(
                     tenant_id: tenant_id.clone(),
                     metadata: HashMap::new(),
                     source_owner: RecordSource::Admin,
-                    created_at: now,
-                    updated_at: now,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
                 };
                 if let Err(err) = state
                     .postgres
@@ -5336,8 +5377,8 @@ async fn provision_tenant(
                         tenant_id: tenant_id.clone(),
                         metadata: HashMap::new(),
                         source_owner: RecordSource::Admin,
-                        created_at: now,
-                        updated_at: now,
+                        created_at: chrono::Utc::now(),
+                        updated_at: chrono::Utc::now(),
                     };
                     if let Err(err) = state
                         .postgres
@@ -6331,7 +6372,7 @@ mod tests {
         let upsert_config = serde_json::json!({
             "fields": {
                 "runtime.logLevel": {
-                    "ownership": "tenant",
+                    "ownership": "Tenant",
                     "value": "info"
                 }
             },
@@ -6358,7 +6399,7 @@ mod tests {
                 "platformAdmin",
                 Body::from(
                     serde_json::to_vec(&serde_json::json!({
-                        "ownership": "tenant",
+                        "ownership": "Tenant",
                         "secretValue": secret_value
                     }))
                     .unwrap(),
@@ -6433,7 +6474,7 @@ mod tests {
                     serde_json::to_vec(&serde_json::json!({
                         "fields": {
                             "database.password": {
-                                "ownership": "tenant",
+                                "ownership": "Tenant",
                                 "value": "plain-text-secret"
                             }
                         },
@@ -6471,7 +6512,7 @@ mod tests {
             .header("x-target-tenant-id", tenant.id.as_str())
             .body(Body::from(
                 serde_json::to_vec(&serde_json::json!({
-                    "ownership": "platform",
+                    "ownership": "Platform",
                     "secretValue": "secret"
                 }))
                 .unwrap(),
@@ -6496,14 +6537,14 @@ mod tests {
         let request: UpsertTenantConfigRequest = serde_json::from_value(serde_json::json!({
             "fields": {
                 "runtime.logLevel": {
-                    "ownership": "tenant",
+                    "ownership": "Tenant",
                     "value": "info"
                 }
             },
             "secretReferences": {
                 "repo.token": {
                     "logicalName": "repo.token",
-                    "ownership": "tenant",
+                    "ownership": "Tenant",
                     "kind": "postgres",
                     "secretId": "22222222-2222-2222-2222-222222222222"
                 }
@@ -6622,7 +6663,7 @@ mod tests {
             .header("x-tenant-id", "default")
             .body(Body::from(
                 serde_json::to_vec(&serde_json::json!({
-                    "ownership": "platform",
+                    "ownership": "Platform",
                     "secretValue": "platform-secret"
                 }))
                 .unwrap(),
@@ -6668,7 +6709,7 @@ mod tests {
                 serde_json::to_vec(&serde_json::json!({
                     "fields": {
                         "platform.control": {
-                            "ownership": "platform",
+                            "ownership": "Platform",
                             "value": "blocked"
                         }
                     },
@@ -7105,8 +7146,8 @@ mod tests {
         // 1. GlobalAdmin upserts tenant config (deployment materialization step)
         let config_body = serde_json::json!({
             "fields": {
-                "runtime.logLevel": { "ownership": "tenant", "value": "warn" },
-                "deployment.namespace": { "ownership": "platform", "value": "aeterna-prod" }
+                "runtime.logLevel": { "ownership": "Tenant", "value": "warn" },
+                "deployment.namespace": { "ownership": "Platform", "value": "aeterna-prod" }
             },
             "secretReferences": {}
         });
@@ -7135,7 +7176,7 @@ mod tests {
                 "platformAdmin",
                 Body::from(
                     serde_json::to_vec(&serde_json::json!({
-                        "ownership": "platform",
+                        "ownership": "Platform",
                         "secretValue": "ghp_bootstrap_secret_value"
                     }))
                     .unwrap(),
@@ -7757,7 +7798,7 @@ mod tests {
                 "secretReferences": {
                     "openai.key": {
                         "logicalName": "openai.key",
-                        "ownership": "tenant",
+                        "ownership": "Tenant",
                         "kind": "postgres",
                         "secretId": "11111111-1111-1111-1111-111111111111"
                     }
@@ -8243,20 +8284,20 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "inline-ok":   { "logicalName": "a", "ownership": "tenant",
+                    "inline-ok":   { "logicalName": "a", "ownership": "Tenant",
                                      "kind": "inline",   "plaintext": "hunter2" },
-                    "env-ok":      { "logicalName": "b", "ownership": "tenant",
+                    "env-ok":      { "logicalName": "b", "ownership": "Tenant",
                                      "kind": "env",      "var": "DATABASE_PASSWORD" },
-                    "file-ok":     { "logicalName": "c", "ownership": "tenant",
+                    "file-ok":     { "logicalName": "c", "ownership": "Tenant",
                                      "kind": "file",     "path": "/run/secrets/db" },
-                    "k8s-ok":      { "logicalName": "d", "ownership": "tenant",
+                    "k8s-ok":      { "logicalName": "d", "ownership": "Tenant",
                                      "kind": "k8s",      "name": "db-secret",
                                                          "key": "password" },
-                    "k8s-ns-ok":   { "logicalName": "e", "ownership": "tenant",
+                    "k8s-ns-ok":   { "logicalName": "e", "ownership": "Tenant",
                                      "kind": "k8s",      "name": "db-secret",
                                                          "key": "password",
                                                          "namespace": "aeterna" },
-                    "vault-ok":    { "logicalName": "f", "ownership": "tenant",
+                    "vault-ok":    { "logicalName": "f", "ownership": "Tenant",
                                      "kind": "vault",    "mount": "secret",
                                                          "path": "tenants/acme/db",
                                                          "field": "password" }
@@ -8280,7 +8321,7 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "bad": { "logicalName": "a", "ownership": "tenant",
+                    "bad": { "logicalName": "a", "ownership": "Tenant",
                              "kind": "inline", "plaintext": "" }
                 }
             }
@@ -8302,7 +8343,7 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "bad": { "logicalName": "a", "ownership": "tenant",
+                    "bad": { "logicalName": "a", "ownership": "Tenant",
                              "kind": "env", "var": "" }
                 }
             }
@@ -8326,7 +8367,7 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "bad": { "logicalName": "a", "ownership": "tenant",
+                    "bad": { "logicalName": "a", "ownership": "Tenant",
                              "kind": "env", "var": "FOO=BAR" }
                 }
             }
@@ -8348,7 +8389,7 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "bad": { "logicalName": "a", "ownership": "tenant",
+                    "bad": { "logicalName": "a", "ownership": "Tenant",
                              "kind": "file", "path": "relative/path" }
                 }
             }
@@ -8370,7 +8411,7 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "bad": { "logicalName": "a", "ownership": "tenant",
+                    "bad": { "logicalName": "a", "ownership": "Tenant",
                              "kind": "k8s", "name": "", "key": "" }
                 }
             }
@@ -8400,7 +8441,7 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "bad": { "logicalName": "a", "ownership": "tenant",
+                    "bad": { "logicalName": "a", "ownership": "Tenant",
                              "kind": "k8s", "name": "n", "key": "k",
                              "namespace": "   " }
                 }
@@ -8423,7 +8464,7 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "bad": { "logicalName": "a", "ownership": "tenant",
+                    "bad": { "logicalName": "a", "ownership": "Tenant",
                              "kind": "vault", "mount": "secret",
                              "path": "", "field": "" }
                 }
@@ -8458,7 +8499,7 @@ mod tests {
             "config": {
                 "fields": {},
                 "secretReferences": {
-                    "bad": { "logicalName": "a", "ownership": "tenant",
+                    "bad": { "logicalName": "a", "ownership": "Tenant",
                              "kind": "mysterybox", "whatever": 1 }
                 }
             }
@@ -8781,7 +8822,7 @@ mod tests {
             "tenant": { "slug": "dryrun-new", "name": "Dryrun New" },
             "config": {
                 "fields": {
-                    "ui.theme": { "ownership": "tenant", "value": "dark" }
+                    "ui.theme": { "ownership": "Tenant", "value": "dark" }
                 },
                 "secretReferences": {}
             }

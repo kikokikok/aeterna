@@ -25,7 +25,7 @@ config.workspace = true
 errors.workspace = true
 utils.workspace = true
 storage.workspace = true
-memory = { workspace = true, features = ["llm-integration", "embedding-integration", "google-provider", "bedrock-provider"] }
+memory = { workspace = true, features = ["llm-integration", "embedding-integration", "google-provider", "bedrock-provider", "vault"] }
 knowledge.workspace = true
 tools.workspace = true
 sync.workspace = true

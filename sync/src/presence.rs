@@ -24,7 +24,6 @@ pub enum PresenceError {
 pub type PresenceResult<T> = Result<T, PresenceError>;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "camelCase")]
 pub enum PresenceState {
     Online,
     Away,

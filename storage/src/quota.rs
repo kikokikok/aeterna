@@ -418,12 +418,12 @@ mod tests {
     #[test]
     fn default_enforcer_has_five_minute_ttl() {
         let enforcer = QuotaEnforcer::default();
-        assert_eq!(enforcer.cache_ttl, Duration::from_secs(300));
+        assert_eq!(enforcer.cache_ttl, Duration::from_mins(5));
     }
 
     #[test]
     fn custom_ttl_enforcer() {
-        let enforcer = QuotaEnforcer::with_ttl(Duration::from_secs(60));
-        assert_eq!(enforcer.cache_ttl, Duration::from_secs(60));
+        let enforcer = QuotaEnforcer::with_ttl(Duration::from_mins(1));
+        assert_eq!(enforcer.cache_ttl, Duration::from_mins(1));
     }
 }
