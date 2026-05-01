@@ -3572,7 +3572,7 @@ mod tests {
         };
         assert!(a.no_redact);
         assert!(
-            !(!a.no_redact),
+            a.no_redact,
             "effective redact must be false when --no-redact"
         );
 

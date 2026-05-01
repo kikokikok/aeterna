@@ -479,7 +479,7 @@ permit(
 
     #[test]
     fn test_cache_entry_valid_before_expiry() {
-        let entry = CacheEntry::new(true, Duration::from_secs(60));
+        let entry = CacheEntry::new(true, Duration::from_mins(1));
         assert!(entry.is_valid(), "Entry should be valid before TTL expires");
         assert!(entry.allowed);
     }
@@ -520,7 +520,7 @@ permit(
     #[tokio::test]
     async fn test_cached_evaluator_cache_miss_then_hit() {
         let inner = Arc::new(CedarPolicyEvaluator::new(allow_all_policy()).unwrap());
-        let cached = CachedPolicyEvaluator::new(inner, Duration::from_secs(60));
+        let cached = CachedPolicyEvaluator::new(inner, Duration::from_mins(1));
 
         let ctx = make_context("user-1", &["developer"], "tenant-a");
         let repo = make_repo("00000000-0000-0000-0000-000000000020", "tenant-a", "repo");
@@ -537,7 +537,7 @@ permit(
     #[tokio::test]
     async fn test_cached_evaluator_invalidate_clears_cache() {
         let inner = Arc::new(CedarPolicyEvaluator::new(allow_all_policy()).unwrap());
-        let cached = CachedPolicyEvaluator::new(inner, Duration::from_secs(60));
+        let cached = CachedPolicyEvaluator::new(inner, Duration::from_mins(1));
 
         let ctx = make_context("user-1", &["developer"], "tenant-a");
         let repo = make_repo("00000000-0000-0000-0000-000000000021", "tenant-a", "repo");
@@ -576,7 +576,7 @@ permit(
     #[tokio::test]
     async fn test_cached_evaluator_approval_hit() {
         let inner = Arc::new(CedarPolicyEvaluator::new(allow_all_policy()).unwrap());
-        let cached = CachedPolicyEvaluator::new(inner, Duration::from_secs(60));
+        let cached = CachedPolicyEvaluator::new(inner, Duration::from_mins(1));
 
         let ctx = make_context("user-1", &["developer"], "tenant-a");
         let request = make_request("00000000-0000-0000-0000-000000000030");

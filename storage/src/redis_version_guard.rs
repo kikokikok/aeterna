@@ -341,6 +341,6 @@ mod tests {
         assert!(PURGE_LOCK_TTL >= Duration::from_secs(30));
         // But not so long that a crashed leader blocks the next deploy
         // for an absurd duration.
-        assert!(PURGE_LOCK_TTL <= Duration::from_secs(120));
+        assert!(PURGE_LOCK_TTL <= Duration::from_mins(2));
     }
 }
