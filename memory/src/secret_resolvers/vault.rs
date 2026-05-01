@@ -541,7 +541,9 @@ mod tests {
 
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/v1/secret/data/tenants/11111111-1111-1111-1111-111111111111/llm/openai"))
+            .and(path(
+                "/v1/secret/data/tenants/11111111-1111-1111-1111-111111111111/llm/openai",
+            ))
             .and(header("x-vault-token", "root-token"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "data": { "data": { "api_key": "tenant-token" } }
