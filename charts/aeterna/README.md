@@ -166,6 +166,57 @@ cnpg:
   enabled: false
 ```
 
+## Vault / OpenBao Secret Resolution
+
+When you deploy OpenBao via the `aeterna-prereqs` chart, enable Vault wiring in
+the main chart so `SecretReference::Vault` values resolve from the application:
+
+```yaml
+vault:
+  enabled: true
+  # Empty = assume the sibling prereqs chart service name
+  address: ""
+  kubernetesAuthPath: "auth/kubernetes"
+  kubernetesAuthRole: "aeterna"
+```
+
+If `vault.address` is left blank, the chart assumes OpenBao is reachable at
+`http://<release>-prereqs-openbao:8200`.
+
+Recommended KV-v2 layout for multi-tenant deployments:
+
+- Global/shared secrets: `secret/global/<domain>/<name>`
+- Tenant-scoped secrets: `secret/tenants/<tenant-id>/<domain>/<name>`
+
+Reference them from tenant config with explicit `SecretReference::Vault`
+paths:
+
+```json
+{
+  "kind": "vault",
+  "mount": "secret",
+  "path": "global/github/app",
+  "field": "private_key"
+}
+```
+
+```json
+{
+  "kind": "vault",
+  "mount": "secret",
+  "path": "tenants/{tenant_id}/llm/openai",
+  "field": "api_key"
+}
+```
+
+`{tenant_id}` is expanded by the server at read time from the current tenant.
+Use a global path when a secret is intentionally shared across tenants.
+
+Note: with a single Aeterna deployment, OpenBao auth is still performed by the
+application's Kubernetes service account, so this layout provides clear
+namespace separation and safe defaults, not hard per-tenant Vault auth
+isolation. Hard isolation requires separate workloads and auth roles per tenant.
+
 ## LLM Provider Configuration
 
 ```yaml

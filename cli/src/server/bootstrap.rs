@@ -22,10 +22,11 @@ use memory::llm::create_llm_service_from_env;
 use memory::manager::MemoryManager;
 use memory::provider_registry::TenantProviderRegistry;
 use memory::reasoning::{DefaultReflectiveReasoner, ReflectiveReasoner};
+use mk_core::secret::SecretReference;
 use mk_core::traits::AuthorizationService;
 use mk_core::types::{
     DEFAULT_TENANT_SLUG, INSTANCE_SCOPE_TENANT_ID, PROVIDER_GITHUB, ReasoningStrategy,
-    ReasoningTrace, Role, RoleIdentifier, TenantContext, UserId,
+    ReasoningTrace, Role, RoleIdentifier, TenantContext, TenantId, UserId,
 };
 use storage::git_provider_connection_store::{
     InMemoryGitProviderConnectionStore, RedisGitProviderConnectionStore,
@@ -46,6 +47,7 @@ use super::service_token_validator;
 use super::{AppState, PluginAuthState, bootstrap_tracker};
 
 const DEFAULT_K8S_NAMESPACE: &str = "default";
+const SYSTEM_MARKER_TENANT_ID: &str = "00000000-0000-0000-0000-000000000000";
 
 const ENV_AUTH_BACKEND: &str = "AETERNA_AUTH_BACKEND";
 const AUTH_BACKEND_ALLOW_ALL: &str = "allow-all";
@@ -305,6 +307,8 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
 
         registry.set_secret_resolver_registry(Arc::new(secret_registry));
     }
+
+    vault_marker_self_test(&registry).await;
 
     let provider_registry = Arc::new(registry);
 
@@ -635,6 +639,53 @@ fn tenant_config_provider_namespace_from_config(k8s_auth: &config::KubernetesAut
         .as_deref()
         .unwrap_or(DEFAULT_K8S_NAMESPACE)
         .to_string()
+}
+
+async fn vault_marker_self_test(registry: &TenantProviderRegistry) {
+    if std::env::var("VAULT_ADDR")
+        .map(|v| v.trim().is_empty())
+        .unwrap_or(true)
+    {
+        return;
+    }
+
+    let tenant = TenantId::new(SYSTEM_MARKER_TENANT_ID.to_string())
+        .expect("hard-coded zero uuid is a valid TenantId");
+    let chart_version_ref = SecretReference::Vault {
+        mount: "secret".to_string(),
+        path: "global/aeterna/.bootstrap-marker".to_string(),
+        field: "chart_version".to_string(),
+    };
+    let timestamp_ref = SecretReference::Vault {
+        mount: "secret".to_string(),
+        path: "global/aeterna/.bootstrap-marker".to_string(),
+        field: "timestamp".to_string(),
+    };
+
+    match registry
+        .resolve_secret_ref(&tenant, &chart_version_ref)
+        .await
+    {
+        Ok(chart_version) => {
+            let chart_version = String::from_utf8_lossy(chart_version.expose()).to_string();
+            let timestamp = registry
+                .resolve_secret_ref(&tenant, &timestamp_ref)
+                .await
+                .ok()
+                .map(|value| String::from_utf8_lossy(value.expose()).to_string());
+            tracing::info!(
+                chart_version = %chart_version,
+                marker_timestamp = timestamp.as_deref().unwrap_or("<unknown>"),
+                "Vault/OpenBao bootstrap marker read succeeded at startup"
+            );
+        }
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "Vault/OpenBao bootstrap marker read failed at startup; continuing"
+            );
+        }
+    }
 }
 
 fn create_graph_store(config: &config::Config) -> anyhow::Result<Option<Arc<DuckDbGraphStore>>> {

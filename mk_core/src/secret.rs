@@ -291,7 +291,10 @@ pub enum SecretReference {
     Vault {
         /// Mount point of the KV-v2 engine (e.g. `"secret"`).
         mount: String,
-        /// Path under the mount (e.g. `"tenants/acme/db"`).
+        /// Path under the mount (e.g. `"global/github/app"` or
+        /// `"tenants/{tenant_id}/db"`). The Vault resolver expands
+        /// `{tenant_id}` (plus `{tenant}` / `{tenantId}` aliases) from the
+        /// current tenant before reading KV-v2.
         path: String,
         /// Field name within the secret document.
         field: String,

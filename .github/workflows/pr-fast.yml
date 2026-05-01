@@ -140,15 +140,21 @@ jobs:
         run: |
           helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
           helm repo add qdrant https://qdrant.github.io/qdrant-helm
+          helm repo add valkey https://valkey.io/valkey-helm/
+          helm repo add openbao https://openbao.github.io/openbao-helm
           helm repo add weaviate https://weaviate.github.io/weaviate-helm/
           helm repo add percona https://percona.github.io/percona-helm-charts/
           helm repo update
-      - name: Helm dependency build
+      - name: Helm dependency build (main chart)
         run: helm dependency build charts/aeterna
-      - name: Helm lint
+      - name: Helm dependency build (prereqs chart)
+        run: helm dependency build charts/aeterna-prereqs
+      - name: Helm lint (main chart)
         # Note: lint returns 0 even when template 'fail' functions fire — they're
         # logged as INFO. That's fine: we want lint to catch STRUCTURAL issues here.
         run: helm lint charts/aeterna
+      - name: Helm lint (prereqs chart)
+        run: helm lint charts/aeterna-prereqs
       - name: Helm template (with minimal connection overrides)
         # The chart requires postgresql.host, redis.host, vectorStore.host at
         # render time (enforced by fail() in templates). None of the fixtures
@@ -161,6 +167,44 @@ jobs:
             --set vectorStore.host=qdrant.ci.local \
             --debug > /tmp/manifest.yaml
           echo "Rendered $(wc -l < /tmp/manifest.yaml) lines across $(grep -c '^kind:' /tmp/manifest.yaml) K8s objects"
+      - name: Helm template prereqs OpenBao modes
+        run: |
+          helm template prereqs charts/aeterna-prereqs > /tmp/prereqs-disabled.yaml
+          test "$(grep -c '^kind:' /tmp/prereqs-disabled.yaml)" -gt 0
+
+          helm template prereqs charts/aeterna-prereqs \
+            --set openbao.enabled=true \
+            --set openbao.mode=internal-dev-seal \
+            >/tmp/prereqs-dev.yaml
+
+          helm template prereqs charts/aeterna-prereqs \
+            --set openbao.enabled=true \
+            --set openbao.mode=internal-shamir \
+            --set openbao.server.dev.enabled=false \
+            --set openbao.server.standalone.enabled=true \
+            >/tmp/prereqs-shamir.yaml
+
+          helm template prereqs charts/aeterna-prereqs \
+            --set openbao.enabled=true \
+            --set openbao.mode=external \
+            --set openbao.server.dev.enabled=false \
+            >/tmp/prereqs-external.yaml
+
+          if helm template prereqs charts/aeterna-prereqs \
+            --set openbao.enabled=true \
+            --set openbao.mode=bogus >/tmp/prereqs-invalid.log 2>&1; then
+            echo "::error::invalid openbao.mode unexpectedly rendered successfully"
+            exit 1
+          fi
+          grep -q 'openbao.mode=' /tmp/prereqs-invalid.log
+
+          helm template aeterna charts/aeterna \
+            --set postgresql.host=pg.ci.local \
+            --set redis.host=redis.ci.local \
+            --set vectorStore.host=qdrant.ci.local \
+            --set vault.enabled=true \
+            >/tmp/aeterna-vault.yaml
+          grep -q 'name: VAULT_ADDR' /tmp/aeterna-vault.yaml
       - name: Install kubeconform
         run: |
           curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.4/kubeconform-linux-amd64.tar.gz | tar xz

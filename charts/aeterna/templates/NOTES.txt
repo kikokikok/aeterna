@@ -1,0 +1,13 @@
+{{- if .Values.vault.enabled }}
+Vault / OpenBao integration is enabled for the Aeterna workload.
+
+Vault address: {{ include "aeterna.vault.address" . }}
+Kubernetes auth path: {{ .Values.vault.kubernetesAuthPath }}
+Kubernetes auth role: {{ .Values.vault.kubernetesAuthRole }}
+ServiceAccount subject: system:serviceaccount:{{ .Release.Namespace }}:{{ include "aeterna.vault.serviceAccountName" . }}
+
+{{- if not .Values.vault.address }}
+The chart is assuming the prereqs chart was installed alongside this release
+and that the OpenBao service is reachable at the default sibling DNS name above.
+{{- end }}
+{{- end }}
