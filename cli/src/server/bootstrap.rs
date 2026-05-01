@@ -47,6 +47,7 @@ use super::service_token_validator;
 use super::{AppState, PluginAuthState, bootstrap_tracker};
 
 const DEFAULT_K8S_NAMESPACE: &str = "default";
+const SYSTEM_MARKER_TENANT_ID: &str = "00000000-0000-0000-0000-000000000000";
 
 const ENV_AUTH_BACKEND: &str = "AETERNA_AUTH_BACKEND";
 const AUTH_BACKEND_ALLOW_ALL: &str = "allow-all";
@@ -571,7 +572,7 @@ async fn vault_marker_self_test(registry: &TenantProviderRegistry) {
         return;
     }
 
-    let tenant = TenantId::new("00000000-0000-0000-0000-000000000000".to_string())
+    let tenant = TenantId::new(SYSTEM_MARKER_TENANT_ID.to_string())
         .expect("hard-coded zero uuid is a valid TenantId");
     let chart_version_ref = SecretReference::Vault {
         mount: "secret".to_string(),

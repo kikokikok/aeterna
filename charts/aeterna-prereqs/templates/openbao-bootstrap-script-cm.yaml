@@ -210,7 +210,7 @@ data:
         die "kubernetes auth verification failed for role=$KUBERNETES_AUTH_ROLE"
       fi
       role_policies="$(echo "$login_out" | jq -r '.auth.policies[]?' | sort | tr '\n' ' ')"
-      echo "$role_policies" | grep -q 'aeterna-pod' || die "kubernetes auth verification token missing aeterna-pod policy"
+      echo "$role_policies" | grep -qw 'aeterna-pod' || die "kubernetes auth verification token missing aeterna-pod policy"
       unset sa_jwt client_token role_policies login_out
       log "  kubernetes auth verified"
     else

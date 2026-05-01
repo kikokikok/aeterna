@@ -47,7 +47,7 @@ spec:
           bash /scripts/bootstrap.sh
           export VAULT_ADDR="$BAO_ADDR"
           export VAULT_TOKEN="$(kubectl -n "$NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.root_token}' | base64 -d)"
-          bao kv get "${KV_PATH}/aeterna/.bootstrap-marker" >/dev/null
+          test "$(bao kv get "${KV_PATH}/aeterna/.bootstrap-marker" -format=json | jq -r '.data.data.chart_version')" = "$CHART_VERSION"
       env:
         - name: MODE
           value: {{ .Values.openbao.mode | quote }}

@@ -33,6 +33,8 @@ use crate::secret_resolver::{ResolveError, SecretRefResolver};
 const DEFAULT_K8S_AUTH_PATH: &str = "auth/kubernetes";
 const DEFAULT_K8S_JWT_PATH: &str = "/var/run/secrets/kubernetes.io/serviceaccount/token";
 const DEFAULT_TIMEOUT_SECS: u64 = 5;
+const TOKEN_REFRESH_BUFFER_SECS: u64 = 30;
+const TOKEN_REFRESH_BUFFER_DIVISOR: u64 = 10;
 
 #[derive(Debug, Clone)]
 enum VaultAuthConfig {
@@ -233,8 +235,13 @@ impl VaultRefResolver {
 
                 let token = SecretBytes::from_string(auth.client_token);
                 let ttl = auth.lease_duration.unwrap_or(300);
-                let refresh_after =
-                    std::cmp::max(1, ttl.saturating_sub(std::cmp::min(30, ttl / 10)));
+                let refresh_after = std::cmp::max(
+                    1,
+                    ttl.saturating_sub(std::cmp::min(
+                        TOKEN_REFRESH_BUFFER_SECS,
+                        ttl / TOKEN_REFRESH_BUFFER_DIVISOR,
+                    )),
+                );
                 let cached = CachedToken {
                     token: token.clone(),
                     expires_at: Instant::now() + Duration::from_secs(refresh_after),
@@ -429,12 +436,12 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "current_thread")]
     async fn reports_kind_vault() {
         assert_eq!(VaultRefResolver::new().kind(), "vault");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "current_thread")]
     async fn resolves_with_static_token() {
         let _guard = ENV_LOCK.lock().await;
         clear_vault_env();
@@ -461,7 +468,7 @@ mod tests {
         clear_vault_env();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "current_thread")]
     async fn resolves_with_kubernetes_auth_and_caches_token() {
         let _guard = ENV_LOCK.lock().await;
         clear_vault_env();
@@ -511,7 +518,7 @@ mod tests {
         clear_vault_env();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "current_thread")]
     async fn missing_field_is_not_found() {
         let _guard = ENV_LOCK.lock().await;
         clear_vault_env();
@@ -538,7 +545,7 @@ mod tests {
         clear_vault_env();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "current_thread")]
     async fn empty_mount_is_malformed() {
         let _guard = ENV_LOCK.lock().await;
         clear_vault_env();
@@ -567,7 +574,7 @@ mod tests {
         clear_vault_env();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "current_thread")]
     async fn wrong_kind_is_rejected() {
         let resolver = VaultRefResolver::new();
         let env = SecretReference::Env {

@@ -190,9 +190,12 @@ jobs:
             --set openbao.server.dev.enabled=false \
             >/tmp/prereqs-external.yaml
 
-          ! helm template prereqs charts/aeterna-prereqs \
+          if helm template prereqs charts/aeterna-prereqs \
             --set openbao.enabled=true \
-            --set openbao.mode=bogus >/tmp/prereqs-invalid.log 2>&1
+            --set openbao.mode=bogus >/tmp/prereqs-invalid.log 2>&1; then
+            echo "::error::invalid openbao.mode unexpectedly rendered successfully"
+            exit 1
+          fi
           grep -q 'openbao.mode=' /tmp/prereqs-invalid.log
 
           helm template aeterna charts/aeterna \
