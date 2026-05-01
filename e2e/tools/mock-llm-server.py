@@ -19,11 +19,13 @@ import json
 import os
 import pathlib
 import sys
+import threading
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 CONFIG: dict = {}
+_TRAFFIC_LOCK = threading.Lock()
 
 # Fields that vary harmlessly between calls; drop or normalize before hashing.
 _DROP_KEYS = {"stream", "user", "stream_options"}
@@ -71,6 +73,17 @@ def forward_upstream(path: str, body: bytes) -> tuple[int, bytes, dict]:
         return e.code, e.read(), dict(e.headers or {})
 
 
+def append_traffic_entry(entry: dict) -> None:
+    traffic_log = CONFIG.get("traffic_log")
+    if not traffic_log:
+        return
+    line = json.dumps(entry, sort_keys=True, separators=(",", ":")) + "\n"
+    with _TRAFFIC_LOCK:
+        pathlib.Path(traffic_log).parent.mkdir(parents=True, exist_ok=True)
+        with open(traffic_log, "a", encoding="utf-8") as fh:
+            fh.write(line)
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # noqa: A003 - stdlib API
         sys.stderr.write("[mock-llm] " + (fmt % args) + "\n")
@@ -96,10 +109,24 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(length) if length else b""
         h = request_hash(body)
         body_path, meta_path = fixture_paths(h)
+        traffic = {
+            "hash": h,
+            "mode": CONFIG["mode"],
+            "method": "POST",
+            "path": self.path,
+            "request_body": body.decode("utf-8", errors="replace"),
+        }
 
         if CONFIG["mode"] == "replay":
             if body_path.exists():
-                self._send(200, body_path.read_bytes())
+                response_body = body_path.read_bytes()
+                append_traffic_entry({
+                    **traffic,
+                    "response_status": 200,
+                    "response_body": response_body.decode("utf-8", errors="replace"),
+                    "fixture_path": str(body_path),
+                })
+                self._send(200, response_body)
             else:
                 err = {
                     "error": "missing fixture",
@@ -107,12 +134,25 @@ class Handler(BaseHTTPRequestHandler):
                     "path": str(body_path),
                     "hint": "re-record with AETERNA_E2E_LLM_RECORDED_MODE=record",
                 }
-                self._send(503, json.dumps(err).encode())
+                response_body = json.dumps(err).encode()
+                append_traffic_entry({
+                    **traffic,
+                    "response_status": 503,
+                    "response_body": response_body.decode("utf-8", errors="replace"),
+                    "fixture_path": str(body_path),
+                })
+                self._send(503, response_body)
             return
 
         # record mode
         if not CONFIG.get("upstream_url"):
-            self._send(500, b'{"error":"record mode requires --upstream-url"}')
+            response_body = b'{"error":"record mode requires --upstream-url"}'
+            append_traffic_entry({
+                **traffic,
+                "response_status": 500,
+                "response_body": response_body.decode("utf-8", errors="replace"),
+            })
+            self._send(500, response_body)
             return
         status, resp, _hdrs = forward_upstream(self.path, body)
         if status == 200:
@@ -124,6 +164,12 @@ class Handler(BaseHTTPRequestHandler):
                 "recorded_at": _dt.datetime.utcnow().isoformat() + "Z",
             }
             meta_path.write_text(json.dumps(meta, indent=2) + "\n")
+        append_traffic_entry({
+            **traffic,
+            "response_status": status,
+            "response_body": resp.decode("utf-8", errors="replace"),
+            "fixture_path": str(body_path),
+        })
         self._send(status, resp)
 
 
@@ -134,6 +180,7 @@ def main() -> int:
     ap.add_argument("--mode", choices=("replay", "record"), default="replay")
     ap.add_argument("--upstream-url", default="")
     ap.add_argument("--upstream-key", default="")
+    ap.add_argument("--traffic-log", default="")
     args = ap.parse_args()
 
     CONFIG.update(
@@ -142,6 +189,7 @@ def main() -> int:
         mode=args.mode,
         upstream_url=args.upstream_url,
         upstream_key=args.upstream_key or os.environ.get("OPENAI_API_KEY", ""),
+        traffic_log=args.traffic_log,
     )
     pathlib.Path(args.fixtures).mkdir(parents=True, exist_ok=True)
     httpd = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)

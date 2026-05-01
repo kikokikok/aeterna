@@ -28,6 +28,19 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           AETERNA_E2E_LLM_MODEL: ${{ inputs.model }}
         run: |
-          ./e2e/llm/${{ inputs.backend }}.sh provision
-          ./e2e/llm/${{ inputs.backend }}.sh env
-          ./e2e/llm/${{ inputs.backend }}.sh health
+          mkdir -p .e2e
+          set -euo pipefail
+          {
+            ./e2e/llm/${{ inputs.backend }}.sh provision
+            ./e2e/llm/${{ inputs.backend }}.sh env
+            ./e2e/llm/${{ inputs.backend }}.sh health
+          } 2>&1 | tee .e2e/live-provider-smoke.log
+        shell: bash
+      - name: Upload live-provider logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-llm-tier2-live-provider-logs
+          path: .e2e/live-provider-smoke.log
+          if-no-files-found: warn
+          retention-days: 7

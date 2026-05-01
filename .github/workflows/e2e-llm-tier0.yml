@@ -21,7 +21,19 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - run: ./e2e/llm/contract-test.sh
+      - name: Run contract test
+        run: |
+          mkdir -p .e2e
+          set -euo pipefail
+          ./e2e/llm/contract-test.sh 2>&1 | tee .e2e/contract-test.log
+      - name: Upload contract-test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-llm-tier0-contract-test-logs
+          path: .e2e/contract-test.log
+          if-no-files-found: warn
+          retention-days: 7
 
   ollama-smoke:
     name: Ollama adapter smoke (real inference)
@@ -41,12 +53,25 @@ jobs:
         env:
           AETERNA_E2E_OLLAMA_HOST: http://localhost:11434
         run: |
-          ./e2e/llm/ollama.sh provision
-          ./e2e/llm/ollama.sh env
-          ./e2e/llm/ollama.sh health
+          mkdir -p .e2e
+          set -euo pipefail
+          {
+            ./e2e/llm/ollama.sh provision
+            ./e2e/llm/ollama.sh env
+            ./e2e/llm/ollama.sh health
+          } 2>&1 | tee .e2e/ollama-smoke.log
+        shell: bash
       - name: Cleanup (best-effort)
         if: always()
         run: ./e2e/llm/ollama.sh cleanup || true
+      - name: Upload ollama-smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-llm-tier0-ollama-smoke-logs
+          path: .e2e/**/*.log
+          if-no-files-found: warn
+          retention-days: 7
 
   recorded-replay:
     name: Recorded-fixture adapter replay
@@ -55,12 +80,36 @@ jobs:
       - uses: actions/checkout@v4
       - name: Provision + replay one fixture
         run: |
-          ./e2e/llm/recorded.sh provision
-          ./e2e/llm/recorded.sh env > /tmp/llm.env
-          # shellcheck disable=SC1091
-          set -a; source /tmp/llm.env; set +a
-          curl -fsS "$AETERNA_OPENAI_BASE_URL/chat/completions" \
-            -H 'Content-Type: application/json' \
-            -d '{"messages":[{"role":"user","content":"ping"}],"model":"qwen2.5:0.5b"}' \
-            | grep -q '"pong"'
-          ./e2e/llm/recorded.sh cleanup
+          mkdir -p .e2e
+          set -euo pipefail
+          {
+            ./e2e/llm/recorded.sh provision
+            ./e2e/llm/recorded.sh env > /tmp/llm.env
+            # shellcheck disable=SC1091
+            set -a; source /tmp/llm.env; set +a
+            curl -fsS "$AETERNA_OPENAI_BASE_URL/chat/completions" \
+              -H 'Content-Type: application/json' \
+              -d '{"messages":[{"role":"user","content":"ping"}],"model":"qwen2.5:0.5b"}' \
+              | grep -q '"pong"'
+            ./e2e/llm/recorded.sh cleanup
+          } 2>&1 | tee .e2e/recorded-replay.log
+        shell: bash
+      - name: Cleanup recorded mock server (best-effort)
+        if: always()
+        run: ./e2e/llm/recorded.sh cleanup || true
+      - name: Upload recorded-replay logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-llm-tier0-recorded-replay-logs
+          path: .e2e/**/*.log
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload recorded HTTP traffic
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-llm-tier0-recorded-http-traffic
+          path: .e2e/llm-recorded-traffic.ndjson
+          if-no-files-found: warn
+          retention-days: 7

@@ -2,6 +2,7 @@
 # Recorded-fixture replay adapter — Tier 0 fast path, $0, deterministic.
 set -euo pipefail
 
+# shellcheck disable=SC2034 # read by _lib.sh helpers after sourcing
 ADAPTER_NAME=recorded
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "${HERE}/../.." && pwd)"
@@ -13,6 +14,7 @@ FIXTURES="${AETERNA_E2E_LLM_FIXTURES:-${ROOT}/e2e/fixtures/llm}"
 PID_FILE="${ROOT}/.e2e/llm-recorded.pid"
 PORT_FILE="${ROOT}/.e2e/llm-recorded.port"
 LOG_FILE="${ROOT}/.e2e/llm-recorded.log"
+TRAFFIC_FILE="${ROOT}/.e2e/llm-recorded-traffic.ndjson"
 MODEL="${AETERNA_E2E_LLM_MODEL:-recorded-fixture}"
 
 do_provision() {
@@ -39,6 +41,7 @@ do_provision() {
     --port "${port}" \
     --fixtures "${FIXTURES}" \
     --mode "${MODE}" \
+    --traffic-log "${TRAFFIC_FILE}" \
     "${upstream_args[@]}" \
     > "${LOG_FILE}" 2>&1 &
   echo $! > "${PID_FILE}"

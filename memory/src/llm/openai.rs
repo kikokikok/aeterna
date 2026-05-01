@@ -117,3 +117,46 @@ impl LlmService for OpenAILlmService {
         Ok(result)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rustls::crypto::aws_lc_rs;
+    use wiremock::matchers::{header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn install_crypto_provider() {
+        let _ = aws_lc_rs::default_provider().install_default();
+    }
+
+    #[tokio::test]
+    async fn routes_generate_requests_to_custom_base_url() {
+        install_crypto_provider();
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/chat/completions"))
+            .and(header("authorization", "Bearer sk-test"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": "chatcmpl-test",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "gpt-4o-mini",
+                "choices": [{
+                    "index": 0,
+                    "message": { "role": "assistant", "content": "hello from mock" },
+                    "finish_reason": "stop"
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let service = OpenAILlmService::new(
+            "sk-test".into(),
+            "gpt-4o-mini".into(),
+            Some(format!("{}/v1", server.uri())),
+        );
+
+        let response = service.generate("hello").await.unwrap();
+        assert_eq!(response, "hello from mock");
+    }
+}

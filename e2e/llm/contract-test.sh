@@ -22,12 +22,15 @@ check_backend() {
   # 2. bash -n parse
   bash -n "${script}" || { echo "  FAIL: bash -n"; fail=$((fail+1)); return; }
 
-  # 3. bogus subcommand exits 64
+  # 3. shellcheck
+  shellcheck -x -P "${HERE}" "${script}" || { echo "  FAIL: shellcheck"; fail=$((fail+1)); return; }
+
+  # 4. bogus subcommand exits 64
   local rc=0
   "${script}" __bogus__ >/dev/null 2>&1 || rc=$?
   [[ "${rc}" == "64" ]] || { echo "  FAIL: bogus subcommand exit ${rc} != 64"; fail=$((fail+1)); return; }
 
-  # 4. env emits required keys (set placeholder secrets so live-* don't die)
+  # 5. env emits required keys (set placeholder secrets so live-* don't die)
   local env_out
   env_out=$(GITHUB_TOKEN=placeholder OPENAI_API_KEY=placeholder ANTHROPIC_API_KEY=placeholder \
             AETERNA_E2E_LLM_FIXTURES=/tmp/_llm_fixtures \

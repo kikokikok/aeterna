@@ -61,7 +61,7 @@
 - [x] 7.1 `.github/workflows/e2e-tier0.yaml`: runs on every push and PR. Uses `services.ollama` container + `actions/cache` for the model blob. Calls `e2e/run.sh --llm-backend ollama`.
 - [x] 7.2 `.github/workflows/e2e-tier1.yaml`: triggers on `push` to `main` and on schedule (cron nightly). Uses github-models. Includes the fork-PR guard from §D2.
 - [x] 7.3 `.github/workflows/e2e-tier2.yaml`: `workflow_dispatch` only, takes `backend` input ∈ {live-openai, live-anthropic}. Documented in CONTRIBUTING.
-- [ ] 7.4 Each workflow uploads test logs and (on failure) the full HTTP traffic captured by the mock server (when applicable).
+- [x] 7.4 Each workflow uploads test logs and (on failure) the full HTTP traffic captured by the mock server (when applicable).
 
 ## Phase 2 — Rust runtime: `AETERNA_OPENAI_BASE_URL`
 
@@ -77,14 +77,14 @@
 - [x] 9.1 Add a unit test in `memory/src/llm/factory.rs`:
   - `with_unset_base_url_keeps_default()` — `from_env()` returns `None` when env var unset; behaviour unchanged.
   - `with_set_base_url_propagates()` — `from_env()` returns `Some(...)` when set.
-- [ ] 9.2 Add an integration test (gated by `#[cfg(feature = "e2e")]` or `IGNORE` by default) that constructs a client with a custom `base_url` and asserts the HTTP request goes there (using `wiremock` or similar test double).
+- [x] 9.2 Add an integration test (gated by `#[cfg(feature = "e2e")]` or `IGNORE` by default) that constructs a client with a custom `base_url` and asserts the HTTP request goes there (using `wiremock` or similar test double).
 - [x] 9.3 Run full `cargo test --workspace` to confirm AC7 (no behaviour change when env var unset).
 
 ### 10. Documentation
 
 - [x] 10.1 Update `README.md` (or `docs/configuration.md` if present) with a row for `AETERNA_OPENAI_BASE_URL`.
-- [ ] 10.2 Add a `docs/e2e-llm-adapters.md` page describing the contract, listing the five backends, and explaining when to use each.
-- [ ] 10.3 Cross-link from PR #169's `e2e/README.md` (added there in #169 BUILD) to `docs/e2e-llm-adapters.md`.
+- [x] 10.2 Add a `docs/e2e-llm-adapters.md` page describing the contract, listing the five backends, and explaining when to use each.
+- [x] 10.3 Cross-link from PR #169's `e2e/README.md` (added there in #169 BUILD) to `docs/e2e-llm-adapters.md`.
 
 ## 11. Verification (Stage 6)
 
@@ -93,4 +93,4 @@
 - [x] 11.3 `cargo check --workspace`, `cargo clippy --workspace`, `cargo test --workspace` all pass.
 - [x] 11.4 Local smoke test: `e2e/llm/ollama.sh provision && e2e/llm/ollama.sh health && e2e/llm/ollama.sh cleanup` against a local Docker daemon completes successfully.
 - [ ] 11.5 GHA dry-run via `act` or by pushing to a draft PR — confirm Tier 0 workflow comes up green on a fresh runner.
-- [ ] 11.6 Confirm no regression on PR #170 (helm template still clean) and no behaviour change on existing aeterna unit tests (AC7).
+- [x] 11.6 Confirm no regression on PR #170 (helm template still clean) and no behaviour change on existing aeterna unit tests (AC7).

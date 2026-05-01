@@ -2,6 +2,7 @@
 # Live OpenAI adapter — Tier 2, local dev / manual workflow_dispatch only. COSTS MONEY.
 set -euo pipefail
 
+# shellcheck disable=SC2034 # read by _lib.sh helpers after sourcing
 ADAPTER_NAME=live-openai
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./_lib.sh

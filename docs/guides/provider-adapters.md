@@ -48,6 +48,9 @@ export AETERNA_OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 > services. Empty string is treated as unset. Per-tenant DB-stored
 > providers always use the public OpenAI endpoint; only env-based config
 > reads this variable.
+>
+> For the e2e-specific adapter contract that emits these variables, see
+> `docs/e2e-llm-adapters.md`.
 
 ### Google Cloud Runtime Configuration
 

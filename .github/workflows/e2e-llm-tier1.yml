@@ -22,6 +22,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AETERNA_E2E_LLM_MODEL: openai/gpt-4o-mini
         run: |
-          ./e2e/llm/github-models.sh provision
-          ./e2e/llm/github-models.sh env
-          ./e2e/llm/github-models.sh health
+          mkdir -p .e2e
+          set -euo pipefail
+          {
+            ./e2e/llm/github-models.sh provision
+            ./e2e/llm/github-models.sh env
+            ./e2e/llm/github-models.sh health
+          } 2>&1 | tee .e2e/github-models-smoke.log
+        shell: bash
+      - name: Upload github-models logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-llm-tier1-github-models-logs
+          path: .e2e/github-models-smoke.log
+          if-no-files-found: warn
+          retention-days: 7

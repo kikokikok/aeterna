@@ -21,4 +21,7 @@ Unknown subcommands exit 64 (EX_USAGE).
 | `live-openai` | 2 | $$ | `OPENAI_API_KEY` | local dev / dispatch only |
 | `live-anthropic` | 2 | $$ | `ANTHROPIC_API_KEY` | local dev (runtime support pending) |
 
-See `openspec/changes/add-llm-backend-adapter/design.md` for full design.
+See also:
+
+- `docs/e2e-llm-adapters.md`
+- `openspec/changes/add-llm-backend-adapter/design.md`

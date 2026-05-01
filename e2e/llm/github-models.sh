@@ -2,6 +2,7 @@
 # GitHub Models adapter — Tier 1, free real-LLM inference for OSS via GITHUB_TOKEN.
 set -euo pipefail
 
+# shellcheck disable=SC2034 # read by _lib.sh helpers after sourcing
 ADAPTER_NAME=github-models
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./_lib.sh

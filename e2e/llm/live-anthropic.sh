@@ -5,6 +5,7 @@
 # factory adds Anthropic support (out of scope for this PR).
 set -euo pipefail
 
+# shellcheck disable=SC2034 # read by _lib.sh helpers after sourcing
 ADAPTER_NAME=live-anthropic
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./_lib.sh

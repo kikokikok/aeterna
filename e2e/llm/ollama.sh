@@ -2,6 +2,7 @@
 # Ollama LLM backend adapter — Tier 0 default for free, fork-safe CI.
 set -euo pipefail
 
+# shellcheck disable=SC2034 # read by _lib.sh helpers after sourcing
 ADAPTER_NAME=ollama
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./_lib.sh
