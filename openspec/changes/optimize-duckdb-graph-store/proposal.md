@@ -2,8 +2,10 @@
 
 The DuckDB-backed `GraphStore` (`storage/src/graph_duckdb.rs`) is the actual
 graph backend in production for memory + knowledge linking. The Postgres
-`impl GraphStore for PostgresBackend` is dead code referencing tables that
-no migration creates and is removed in a sibling commit.
+`impl GraphStore for PostgresBackend` was dead code referencing tables that
+no migration creates (zero `dyn GraphStore` callers, all real consumers use
+the concrete `DuckDbGraphStore`) and is removed in this PR — see commit
+deleting `storage/src/postgres.rs:2463-2671`.
 
 The DuckDB design has three real fitness gaps that bound how far we can scale
 before we hit either a perf cliff or a correctness problem:
