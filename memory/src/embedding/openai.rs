@@ -232,21 +232,24 @@ mod tests {
 
     #[test]
     fn test_dimension_configuration() {
-        let service = OpenAIEmbeddingService::new("sk-test".to_string(), "text-embedding-ada-002", None);
+        let service =
+            OpenAIEmbeddingService::new("sk-test".to_string(), "text-embedding-ada-002", None);
         assert_eq!(
             service.dimension(),
             1536,
             "ada-002 should have 1536 dimensions"
         );
 
-        let service = OpenAIEmbeddingService::new("sk-test".to_string(), "text-embedding-3-small", None);
+        let service =
+            OpenAIEmbeddingService::new("sk-test".to_string(), "text-embedding-3-small", None);
         assert_eq!(
             service.dimension(),
             1536,
             "3-small should have 1536 dimensions"
         );
 
-        let service = OpenAIEmbeddingService::new("sk-test".to_string(), "text-embedding-3-large", None);
+        let service =
+            OpenAIEmbeddingService::new("sk-test".to_string(), "text-embedding-3-large", None);
         assert_eq!(
             service.dimension(),
             3072,

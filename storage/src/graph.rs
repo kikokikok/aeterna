@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use mk_core::types::TenantContext;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphNode {
@@ -49,4 +50,21 @@ pub trait GraphStore: Send + Sync {
         ctx: TenantContext,
         source_memory_id: &str,
     ) -> Result<usize, Self::Error>;
+
+    /// Append a graph mutation event to the event log.
+    /// Returns the assigned sequence number.
+    /// Default implementation panics — only `DuckDbGraphStore` with event sourcing implements this.
+    async fn append_event(
+        &self,
+        _ctx: TenantContext,
+        _kind: &str,
+        _payload: Value,
+    ) -> Result<i64, Self::Error> {
+        unimplemented!("append_event is only available when event sourcing is enabled")
+    }
+
+    /// Return the last applied event sequence for a tenant on this pod.
+    async fn last_applied_seq(&self, _ctx: TenantContext) -> Result<i64, Self::Error> {
+        unimplemented!("last_applied_seq is only available when event sourcing is enabled")
+    }
 }

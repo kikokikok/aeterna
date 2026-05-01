@@ -5,12 +5,19 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use storage::graph::GraphStore;
 use storage::graph_duckdb::{DuckDbGraphConfig, DuckDbGraphStore};
+#[cfg(feature = "postgres-graph")]
 use storage::postgres::PostgresBackend;
+#[cfg(not(feature = "postgres-graph"))]
+use testing::unique_id;
+#[cfg(feature = "postgres-graph")]
 use testing::{postgres, unique_id};
+#[cfg(feature = "postgres-graph")]
 use tokio::sync::OnceCell;
 
+#[cfg(feature = "postgres-graph")]
 static SCHEMA_INITIALIZED: OnceCell<bool> = OnceCell::const_new();
 
+#[cfg(feature = "postgres-graph")]
 async fn create_test_backend() -> Option<Arc<PostgresBackend>> {
     let fixture = postgres().await?;
     let backend = Arc::new(PostgresBackend::new(fixture.url()).await.ok()?);
@@ -31,6 +38,7 @@ fn test_tenant_context() -> TenantContext {
     TenantContext::new(tenant_id, user_id)
 }
 
+#[cfg(feature = "postgres-graph")]
 #[tokio::test]
 async fn test_graph_based_reasoning() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let Some(graph_store) = create_test_backend().await else {
@@ -384,6 +392,7 @@ async fn test_duckdb_graph_community_detection()
     Ok(())
 }
 
+#[cfg(feature = "postgres-graph")]
 #[tokio::test]
 async fn test_memory_add_with_graph_extraction_malformed_json()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -442,6 +451,7 @@ async fn test_memory_add_with_graph_extraction_malformed_json()
     Ok(())
 }
 
+#[cfg(feature = "postgres-graph")]
 #[tokio::test]
 async fn test_memory_add_with_graph_extraction_no_json_in_response()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -494,6 +504,7 @@ async fn test_memory_add_with_graph_extraction_no_json_in_response()
     Ok(())
 }
 
+#[cfg(feature = "postgres-graph")]
 #[tokio::test]
 async fn test_memory_add_with_valid_extraction_creates_graph_entities()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -616,6 +627,7 @@ async fn test_memory_add_without_graph_store_skips_extraction()
     Ok(())
 }
 
+#[cfg(feature = "postgres-graph")]
 #[tokio::test]
 async fn test_memory_add_without_llm_service_skips_extraction()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

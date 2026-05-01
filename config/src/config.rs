@@ -786,6 +786,27 @@ pub struct GraphConfig {
     #[serde(default = "default_graph_s3_region")]
     pub s3_region: String,
 
+    /// Optional explicit reader-pool size override for DuckDB read connections.
+    #[serde(default)]
+    #[validate(range(min = 1, max = 64))]
+    pub reader_pool_size: Option<usize>,
+
+    /// Full snapshot cadence in seconds.
+    #[serde(default = "default_graph_snapshot_full_interval_secs")]
+    #[validate(range(min = 60, max = 31536000))]
+    pub snapshot_full_interval_secs: u64,
+
+    /// Delta snapshot cadence in seconds.
+    #[serde(default = "default_graph_snapshot_delta_interval_secs")]
+    #[validate(range(min = 1, max = 31536000))]
+    pub snapshot_delta_interval_secs: u64,
+
+    /// Enable event-sourced WAL coordination across pods (Phase 2).
+    /// When OFF (default): writes go directly to local DuckDB only.
+    /// When ON: writes are dual-written to Postgres event log + local DuckDB.
+    #[serde(default)]
+    pub event_sourcing_enabled: bool,
+
     /// Alerting thresholds for write contention
     #[serde(default)]
     pub contention_alerts: ContentionAlertConfig,
@@ -862,6 +883,14 @@ fn default_graph_s3_region() -> String {
     "us-east-1".to_string()
 }
 
+fn default_graph_snapshot_full_interval_secs() -> u64 {
+    604800
+}
+
+fn default_graph_snapshot_delta_interval_secs() -> u64 {
+    300
+}
+
 impl Default for GraphConfig {
     fn default() -> Self {
         Self {
@@ -871,6 +900,10 @@ impl Default for GraphConfig {
             s3_prefix: None,
             s3_endpoint: None,
             s3_region: default_graph_s3_region(),
+            reader_pool_size: None,
+            snapshot_full_interval_secs: default_graph_snapshot_full_interval_secs(),
+            snapshot_delta_interval_secs: default_graph_snapshot_delta_interval_secs(),
+            event_sourcing_enabled: true,
             contention_alerts: ContentionAlertConfig::default(),
         }
     }
@@ -1684,6 +1717,8 @@ mod tests {
         assert!(config.s3_prefix.is_none());
         assert!(config.s3_endpoint.is_none());
         assert_eq!(config.s3_region, "us-east-1");
+        assert_eq!(config.snapshot_full_interval_secs, 604800);
+        assert_eq!(config.snapshot_delta_interval_secs, 300);
     }
 
     #[test]
@@ -1701,6 +1736,8 @@ mod tests {
         let providers = ProviderConfig::default();
         assert!(providers.graph.enabled);
         assert_eq!(providers.graph.database_path, ":memory:");
+        assert_eq!(providers.graph.snapshot_full_interval_secs, 604800);
+        assert_eq!(providers.graph.snapshot_delta_interval_secs, 300);
     }
 
     // ── ProvisioningConfig (B2 task 4.1) ────────────────────────────────

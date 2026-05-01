@@ -8,7 +8,7 @@
 use mk_core::types::{TenantContext, TenantId, UserId};
 use serde_json::json;
 use std::time::Instant;
-use storage::graph::{GraphEdge, GraphNode};
+use storage::graph::{GraphEdge, GraphNode, GraphStore};
 use storage::graph_duckdb::{DuckDbGraphConfig, DuckDbGraphStore};
 
 const DEBUG_MULTIPLIER: f64 = 50.0;
@@ -588,4 +588,66 @@ fn bench_large_graph_traversal() {
         avg_ms < 500.0 * DEBUG_MULTIPLIER,
         "Large graph traversal should be reasonable for debug build"
     );
+}
+
+#[test]
+fn bench_phase1_indexed_neighbor_and_label_lookup() {
+    let store = create_store();
+    let ctx = create_tenant_context("tenant-phase1-index");
+    let tenant_id = "tenant-phase1-index";
+
+    let node_count = 5_000;
+    let needle_idx = 2_500;
+    let nodes: Vec<GraphNode> = (0..node_count)
+        .map(|i| GraphNode {
+            id: format!("node-{i}"),
+            label: if i == needle_idx {
+                "NeedleLabel".to_string()
+            } else {
+                format!("Label-{i}")
+            },
+            properties: json!({"i": i}),
+            tenant_id: tenant_id.to_string(),
+        })
+        .collect();
+
+    // All edges use valid node IDs to pass referential integrity.
+    let edges: Vec<GraphEdge> = (0..(node_count - 1))
+        .map(|i| GraphEdge {
+            id: format!("edge-{i}"),
+            source_id: format!("node-{i}"),
+            target_id: format!("node-{}", i + 1),
+            relation: "related_to".to_string(),
+            properties: json!({}),
+            tenant_id: tenant_id.to_string(),
+        })
+        .collect();
+
+    store
+        .add_nodes_and_edges_atomic(&ctx, tenant_id, nodes, edges)
+        .unwrap();
+
+    let start = Instant::now();
+    let related = store
+        .find_related(ctx.clone(), &format!("node-{needle_idx}"), 1)
+        .unwrap();
+    let neighbor_elapsed = start.elapsed();
+
+    let label_start = Instant::now();
+    let label_results =
+        futures::executor::block_on(store.search_nodes(ctx.clone(), "NeedleLabel", 5)).unwrap();
+    let label_elapsed = label_start.elapsed();
+
+    println!(
+        "Phase1 indexed lookups: neighbor={:?}, label={:?}, related_count={}, label_count={}",
+        neighbor_elapsed,
+        label_elapsed,
+        related.len(),
+        label_results.len()
+    );
+
+    assert!(!related.is_empty());
+    assert_eq!(label_results.len(), 1);
+    assert!(neighbor_elapsed.as_millis() < (200.0 * DEBUG_MULTIPLIER) as u128);
+    assert!(label_elapsed.as_millis() < (100.0 * DEBUG_MULTIPLIER) as u128);
 }

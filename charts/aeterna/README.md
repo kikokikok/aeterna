@@ -768,6 +768,7 @@ Key parameters:
 | `centralIndex.rateLimitPerMinute` | Rate limit per API key | `100` |
 | `aeterna.replicaCount` | Aeterna replicas | `1` |
 | `aeterna.autoscaling.enabled` | Enable HPA | `false` |
+| `aeterna.features.eventSourcingEnabled` | Enable event-sourced graph dual-write | `true` |
 | `networkPolicy.enabled` | Enable network policies | `false` |
 
 ## License

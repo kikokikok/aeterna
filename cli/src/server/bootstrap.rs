@@ -32,7 +32,7 @@ use storage::git_provider_connection_store::{
     InMemoryGitProviderConnectionStore, RedisGitProviderConnectionStore,
 };
 use storage::governance::GovernanceStorage;
-use storage::graph_duckdb::{DuckDbGraphConfig, DuckDbGraphStore};
+use storage::graph_duckdb::{DuckDbGraphConfig, DuckDbGraphStore, SnapshotPolicy};
 use storage::postgres::PostgresBackend;
 use storage::secret_provider::build_secret_provider_from_env;
 use storage::tenant_config_provider::KubernetesTenantConfigProvider;
@@ -699,6 +699,11 @@ fn create_graph_store(config: &config::Config) -> anyhow::Result<Option<Arc<Duck
         s3_prefix: config.providers.graph.s3_prefix.clone(),
         s3_endpoint: config.providers.graph.s3_endpoint.clone(),
         s3_region: Some(config.providers.graph.s3_region.clone()),
+        reader_pool_size: config.providers.graph.reader_pool_size,
+        snapshot_policy: SnapshotPolicy {
+            full_interval_secs: config.providers.graph.snapshot_full_interval_secs,
+            delta_interval_secs: config.providers.graph.snapshot_delta_interval_secs,
+        },
         ..Default::default()
     })?;
 
@@ -1457,6 +1462,21 @@ mod tests {
 
         let graph_store = create_graph_store(&config).unwrap();
         assert!(graph_store.is_none());
+    }
+
+    #[test]
+    fn create_graph_store_passes_snapshot_policy() {
+        let mut config = config::Config::default();
+        config.providers.graph.database_path = ":memory:".to_string();
+        config.providers.graph.snapshot_full_interval_secs = 1234;
+        config.providers.graph.snapshot_delta_interval_secs = 56;
+
+        let graph_store = create_graph_store(&config)
+            .unwrap()
+            .expect("graph store should be enabled");
+
+        assert_eq!(graph_store.snapshot_policy().full_interval_secs, 1234);
+        assert_eq!(graph_store.snapshot_policy().delta_interval_secs, 56);
     }
 
     #[tokio::test]

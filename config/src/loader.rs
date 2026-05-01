@@ -256,6 +256,10 @@ fn load_graph_from_env() -> anyhow::Result<GraphConfig> {
         s3_prefix: env::var("GR_S3_PREFIX").ok(),
         s3_endpoint: env::var("GR_S3_ENDPOINT").ok(),
         s3_region: env::var("GR_S3_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
+        reader_pool_size: parse_env("GR_READER_POOL_SIZE").ok(),
+        snapshot_full_interval_secs: parse_env("GR_SNAPSHOT_FULL_INTERVAL_SECS").unwrap_or(604800),
+        snapshot_delta_interval_secs: parse_env("GR_SNAPSHOT_DELTA_INTERVAL_SECS").unwrap_or(300),
+        event_sourcing_enabled: parse_env("GR_EVENT_SOURCING_ENABLED").unwrap_or(false),
         contention_alerts: ContentionAlertConfig::default(),
     })
 }

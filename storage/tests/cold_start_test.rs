@@ -1,6 +1,6 @@
 use storage::graph_duckdb::{
-    ColdStartConfig, DuckDbGraphConfig, DuckDbGraphStore, LazyLoadResult, PartitionAccessRecord,
-    WarmPoolRecommendation,
+    ColdStartConfig, DuckDbGraphConfig, DuckDbGraphStore, GraphNodeExtended, LazyLoadResult,
+    PartitionAccessRecord, PartitionKeyStrategy, WarmPoolRecommendation,
 };
 
 fn create_store_with_cold_start(config: ColdStartConfig) -> DuckDbGraphStore {
@@ -251,4 +251,113 @@ fn test_warm_pool_recommendation_struct() {
     assert!(rec.recommended);
     assert_eq!(rec.min_instances, 5);
     assert_eq!(rec.reason, "High traffic");
+}
+
+#[test]
+fn test_partition_key_strategy_by_month_formats_timestamp() {
+    let ts = chrono::DateTime::parse_from_rfc3339("2026-05-01T12:34:56Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+
+    let key = PartitionKeyStrategy::ByMonth.partition_key_for_timestamp(ts);
+    assert_eq!(key, "2026-05");
+}
+
+#[test]
+fn test_partition_key_strategy_by_month_formats_node_created_at() {
+    let node = GraphNodeExtended {
+        id: "node-1".to_string(),
+        label: "Test".to_string(),
+        properties: serde_json::Value::Null,
+        tenant_id: "tenant-1".to_string(),
+        memory_id: None,
+        created_at: chrono::DateTime::parse_from_rfc3339("2026-06-15T08:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc),
+        updated_at: chrono::Utc::now(),
+        deleted_at: None,
+    };
+
+    let key = PartitionKeyStrategy::ByMonth.partition_key_for(&node);
+    assert_eq!(key, "2026-06");
+}
+
+#[test]
+fn test_partition_key_strategy_by_month_normalizes_date_like_inputs() {
+    assert_eq!(
+        PartitionKeyStrategy::ByMonth.normalize_partition_key("2026-05-19"),
+        "2026-05"
+    );
+    assert_eq!(
+        PartitionKeyStrategy::ByMonth.normalize_partition_key("2026-05-19T08:45:00Z"),
+        "2026-05"
+    );
+    assert_eq!(
+        PartitionKeyStrategy::ByMonth.normalize_partition_key("2026-05"),
+        "2026-05"
+    );
+}
+
+#[tokio::test]
+async fn test_lazy_load_partitions_normalizes_month_partition_keys() {
+    let store = create_store_with_cold_start(ColdStartConfig::default());
+
+    let result = store
+        .lazy_load_partitions("tenant-1", &["2026-05-19".to_string()])
+        .await
+        .unwrap();
+
+    assert_eq!(result.partitions_loaded, 1);
+
+    store
+        .record_partition_access("tenant-1", "2026-05", 12.0)
+        .unwrap();
+    let prewarm = store.get_prewarm_partitions("tenant-1").unwrap();
+    assert!(prewarm.contains(&"2026-05".to_string()));
+}
+
+#[tokio::test]
+async fn test_lazy_load_partitions_honors_prewarm_partition_count_after_normalization() {
+    let mut cold_start = ColdStartConfig::default();
+    cold_start.prewarm_partition_count = 2;
+    let store = create_store_with_cold_start(cold_start);
+
+    let result = store
+        .lazy_load_partitions(
+            "tenant-1",
+            &[
+                "2026-05-01".to_string(),
+                "2026-05-15".to_string(),
+                "2026-06-01".to_string(),
+                "2026-07-01".to_string(),
+            ],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(result.partitions_loaded, 2);
+    assert_eq!(result.deferred_partitions, vec!["2026-07".to_string()]);
+}
+
+#[tokio::test]
+async fn test_cold_start_n_month_partitions_lazy_loads_prewarm_count_5() {
+    let mut cold_start = ColdStartConfig::default();
+    cold_start.prewarm_partition_count = 5;
+    let store = create_store_with_cold_start(cold_start);
+
+    let partitions: Vec<String> = (1..=8).map(|m| format!("2026-{:02}-01", m)).collect();
+
+    let result = store
+        .lazy_load_partitions("tenant-cold", &partitions)
+        .await
+        .unwrap();
+
+    assert_eq!(result.partitions_loaded, 5);
+    assert_eq!(result.deferred_partitions.len(), 3);
+    for deferred in &result.deferred_partitions {
+        assert!(
+            ["2026-06", "2026-07", "2026-08"].contains(&deferred.as_str()),
+            "Unexpected deferred partition: {deferred}"
+        );
+    }
 }

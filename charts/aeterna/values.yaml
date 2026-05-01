@@ -306,6 +306,8 @@ aeterna:
     rlm: true
     ## @param aeterna.features.reflective Enable reflective reasoning
     reflective: true
+    ## @param aeterna.features.eventSourcingEnabled Enable event-sourced dual-write for DuckDB graph store
+    eventSourcingEnabled: true
 
 ## GitHub Organization Sync configuration
 ## Syncs GitHub Org teams and members into Aeterna's organizational hierarchy
