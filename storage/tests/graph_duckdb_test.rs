@@ -253,16 +253,18 @@ async fn test_duckdb_snapshot_delta_exports_since_seq() {
         .await
         .unwrap();
 
-    let conn = store.db_handle();
-    let conn = conn.lock();
-    let cutoff_seq: i64 = conn
-        .query_row(
+    // Scoped block so the MutexGuard is dropped before the subsequent
+    // `.await`s — silences `clippy::await_holding_lock` (denied by CI gate).
+    let cutoff_seq: i64 = {
+        let conn = store.db_handle();
+        let conn = conn.lock();
+        conn.query_row(
             "SELECT seq FROM memory_nodes WHERE id = 'node-a'",
             [],
             |row| row.get(0),
         )
-        .unwrap();
-    drop(conn);
+        .unwrap()
+    };
 
     store
         .add_edge(

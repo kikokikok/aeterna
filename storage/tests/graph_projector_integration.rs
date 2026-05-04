@@ -220,7 +220,7 @@ async fn test_projector_lag_exceeds_threshold_not_ready() {
     }
 
     let config = ProjectorConfig {
-        poll_interval: Duration::from_secs(600), // will never poll during this test
+        poll_interval: Duration::from_mins(10), // will never poll during this test
         batch_size: 100,
         lag_threshold: 5, // low threshold
         checkpoint_interval: Duration::from_secs(600),
