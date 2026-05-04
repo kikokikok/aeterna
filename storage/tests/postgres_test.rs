@@ -370,7 +370,7 @@ async fn test_get_user_roles_for_auth_includes_instance_scope_and_deduplicates()
     let tenant_unit_id = unique_id("company");
     let root_unit_id = unique_id("instance");
     let user_id = unique_id("user");
-    let now = chrono::Utc::now().timestamp();
+    let now = chrono::Utc::now();
 
     backend
         .create_unit(&OrganizationalUnit {

@@ -221,7 +221,7 @@ async fn seed_platform_admin_user(state: &AppState) {
     // Create a unit at INSTANCE_SCOPE_TENANT_ID so the user_roles FK
     // (unit_id → organizational_units.id) is satisfied.
     let root_unit_id = uuid::Uuid::new_v4().to_string();
-    let now = chrono::Utc::now().timestamp();
+    let now = chrono::Utc::now();
     state
         .postgres
         .create_unit(&OrganizationalUnit {

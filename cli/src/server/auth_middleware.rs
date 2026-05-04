@@ -542,7 +542,7 @@ mod tests {
         .bind(INSTANCE_SCOPE_TENANT_ID)
         .bind(&root_unit_id)
         .bind("platformadmin")
-        .bind(now)
+        .bind(chrono::Utc::now())
         .execute(backend.pool())
         .await
         .unwrap();

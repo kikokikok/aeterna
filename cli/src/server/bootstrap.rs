@@ -1069,7 +1069,7 @@ async fn seed_platform_admin(
 
     let provider = &cfg.provider;
     let subject = cfg.provider_subject.as_deref().unwrap_or(email.as_str());
-    let now_epoch = chrono::Utc::now().timestamp();
+    let now_ts = chrono::Utc::now();
 
     let mut tx = pool.begin().await.context("begin seed transaction")?;
 
@@ -1080,7 +1080,7 @@ async fn seed_platform_admin(
     )
     .bind(INSTANCE_SCOPE_TENANT_ID)
     .bind("Instance")
-    .bind(now_epoch)
+    .bind(now_ts)
     .execute(&mut *tx)
     .await
     .context("upsert instance-scope organizational unit")?;
@@ -1106,7 +1106,7 @@ async fn seed_platform_admin(
     .bind(company_id)
     .bind("Default")
     .bind(company_id)
-    .bind(now_epoch)
+    .bind(now_ts)
     .execute(&mut *tx)
     .await
     .context("upsert organizational_units company")?;
@@ -1235,7 +1235,7 @@ async fn seed_platform_admin(
     .bind(&user_id_str)
     .bind(INSTANCE_SCOPE_TENANT_ID)
     .bind(INSTANCE_SCOPE_TENANT_ID)
-    .bind(now_epoch)
+    .bind(now_ts)
     .execute(&mut *tx)
     .await
     .context("upsert PlatformAdmin role")?;
@@ -1265,7 +1265,7 @@ async fn seed_k8s_service_account(
         None => return Ok(()),
     };
 
-    let now_epoch = chrono::Utc::now().timestamp();
+    let now_ts_k8s = chrono::Utc::now();
     let synthetic_email = format!("k8s+{}@local", sa_subject.replace([':', '/'], "."));
 
     let mut tx = pool
@@ -1280,7 +1280,7 @@ async fn seed_k8s_service_account(
     )
     .bind(INSTANCE_SCOPE_TENANT_ID)
     .bind("Instance")
-    .bind(now_epoch)
+    .bind(now_ts_k8s)
     .execute(&mut *tx)
     .await
     .context("upsert instance-scope organizational unit for k8s SA")?;
@@ -1312,7 +1312,7 @@ async fn seed_k8s_service_account(
     .bind(user_uuid.to_string())
     .bind(INSTANCE_SCOPE_TENANT_ID)
     .bind(INSTANCE_SCOPE_TENANT_ID)
-    .bind(now_epoch)
+    .bind(now_ts_k8s)
     .execute(&mut *tx)
     .await
     .context("upsert PlatformAdmin role for kubernetes service account")?;
