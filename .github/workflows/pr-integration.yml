@@ -102,7 +102,7 @@ jobs:
     # First build after a cold cache is ~30 min (full Rust release build).
     # After post-merge.yml seeds ghcr.io/{repo}-cache:buildcache-master-{arch},
     # subsequent PR builds pull warm layers and finish in <10 min.
-    timeout-minutes: 40
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
