@@ -405,6 +405,8 @@ jobs:
           helm repo add qdrant         https://qdrant.github.io/qdrant-helm
           helm repo add weaviate       https://weaviate.github.io/weaviate-helm/
           helm repo add percona        https://percona.github.io/percona-helm-charts/
+          helm repo add valkey         https://valkey.io/valkey-helm/
+          helm repo add openbao        https://openbao.github.io/openbao-helm
           helm repo update
       - run: helm dependency build charts/aeterna
       - run: helm dependency build charts/aeterna-prereqs
