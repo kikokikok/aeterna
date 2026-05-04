@@ -173,7 +173,6 @@ async fn list_orgs(
             return error_response(StatusCode::BAD_REQUEST, "org_list_failed", &err.to_string());
         }
     };
-    units.retain(|unit| unit.unit_type == UnitType::Organization);
     if !ctx.has_known_role(&Role::PlatformAdmin) {
         units.retain(|unit| unit.tenant_id == ctx.tenant_id);
     }
@@ -199,7 +198,6 @@ async fn list_orgs_cross_tenant(
             return error_response(StatusCode::BAD_REQUEST, "org_list_failed", &err.to_string());
         }
     };
-    units.retain(|unit| unit.unit_type == UnitType::Organization);
     if let Some(t) = single_tenant {
         units.retain(|unit| unit.tenant_id.as_str() == t.id.as_str());
     }
@@ -237,7 +235,7 @@ async fn list_orgs_cross_tenant(
                 "id":         unit.id,
                 "name":       unit.name,
                 "parentId":   unit.parent_id,
-                "unitType":   "organization",
+                "unitType":   unit.unit_type,
                 "tenantId":   unit.tenant_id,
                 "tenantSlug": t.map(|t| t.slug.clone()),
                 "tenantName": t.map(|t| t.name.clone()),
