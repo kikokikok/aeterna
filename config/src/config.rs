@@ -903,7 +903,7 @@ impl Default for GraphConfig {
             reader_pool_size: None,
             snapshot_full_interval_secs: default_graph_snapshot_full_interval_secs(),
             snapshot_delta_interval_secs: default_graph_snapshot_delta_interval_secs(),
-            event_sourcing_enabled: true,
+            event_sourcing_enabled: false,
             contention_alerts: ContentionAlertConfig::default(),
         }
     }
