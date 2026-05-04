@@ -21,6 +21,7 @@ const JOB_CLEANUP_INTERVAL_SECS: u64 = 3600;
 const REMEDIATION_EXPIRY_INTERVAL_SECS: u64 = 86400;
 const DLQ_CLEANUP_INTERVAL_SECS: u64 = 86400;
 const IMPORTANCE_DECAY_INTERVAL_SECS: u64 = 3600;
+const GRAPH_CONSISTENCY_INTERVAL_SECS: u64 = 3600;
 const RETENTION_AGE_7_DAYS_SECS: u64 = 7 * 86400;
 const RETENTION_AGE_30_DAYS_SECS: u64 = 30 * 86400;
 
@@ -126,7 +127,7 @@ impl LifecycleManager {
             "importance_decay",
             Duration::from_secs(IMPORTANCE_DECAY_INTERVAL_SECS),
             self.shutdown_rx.clone(),
-            rc,
+            rc.clone(),
             {
                 let state = state.clone();
                 move || {
@@ -138,7 +139,23 @@ impl LifecycleManager {
             },
         );
 
-        tracing::info!("Lifecycle manager started (5 tasks)");
+        Self::spawn_task_with_lock(
+            "verify_graph_consistency",
+            Duration::from_secs(GRAPH_CONSISTENCY_INTERVAL_SECS),
+            self.shutdown_rx.clone(),
+            rc,
+            {
+                let state = state.clone();
+                move || {
+                    let state = state.clone();
+                    async move {
+                        run_verify_graph_consistency(&state).await;
+                    }
+                }
+            },
+        );
+
+        tracing::info!("Lifecycle manager started (6 tasks)");
     }
 
     /// Signal all spawned tasks to shut down.
@@ -371,6 +388,63 @@ async fn run_importance_decay(state: &AppState) {
             }
         }
     }
+}
+
+async fn run_verify_graph_consistency(state: &AppState) {
+    let Some(ref graph_store) = state.graph_store else {
+        tracing::debug!("verify_graph_consistency: graph store not configured, skipping");
+        return;
+    };
+
+    let tenants = match state.tenant_store.list_tenants(false).await {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::warn!(error = %e, "verify_graph_consistency: failed to list tenants");
+            return;
+        }
+    };
+
+    let mut checked = 0u64;
+    let mut divergences = 0u64;
+
+    for tenant in &tenants {
+        let tenant_id = tenant.id.as_str();
+        let conn = graph_store.db_handle();
+        let conn = conn.lock();
+        match storage::graph_verify::compute_digest_hex(&conn, tenant_id) {
+            Ok(digest) => {
+                tracing::debug!(
+                    tenant_id,
+                    digest = %digest,
+                    "verify_graph_consistency: computed digest"
+                );
+                checked += 1;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    tenant_id,
+                    error = %e,
+                    "verify_graph_consistency: digest computation failed"
+                );
+                divergences += 1;
+            }
+        }
+    }
+
+    if divergences > 0 {
+        tracing::error!(
+            divergences,
+            checked,
+            "verify_graph_consistency: digest failures detected"
+        );
+        metrics::counter!("graph_consistency_divergences_total").increment(divergences);
+    }
+
+    tracing::info!(
+        checked,
+        total_tenants = tenants.len(),
+        "verify_graph_consistency cycle completed"
+    );
 }
 
 #[cfg(test)]

@@ -6,6 +6,7 @@ pub mod bootstrap_api;
 pub mod bootstrap_tracker;
 pub mod context;
 pub mod govern_api;
+pub mod graph_digest_api;
 pub mod health;
 pub mod k8s_auth;
 pub mod knowledge_api;

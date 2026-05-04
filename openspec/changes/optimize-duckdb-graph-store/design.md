@@ -220,9 +220,9 @@ ungreen until `head_seq - last_applied_seq <= 100` for every active tenant.
 - **Projector bug → silent divergence between pods.** Mitigated by:
   (a) every event carries a content hash; projector verifies on apply,
   refuses divergent state and surfaces a metric;
-  (b) periodic `verify` job that picks N random tenants, computes a
-  Merkle-style digest of (sorted nodes ∥ sorted edges) on each pod, fails
-  loudly if pods disagree.
+  (b) hourly `verify_graph_consistency` cron job computes SHA-256 digests
+  of (sorted nodes ∥ sorted edges) for all active tenants, emits
+  `graph_consistency_divergences_total` on mismatch. ✅ Implemented.
 - **Postgres write throughput becomes the new bottleneck.** Mitigated by:
   (a) JSONB payloads are small (~200 bytes); a single Postgres can sustain
   10k inserts/sec with no tuning;

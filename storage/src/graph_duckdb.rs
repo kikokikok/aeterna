@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use deadpool::managed;
 use duckdb::{Config, Connection, params};
 use mk_core::types::TenantContext;
 use parking_lot::Mutex;
@@ -11,6 +12,7 @@ use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::graph::{GraphEdge, GraphNode, GraphStore};
+use crate::observability::graph_metrics;
 
 const SCHEMA_VERSION: i32 = 1;
 
@@ -22,6 +24,14 @@ const DEFAULT_CONTENTION_WAIT_CRITICAL_MS: u64 = 3000;
 const DEFAULT_SNAPSHOT_INTERVAL_SECS: u64 = 3600;
 const DEFAULT_GRAPH_RETENTION_MAX_AGE_SECS: u64 = 86400 * 7;
 const DEFAULT_ICEBERG_CATALOG_NAME: &str = "aeterna_iceberg";
+const DEFAULT_SNAPSHOT_FULL_INTERVAL_SECS: u64 = 604800;
+const DEFAULT_SNAPSHOT_DELTA_INTERVAL_SECS: u64 = 300;
+
+fn default_reader_pool_size() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get().min(8))
+        .unwrap_or(4)
+}
 
 #[derive(Error, Debug)]
 pub enum GraphError {
@@ -157,6 +167,58 @@ pub struct WarmPoolRecommendation {
     pub reason: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PartitionKeyStrategy {
+    ByMonth,
+}
+
+impl PartitionKeyStrategy {
+    pub fn partition_key_for(&self, node: &GraphNodeExtended) -> String {
+        self.partition_key_for_timestamp(node.created_at)
+    }
+
+    pub fn partition_key_for_timestamp(&self, created_at: DateTime<Utc>) -> String {
+        match self {
+            Self::ByMonth => created_at.format("%Y-%m").to_string(),
+        }
+    }
+
+    pub fn normalize_partition_key(&self, candidate: &str) -> String {
+        match self {
+            Self::ByMonth => {
+                if let Ok(parsed) = chrono::NaiveDate::parse_from_str(candidate, "%Y-%m-%d") {
+                    return parsed.format("%Y-%m").to_string();
+                }
+                if let Ok(parsed) =
+                    chrono::NaiveDateTime::parse_from_str(candidate, "%Y-%m-%dT%H:%M:%S")
+                {
+                    return parsed.format("%Y-%m").to_string();
+                }
+                if let Ok(parsed) = DateTime::parse_from_rfc3339(candidate) {
+                    return parsed.with_timezone(&Utc).format("%Y-%m").to_string();
+                }
+                candidate.to_string()
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SnapshotPolicy {
+    pub full_interval_secs: u64,
+
+    pub delta_interval_secs: u64,
+}
+
+impl Default for SnapshotPolicy {
+    fn default() -> Self {
+        Self {
+            full_interval_secs: DEFAULT_SNAPSHOT_FULL_INTERVAL_SECS,
+            delta_interval_secs: DEFAULT_SNAPSHOT_DELTA_INTERVAL_SECS,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DuckDbGraphConfig {
     pub path: String,
@@ -177,6 +239,10 @@ pub struct DuckDbGraphConfig {
 
     pub s3_force_path_style: bool,
 
+    pub reader_pool_size: Option<usize>,
+
+    pub snapshot_policy: SnapshotPolicy,
+
     pub cold_start: ColdStartConfig,
 
     pub iceberg: IcebergConfig,
@@ -194,11 +260,68 @@ impl Default for DuckDbGraphConfig {
             s3_endpoint: None,
             s3_region: None,
             s3_force_path_style: false,
+            reader_pool_size: None,
+            snapshot_policy: SnapshotPolicy::default(),
             cold_start: ColdStartConfig::default(),
             iceberg: IcebergConfig::default(),
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct ReaderManager {
+    path: String,
+}
+
+impl ReaderManager {
+    fn new(path: String) -> Self {
+        Self { path }
+    }
+
+    fn open_reader(&self) -> Result<Connection, GraphError> {
+        let config = Config::default()
+            .enable_autoload_extension(false)
+            .map_err(GraphError::DuckDb)?
+            .access_mode(duckdb::AccessMode::ReadOnly)
+            .map_err(GraphError::DuckDb)?;
+
+        let conn = Connection::open_with_flags(Path::new(&self.path), config)?;
+        let _ = conn.execute_batch("LOAD json;");
+        let _ = DuckDbGraphStore::enable_parquet_support(&conn);
+        Ok(conn)
+    }
+}
+
+impl managed::Manager for ReaderManager {
+    type Type = Connection;
+    type Error = GraphError;
+
+    fn create(&self) -> impl std::future::Future<Output = Result<Self::Type, Self::Error>> + Send {
+        let manager = self.clone();
+        async move { manager.open_reader() }
+    }
+
+    fn recycle(
+        &self,
+        conn: &mut Self::Type,
+        _: &managed::Metrics,
+    ) -> impl std::future::Future<Output = managed::RecycleResult<Self::Error>> + Send {
+        let healthy = conn
+            .query_row("SELECT 1", [], |row| row.get::<_, i32>(0))
+            .is_ok();
+        async move {
+            if healthy {
+                Ok(())
+            } else {
+                Err(managed::RecycleError::Message(
+                    "duckdb reader connection is unhealthy".into(),
+                ))
+            }
+        }
+    }
+}
+
+type ReaderPool = managed::Pool<ReaderManager>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entity {
@@ -348,6 +471,16 @@ pub struct SnapshotMetadata {
     pub node_count: u64,
     pub edge_count: u64,
     pub schema_version: i32,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeltaSnapshotResult {
+    pub s3_key: String,
+    pub since_seq: i64,
+    pub to_seq: i64,
+    pub size_bytes: u64,
+    pub checksum: String,
+    pub rows_exported: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -626,8 +759,11 @@ impl GraphMetrics {
 }
 
 pub struct DuckDbGraphStore {
-    conn: Arc<Mutex<Connection>>,
+    writer: Arc<Mutex<Connection>>,
+    reader_pool: Option<Arc<ReaderPool>>,
     config: DuckDbGraphConfig,
+    event_log: Option<Arc<crate::graph_event_log::GraphEventLog>>,
+    projector: Option<Arc<crate::graph_projector::GraphProjector>>,
 }
 
 impl DuckDbGraphStore {
@@ -637,6 +773,8 @@ impl DuckDbGraphStore {
 
         let db_config = Config::default()
             .enable_autoload_extension(false)
+            .map_err(|e| GraphError::DuckDb(e))?
+            .access_mode(duckdb::AccessMode::ReadWrite)
             .map_err(|e| GraphError::DuckDb(e))?;
 
         let conn = if config.path == ":memory:" {
@@ -647,17 +785,35 @@ impl DuckDbGraphStore {
 
         let _ = conn.execute_batch("LOAD json;");
         let _ = Self::enable_parquet_support(&conn);
+        let _ = conn.execute_batch("SET immediate_transaction_mode = true;");
+
+        let reader_pool = if config.path == ":memory:" {
+            None
+        } else {
+            let pool_size = config
+                .reader_pool_size
+                .unwrap_or_else(default_reader_pool_size);
+            let pool = ReaderPool::builder(ReaderManager::new(config.path.clone()))
+                .max_size(pool_size)
+                .build()
+                .map_err(|e| GraphError::Migration(format!("Failed to build reader pool: {e}")))?;
+            Some(Arc::new(pool))
+        };
 
         let store = Self {
-            conn: Arc::new(Mutex::new(conn)),
+            writer: Arc::new(Mutex::new(conn)),
+            reader_pool,
             config,
+            event_log: None,
+            projector: None,
         };
 
         store.initialize_schema()?;
+        store.ensure_mutation_seq_schema()?;
         store.run_migrations()?;
 
         if store.config.iceberg.enabled {
-            let conn = store.conn.lock();
+            let conn = store.writer.lock();
             match Self::install_iceberg_extension(&conn) {
                 Ok(()) => {
                     if let Err(e) = Self::configure_iceberg_catalog(&conn, &store.config.iceberg) {
@@ -683,9 +839,53 @@ impl DuckDbGraphStore {
         Ok(store)
     }
 
+    pub fn enable_event_sourcing(
+        &mut self,
+        event_log: Arc<crate::graph_event_log::GraphEventLog>,
+        projector: Arc<crate::graph_projector::GraphProjector>,
+    ) {
+        self.event_log = Some(event_log);
+        self.projector = Some(projector);
+    }
+
     /// Returns a handle to the underlying DuckDB connection for use by graph tools.
     pub fn db_handle(&self) -> Arc<Mutex<Connection>> {
-        self.conn.clone()
+        self.writer.clone()
+    }
+
+    pub fn snapshot_policy(&self) -> &SnapshotPolicy {
+        &self.config.snapshot_policy
+    }
+
+    fn writer_conn(&self) -> parking_lot::MutexGuard<'_, Connection> {
+        self.writer.lock()
+    }
+
+    pub fn partition_key_strategy(&self) -> PartitionKeyStrategy {
+        PartitionKeyStrategy::ByMonth
+    }
+
+    async fn reader_conn(&self) -> Result<managed::Object<ReaderManager>, GraphError> {
+        let pool = self.reader_pool.as_ref().ok_or_else(|| {
+            GraphError::Migration("Reader pool unavailable for in-memory DuckDB store".to_string())
+        })?;
+
+        pool.get().await.map_err(|e| {
+            GraphError::Migration(format!("Failed to acquire DuckDB reader connection: {e}"))
+        })
+    }
+
+    fn read_with_conn<T, F>(&self, f: F) -> Result<T, GraphError>
+    where
+        F: FnOnce(&Connection) -> Result<T, GraphError>,
+    {
+        if self.reader_pool.is_some() {
+            let conn = futures::executor::block_on(self.reader_conn())?;
+            f(&conn)
+        } else {
+            let conn = self.writer_conn();
+            f(&conn)
+        }
     }
 
     fn enable_parquet_support(conn: &Connection) -> Result<(), GraphError> {
@@ -720,7 +920,7 @@ impl DuckDbGraphStore {
 
     #[instrument(skip(self))]
     fn initialize_schema(&self) -> Result<(), GraphError> {
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
 
         conn.execute_batch(
             r#"
@@ -742,12 +942,15 @@ impl DuckDbGraphStore {
                 memory_id VARCHAR,
                 created_at TIMESTAMP DEFAULT (now()),
                 updated_at TIMESTAMP DEFAULT (now()),
+                seq BIGINT DEFAULT 0,
                 deleted_at TIMESTAMP
             );
 
             CREATE INDEX IF NOT EXISTS idx_nodes_tenant ON memory_nodes(tenant_id);
             CREATE INDEX IF NOT EXISTS idx_nodes_tenant_deleted ON memory_nodes(tenant_id, deleted_at);
+            CREATE INDEX IF NOT EXISTS idx_nodes_tenant_label ON memory_nodes(tenant_id, label);
             CREATE INDEX IF NOT EXISTS idx_nodes_memory ON memory_nodes(memory_id);
+            CREATE INDEX IF NOT EXISTS idx_nodes_label_lookup ON memory_nodes(label);
             "#,
         )?;
 
@@ -762,12 +965,15 @@ impl DuckDbGraphStore {
                 tenant_id VARCHAR NOT NULL,
                 weight DOUBLE DEFAULT 1.0,
                 created_at TIMESTAMP DEFAULT (now()),
+                seq BIGINT DEFAULT 0,
                 deleted_at TIMESTAMP
             );
 
             CREATE INDEX IF NOT EXISTS idx_edges_tenant_source ON memory_edges(tenant_id, source_id);
             CREATE INDEX IF NOT EXISTS idx_edges_tenant_target ON memory_edges(tenant_id, target_id);
             CREATE INDEX IF NOT EXISTS idx_edges_tenant_deleted ON memory_edges(tenant_id, deleted_at);
+            CREATE INDEX IF NOT EXISTS idx_edges_source_lookup ON memory_edges(source_id);
+            CREATE INDEX IF NOT EXISTS idx_edges_target_lookup ON memory_edges(target_id);
             "#,
         )?;
 
@@ -822,13 +1028,114 @@ impl DuckDbGraphStore {
             "#,
         )?;
 
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS graph_tenant_sequences (
+                tenant_id VARCHAR PRIMARY KEY,
+                last_seq BIGINT NOT NULL DEFAULT 0
+            );
+            "#,
+        )?;
+
         debug!("Schema initialized successfully");
         Ok(())
     }
 
+    fn ensure_mutation_seq_schema(&self) -> Result<(), GraphError> {
+        let conn = self.writer_conn();
+
+        Self::ensure_column_exists(
+            &conn,
+            "memory_nodes",
+            "seq",
+            "ALTER TABLE memory_nodes ADD COLUMN seq BIGINT DEFAULT 0",
+        )?;
+        Self::ensure_column_exists(
+            &conn,
+            "memory_edges",
+            "seq",
+            "ALTER TABLE memory_edges ADD COLUMN seq BIGINT DEFAULT 0",
+        )?;
+
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS graph_tenant_sequences (
+                tenant_id VARCHAR PRIMARY KEY,
+                last_seq BIGINT NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_edges_source_lookup ON memory_edges(source_id);
+            CREATE INDEX IF NOT EXISTS idx_edges_target_lookup ON memory_edges(target_id);
+            CREATE INDEX IF NOT EXISTS idx_nodes_label_lookup ON memory_nodes(label);
+            "#,
+        )?;
+
+        Ok(())
+    }
+
+    fn ensure_column_exists(
+        conn: &Connection,
+        table_name: &str,
+        column_name: &str,
+        alter_sql: &str,
+    ) -> Result<(), GraphError> {
+        let exists: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = ? AND column_name = ?",
+            params![table_name, column_name],
+            |row| row.get(0),
+        )?;
+
+        if exists == 0 {
+            conn.execute_batch(alter_sql)?;
+        }
+
+        Ok(())
+    }
+
+    fn next_mutation_seq(&self, conn: &Connection, tenant_id: &str) -> Result<i64, GraphError> {
+        let current = conn.query_row(
+            "SELECT last_seq FROM graph_tenant_sequences WHERE tenant_id = ?",
+            params![tenant_id],
+            |row| row.get::<_, i64>(0),
+        );
+
+        match current {
+            Ok(last_seq) => {
+                let next_seq = last_seq + 1;
+                conn.execute(
+                    "UPDATE graph_tenant_sequences SET last_seq = ? WHERE tenant_id = ?",
+                    params![next_seq, tenant_id],
+                )?;
+                Ok(next_seq)
+            }
+            Err(duckdb::Error::QueryReturnedNoRows) => {
+                conn.execute(
+                    "INSERT INTO graph_tenant_sequences (tenant_id, last_seq) VALUES (?, 1)",
+                    params![tenant_id],
+                )?;
+                Ok(1)
+            }
+            Err(e) => Err(GraphError::DuckDb(e)),
+        }
+    }
+
+    fn current_max_seq(&self, conn: &Connection, tenant_id: &str) -> Result<i64, GraphError> {
+        let node_max: i64 = conn.query_row(
+            "SELECT COALESCE(MAX(seq), 0) FROM memory_nodes WHERE tenant_id = ?",
+            params![tenant_id],
+            |row| row.get(0),
+        )?;
+        let edge_max: i64 = conn.query_row(
+            "SELECT COALESCE(MAX(seq), 0) FROM memory_edges WHERE tenant_id = ?",
+            params![tenant_id],
+            |row| row.get(0),
+        )?;
+
+        Ok(node_max.max(edge_max))
+    }
+
     #[instrument(skip(self))]
     fn run_migrations(&self) -> Result<(), GraphError> {
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
 
         let current_version: i32 = conn
             .query_row(
@@ -912,25 +1219,25 @@ impl DuckDbGraphStore {
     }
 
     pub fn get_migration_history(&self) -> Result<Vec<MigrationRecord>, GraphError> {
-        let conn = self.conn.lock();
+        self.read_with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT version, CAST(applied_at AS VARCHAR) as applied_at, description FROM \
+                 schema_version ORDER BY version ASC",
+            )?;
 
-        let mut stmt = conn.prepare(
-            "SELECT version, CAST(applied_at AS VARCHAR) as applied_at, description FROM \
-             schema_version ORDER BY version ASC",
-        )?;
+            let records = stmt
+                .query_map([], |row| {
+                    Ok(MigrationRecord {
+                        version: row.get(0)?,
+                        applied_at: row.get(1)?,
+                        description: row.get(2)?,
+                    })
+                })?
+                .filter_map(|r| r.ok())
+                .collect();
 
-        let records = stmt
-            .query_map([], |row| {
-                Ok(MigrationRecord {
-                    version: row.get(0)?,
-                    applied_at: row.get(1)?,
-                    description: row.get(2)?,
-                })
-            })?
-            .filter_map(|r| r.ok())
-            .collect();
-
-        Ok(records)
+            Ok(records)
+        })
     }
 
     fn validate_tenant(&self, ctx: &TenantContext) -> Result<String, GraphError> {
@@ -1033,13 +1340,14 @@ impl DuckDbGraphStore {
     #[instrument(skip(self), fields(node_id = %node_id))]
     pub fn soft_delete_node(&self, ctx: TenantContext, node_id: &str) -> Result<(), GraphError> {
         let tenant_id = self.validate_tenant(&ctx)?;
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
         let now = Utc::now().to_rfc3339();
+        let seq = self.next_mutation_seq(&conn, &tenant_id)?;
 
         let updated = conn.execute(
-            "UPDATE memory_nodes SET deleted_at = ? WHERE id = ? AND tenant_id = ? AND deleted_at \
+            "UPDATE memory_nodes SET deleted_at = ?, seq = ? WHERE id = ? AND tenant_id = ? AND deleted_at \
              IS NULL",
-            params![now, node_id, tenant_id],
+            params![now, seq, node_id, tenant_id],
         )?;
 
         if updated == 0 {
@@ -1047,9 +1355,9 @@ impl DuckDbGraphStore {
         }
 
         conn.execute(
-            "UPDATE memory_edges SET deleted_at = ? WHERE (source_id = ? OR target_id = ?) AND \
+            "UPDATE memory_edges SET deleted_at = ?, seq = ? WHERE (source_id = ? OR target_id = ?) AND \
              tenant_id = ? AND deleted_at IS NULL",
-            params![now, node_id, node_id, tenant_id],
+            params![now, seq, node_id, node_id, tenant_id],
         )?;
 
         info!("Soft-deleted node {} and cascaded to edges", node_id);
@@ -1063,8 +1371,9 @@ impl DuckDbGraphStore {
         source_memory_id: &str,
     ) -> Result<usize, GraphError> {
         let tenant_id = self.validate_tenant(&ctx)?;
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
         let now = Utc::now().to_rfc3339();
+        let seq = self.next_mutation_seq(&conn, &tenant_id)?;
 
         let mut stmt = conn.prepare(
             "SELECT id FROM memory_nodes 
@@ -1084,20 +1393,20 @@ impl DuckDbGraphStore {
         }
 
         let nodes_deleted = conn.execute(
-            "UPDATE memory_nodes SET deleted_at = ? 
+            "UPDATE memory_nodes SET deleted_at = ?, seq = ? 
              WHERE tenant_id = ? 
              AND deleted_at IS NULL 
              AND json_extract_string(properties, '$.source_memory_id') = ?",
-            params![now, tenant_id, source_memory_id],
+            params![now, seq, tenant_id, source_memory_id],
         )?;
 
         for node_id in &node_ids {
             conn.execute(
-                "UPDATE memory_edges SET deleted_at = ? 
+                "UPDATE memory_edges SET deleted_at = ?, seq = ? 
                  WHERE (source_id = ? OR target_id = ?) 
                  AND tenant_id = ? 
                  AND deleted_at IS NULL",
-                params![now, node_id, node_id, tenant_id],
+                params![now, seq, node_id, node_id, tenant_id],
             )?;
         }
 
@@ -1110,7 +1419,7 @@ impl DuckDbGraphStore {
 
     #[instrument(skip(self))]
     pub fn cleanup_deleted(&self, older_than: DateTime<Utc>) -> Result<usize, GraphError> {
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
         let cutoff = older_than.to_rfc3339();
 
         let edges_deleted = conn.execute(
@@ -1154,8 +1463,6 @@ impl DuckDbGraphStore {
                 max_hops, self.config.max_path_depth
             );
         }
-
-        let conn = self.conn.lock();
 
         let query = format!(
             r#"
@@ -1222,63 +1529,73 @@ impl DuckDbGraphStore {
             effective_max_hops
         );
 
-        let mut stmt = conn.prepare(&query)?;
-        let rows = stmt.query_map(
-            params![
-                node_id, node_id, node_id, tenant_id, tenant_id, tenant_id, tenant_id, node_id
-            ],
-            |row| {
-                Ok((
-                    GraphEdgeExtended {
-                        id: row.get(0)?,
-                        source_id: row.get(1)?,
-                        target_id: row.get(2)?,
-                        relation: row.get(3)?,
-                        properties: row
-                            .get::<_, Option<String>>(4)?
-                            .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
-                            .unwrap_or(serde_json::Value::Null),
-                        tenant_id: tenant_id.clone(),
-                        weight: row.get(5)?,
-                        created_at: row
-                            .get::<_, Option<String>>(6)?
-                            .and_then(|s| s.parse().ok())
-                            .unwrap_or_else(Utc::now),
-                        deleted_at: None,
-                    },
-                    GraphNodeExtended {
-                        id: row.get(7)?,
-                        label: row.get(8)?,
-                        properties: row
-                            .get::<_, Option<String>>(9)?
-                            .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
-                            .unwrap_or(serde_json::Value::Null),
-                        tenant_id: tenant_id.clone(),
-                        memory_id: row.get(10)?,
-                        created_at: row
-                            .get::<_, Option<String>>(11)?
-                            .and_then(|s| s.parse().ok())
-                            .unwrap_or_else(Utc::now),
-                        updated_at: row
-                            .get::<_, Option<String>>(12)?
-                            .and_then(|s| s.parse().ok())
-                            .unwrap_or_else(Utc::now),
-                        deleted_at: None,
-                    },
-                ))
-            },
-        )?;
+        let results = self.read_with_conn(|conn| {
+            let mut stmt = conn.prepare(&query)?;
+            let rows = stmt.query_map(
+                params![
+                    node_id, node_id, node_id, tenant_id, tenant_id, tenant_id, tenant_id, node_id
+                ],
+                |row| {
+                    Ok((
+                        GraphEdgeExtended {
+                            id: row.get(0)?,
+                            source_id: row.get(1)?,
+                            target_id: row.get(2)?,
+                            relation: row.get(3)?,
+                            properties: row
+                                .get::<_, Option<String>>(4)?
+                                .map(|value| {
+                                    serde_json::from_str::<serde_json::Value>(value.as_str())
+                                        .unwrap_or(serde_json::Value::Null)
+                                })
+                                .unwrap_or(serde_json::Value::Null),
+                            tenant_id: tenant_id.clone(),
+                            weight: row.get(5)?,
+                            created_at: row
+                                .get::<_, Option<String>>(6)?
+                                .and_then(|s| s.parse().ok())
+                                .unwrap_or_else(Utc::now),
+                            deleted_at: None,
+                        },
+                        GraphNodeExtended {
+                            id: row.get(7)?,
+                            label: row.get(8)?,
+                            properties: row
+                                .get::<_, Option<String>>(9)?
+                                .map(|value| {
+                                    serde_json::from_str::<serde_json::Value>(value.as_str())
+                                        .unwrap_or(serde_json::Value::Null)
+                                })
+                                .unwrap_or(serde_json::Value::Null),
+                            tenant_id: tenant_id.clone(),
+                            memory_id: row.get(10)?,
+                            created_at: row
+                                .get::<_, Option<String>>(11)?
+                                .and_then(|s| s.parse().ok())
+                                .unwrap_or_else(Utc::now),
+                            updated_at: row
+                                .get::<_, Option<String>>(12)?
+                                .and_then(|s| s.parse().ok())
+                                .unwrap_or_else(Utc::now),
+                            deleted_at: None,
+                        },
+                    ))
+                },
+            )?;
 
-        let mut results = Vec::new();
-        for row in rows {
-            results.push(row?);
-        }
+            let mut results = Vec::new();
+            for row in rows {
+                results.push(row?);
+            }
+            Ok(results)
+        })?;
 
         debug!(
             "Found {} related nodes within {} hops",
             results.len(),
             effective_max_hops
         );
+        graph_metrics::record_traversal_depth(effective_max_hops);
         Ok(results)
     }
 
@@ -1297,8 +1614,6 @@ impl DuckDbGraphStore {
             return Err(GraphError::MaxDepthExceeded(self.config.max_path_depth));
         }
         let effective_max_depth = max_depth.unwrap_or(self.config.max_path_depth);
-
-        let conn = self.conn.lock();
 
         let query = format!(
             r#"
@@ -1350,32 +1665,34 @@ impl DuckDbGraphStore {
             effective_max_depth
         );
 
-        let result = conn.query_row(
-            &query,
-            params![end_id, start_id, tenant_id, end_id, tenant_id],
-            |row| {
-                let path_str: String = row.get(0)?;
-                Ok(path_str)
-            },
-        );
+        self.read_with_conn(|conn| {
+            let result = conn.query_row(
+                &query,
+                params![end_id, start_id, tenant_id, end_id, tenant_id],
+                |row| {
+                    let path_str: String = row.get(0)?;
+                    Ok(path_str)
+                },
+            );
 
-        match result {
-            Ok(path_str) => {
-                let path_ids: Vec<&str> = path_str.split(',').collect();
-                let mut edges = Vec::new();
-                for edge_id in path_ids {
-                    let edge = self.get_edge_by_id(&conn, edge_id, &tenant_id)?;
-                    edges.push(edge);
+            match result {
+                Ok(path_str) => {
+                    let path_ids: Vec<&str> = path_str.split(',').collect();
+                    let mut edges = Vec::new();
+                    for edge_id in path_ids {
+                        let edge = self.get_edge_by_id(conn, edge_id, &tenant_id)?;
+                        edges.push(edge);
+                    }
+                    debug!("Found path with {} edges", edges.len());
+                    Ok(edges)
                 }
-                debug!("Found path with {} edges", edges.len());
-                Ok(edges)
+                Err(duckdb::Error::QueryReturnedNoRows) => {
+                    debug!("No path found between {} and {}", start_id, end_id);
+                    Ok(vec![])
+                }
+                Err(e) => Err(GraphError::DuckDb(e)),
             }
-            Err(duckdb::Error::QueryReturnedNoRows) => {
-                debug!("No path found between {} and {}", start_id, end_id);
-                Ok(vec![])
-            }
-            Err(e) => Err(GraphError::DuckDb(e)),
-        }
+        })
     }
 
     fn get_edge_by_id(
@@ -1401,7 +1718,10 @@ impl DuckDbGraphStore {
                     relation: row.get(3)?,
                     properties: row
                         .get::<_, Option<String>>(4)?
-                        .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
+                        .map(|value| {
+                            serde_json::from_str::<serde_json::Value>(value.as_str())
+                                .unwrap_or(serde_json::Value::Null)
+                        })
                         .unwrap_or(serde_json::Value::Null),
                     tenant_id: tenant_id.to_string(),
                     weight: row.get(5)?,
@@ -1431,7 +1751,7 @@ impl DuckDbGraphStore {
             ));
         }
 
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
         let properties_json = if entity.id == "TRIGGER_SERIALIZATION_ERROR" {
             return Err(GraphError::Serialization("Induced failure".to_string()));
         } else {
@@ -1468,7 +1788,7 @@ impl DuckDbGraphStore {
         properties: Option<serde_json::Value>,
     ) -> Result<String, GraphError> {
         let tenant_id = self.validate_tenant(&ctx)?;
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
 
         let source_exists: i32 = conn.query_row(
             "SELECT COUNT(*) FROM entities WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL",
@@ -1518,42 +1838,50 @@ impl DuckDbGraphStore {
 
     pub fn get_stats(&self, ctx: TenantContext) -> Result<GraphStats, GraphError> {
         let tenant_id = self.validate_tenant(&ctx)?;
-        let conn = self.conn.lock();
+        self.read_with_conn(|conn| {
+            let node_count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM memory_nodes WHERE tenant_id = ? AND deleted_at IS NULL",
+                params![tenant_id],
+                |row| row.get(0),
+            )?;
 
-        let node_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM memory_nodes WHERE tenant_id = ? AND deleted_at IS NULL",
-            params![tenant_id],
-            |row| row.get(0),
-        )?;
+            let edge_count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM memory_edges WHERE tenant_id = ? AND deleted_at IS NULL",
+                params![tenant_id],
+                |row| row.get(0),
+            )?;
 
-        let edge_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM memory_edges WHERE tenant_id = ? AND deleted_at IS NULL",
-            params![tenant_id],
-            |row| row.get(0),
-        )?;
+            let entity_count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM entities WHERE tenant_id = ? AND deleted_at IS NULL",
+                params![tenant_id],
+                |row| row.get(0),
+            )?;
 
-        let entity_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM entities WHERE tenant_id = ? AND deleted_at IS NULL",
-            params![tenant_id],
-            |row| row.get(0),
-        )?;
+            let entity_edge_count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM entity_edges WHERE tenant_id = ? AND deleted_at IS NULL",
+                params![tenant_id],
+                |row| row.get(0),
+            )?;
 
-        let entity_edge_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM entity_edges WHERE tenant_id = ? AND deleted_at IS NULL",
-            params![tenant_id],
-            |row| row.get(0),
-        )?;
+            graph_metrics::record_node_count(&tenant_id, node_count as usize);
+            graph_metrics::record_edge_count(&tenant_id, edge_count as usize);
 
-        Ok(GraphStats {
-            node_count: node_count as usize,
-            edge_count: edge_count as usize,
-            entity_count: entity_count as usize,
-            entity_edge_count: entity_edge_count as usize,
+            Ok(GraphStats {
+                node_count: node_count as usize,
+                edge_count: edge_count as usize,
+                entity_count: entity_count as usize,
+                entity_edge_count: entity_edge_count as usize,
+            })
         })
     }
 
     #[instrument(skip(self), fields(tenant_id = %tenant_id))]
     pub async fn persist_to_s3(&self, tenant_id: &str) -> Result<String, GraphError> {
+        self.snapshot_full(tenant_id).await
+    }
+
+    #[instrument(skip(self), fields(tenant_id = %tenant_id))]
+    pub async fn snapshot_full(&self, tenant_id: &str) -> Result<String, GraphError> {
         if self.config.iceberg.enabled {
             self.sync_to_iceberg(tenant_id)?;
             return Ok(format!(
@@ -1575,10 +1903,21 @@ impl DuckDbGraphStore {
         let s3_client = self.create_s3_client().await?;
 
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
-        let snapshot_key = format!("{}/{}/snapshot_{}.parquet", prefix, tenant_id, timestamp);
+        let snapshot_key = format!("{}/{}/full_{}.parquet", prefix, tenant_id, timestamp);
         let staging_key = format!("{}/.staging/{}", snapshot_key, Uuid::new_v4());
 
         let parquet_data = self.export_to_parquet(tenant_id)?;
+        graph_metrics::record_snapshot_bytes(parquet_data.len() as u64);
+
+        let snapshot_seq = {
+            let conn = self.writer_conn();
+            conn.query_row(
+                "SELECT COALESCE(MAX(seq), 0) FROM memory_nodes WHERE tenant_id = ?",
+                params![tenant_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0)
+        };
 
         let mut hasher = Sha256::new();
         hasher.update(&parquet_data);
@@ -1592,6 +1931,7 @@ impl DuckDbGraphStore {
             .metadata("checksum", &checksum)
             .metadata("tenant_id", tenant_id)
             .metadata("timestamp", &timestamp)
+            .metadata("snapshot_seq", snapshot_seq.to_string())
             .send()
             .await
             .map_err(|e| GraphError::S3(format!("Failed to upload staging: {}", e)))?;
@@ -1618,8 +1958,65 @@ impl DuckDbGraphStore {
             .await
             .map_err(|e| GraphError::S3(format!("Failed to cleanup staging: {}", e)))?;
 
-        info!("Persisted graph snapshot to S3: {}", snapshot_key);
+        info!("Persisted full graph snapshot to S3: {}", snapshot_key);
         Ok(snapshot_key)
+    }
+
+    #[instrument(skip(self), fields(tenant_id = %tenant_id, since_seq = since_seq))]
+    pub async fn snapshot_delta(
+        &self,
+        tenant_id: &str,
+        since_seq: i64,
+    ) -> Result<DeltaSnapshotResult, GraphError> {
+        use aws_sdk_s3::primitives::ByteStream;
+        use sha2::{Digest, Sha256};
+
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let bucket = self
+            .config
+            .s3_bucket
+            .as_ref()
+            .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
+        let prefix = self.config.s3_prefix.as_deref().unwrap_or("graph");
+        let s3_client = self.create_s3_client().await?;
+
+        let (parquet_data, rows_exported, to_seq) =
+            self.export_delta_to_parquet(tenant_id, since_seq)?;
+        graph_metrics::record_snapshot_bytes(parquet_data.len() as u64);
+
+        let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
+        let s3_key = format!(
+            "{}/{}/delta_{}_{}.parquet",
+            prefix, tenant_id, since_seq, timestamp
+        );
+
+        let mut hasher = Sha256::new();
+        hasher.update(&parquet_data);
+        let checksum = hex::encode(hasher.finalize());
+        let size_bytes = parquet_data.len() as u64;
+
+        s3_client
+            .put_object()
+            .bucket(bucket)
+            .key(&s3_key)
+            .body(ByteStream::from(parquet_data))
+            .metadata("checksum", &checksum)
+            .metadata("tenant_id", tenant_id)
+            .metadata("since_seq", since_seq.to_string())
+            .metadata("to_seq", to_seq.to_string())
+            .send()
+            .await
+            .map_err(|e| GraphError::S3(format!("Failed to upload delta snapshot: {}", e)))?;
+
+        Ok(DeltaSnapshotResult {
+            s3_key,
+            since_seq,
+            to_seq,
+            size_bytes,
+            checksum,
+            rows_exported,
+        })
     }
 
     #[instrument(skip(self), fields(tenant_id = %tenant_id, snapshot_key = %snapshot_key))]
@@ -1682,7 +2079,7 @@ impl DuckDbGraphStore {
     pub fn export_to_parquet(&self, tenant_id: &str) -> Result<Vec<u8>, GraphError> {
         Self::validate_tenant_id_format(tenant_id)?;
 
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
         Self::enable_parquet_support(&conn)?;
 
         let export_sql = r#"
@@ -1690,12 +2087,13 @@ impl DuckDbGraphStore {
                 SELECT 'node' as record_type, id, label, properties, memory_id, 
                        CAST(created_at AS VARCHAR) as created_at, 
                        CAST(updated_at AS VARCHAR) as updated_at,
-                       NULL as source_id, NULL as target_id, NULL as relation, NULL as weight
+                       NULL as source_id, NULL as target_id, NULL as relation, NULL as weight,
+                       CAST(seq AS VARCHAR) as seq
                 FROM memory_nodes WHERE tenant_id = ? AND deleted_at IS NULL
                 UNION ALL
                 SELECT 'edge' as record_type, id, NULL as label, properties, NULL as memory_id,
                        CAST(created_at AS VARCHAR) as created_at, NULL as updated_at,
-                       source_id, target_id, relation, CAST(weight AS VARCHAR)
+                       source_id, target_id, relation, CAST(weight AS VARCHAR), CAST(seq AS VARCHAR)
                 FROM memory_edges WHERE tenant_id = ? AND deleted_at IS NULL
             ) TO '/dev/stdout' (FORMAT PARQUET)
             "#
@@ -1719,7 +2117,7 @@ impl DuckDbGraphStore {
     pub fn import_from_parquet(&self, tenant_id: &str, data: &[u8]) -> Result<(), GraphError> {
         Self::validate_tenant_id_format(tenant_id)?;
 
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
         Self::enable_parquet_support(&conn)?;
 
         let temp_path = format!("/tmp/graph_import_{}.parquet", Uuid::new_v4());
@@ -1736,9 +2134,9 @@ impl DuckDbGraphStore {
 
         let import_nodes_sql = format!(
             r#"
-            INSERT INTO memory_nodes (id, label, properties, memory_id, tenant_id, created_at, updated_at)
+            INSERT INTO memory_nodes (id, label, properties, memory_id, tenant_id, created_at, updated_at, seq)
             SELECT id, label, properties, memory_id, '{tenant_id}', 
-                   TRY_CAST(created_at AS TIMESTAMP), TRY_CAST(updated_at AS TIMESTAMP)
+                   TRY_CAST(created_at AS TIMESTAMP), TRY_CAST(updated_at AS TIMESTAMP), TRY_CAST(seq AS BIGINT)
             FROM read_parquet('{path}')
             WHERE record_type = 'node'
             "#,
@@ -1749,9 +2147,9 @@ impl DuckDbGraphStore {
 
         let import_edges_sql = format!(
             r#"
-            INSERT INTO memory_edges (id, source_id, target_id, relation, properties, tenant_id, weight, created_at)
+            INSERT INTO memory_edges (id, source_id, target_id, relation, properties, tenant_id, weight, created_at, seq)
             SELECT id, source_id, target_id, relation, properties, '{tenant_id}', 
-                   TRY_CAST(weight AS DOUBLE), TRY_CAST(created_at AS TIMESTAMP)
+                   TRY_CAST(weight AS DOUBLE), TRY_CAST(created_at AS TIMESTAMP), TRY_CAST(seq AS BIGINT)
             FROM read_parquet('{path}')
             WHERE record_type = 'edge'
             "#,
@@ -1760,10 +2158,301 @@ impl DuckDbGraphStore {
         );
         conn.execute_batch(&import_edges_sql)?;
 
+        let max_seq = self.current_max_seq(&conn, tenant_id)?;
+        conn.execute(
+            r#"
+            INSERT INTO graph_tenant_sequences (tenant_id, last_seq)
+            VALUES (?, ?)
+            ON CONFLICT (tenant_id) DO UPDATE SET last_seq = excluded.last_seq
+            "#,
+            params![tenant_id, max_seq],
+        )?;
+
         std::fs::remove_file(&temp_path).ok();
 
         debug!("Imported graph data from parquet for tenant {}", tenant_id);
         Ok(())
+    }
+
+    /// Additively import delta parquet data. Uses INSERT OR IGNORE to avoid
+    /// conflicts with rows already present from the full snapshot.
+    pub fn import_delta_from_parquet(
+        &self,
+        tenant_id: &str,
+        data: &[u8],
+    ) -> Result<(), GraphError> {
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let conn = self.writer_conn();
+        Self::enable_parquet_support(&conn)?;
+
+        let temp_path = format!("/tmp/graph_delta_import_{}.parquet", Uuid::new_v4());
+        std::fs::write(&temp_path, data)?;
+
+        let import_nodes_sql = format!(
+            r#"
+            INSERT OR IGNORE INTO memory_nodes (id, label, properties, memory_id, tenant_id, created_at, updated_at, seq)
+            SELECT id, label, properties, memory_id, '{tenant_id}',
+                   TRY_CAST(created_at AS TIMESTAMP), TRY_CAST(updated_at AS TIMESTAMP), TRY_CAST(seq AS BIGINT)
+            FROM read_parquet('{path}')
+            WHERE record_type = 'node'
+            "#,
+            tenant_id = tenant_id,
+            path = temp_path
+        );
+        conn.execute_batch(&import_nodes_sql)?;
+
+        let import_edges_sql = format!(
+            r#"
+            INSERT OR IGNORE INTO memory_edges (id, source_id, target_id, relation, properties, tenant_id, weight, created_at, seq)
+            SELECT id, source_id, target_id, relation, properties, '{tenant_id}',
+                   TRY_CAST(weight AS DOUBLE), TRY_CAST(created_at AS TIMESTAMP), TRY_CAST(seq AS BIGINT)
+            FROM read_parquet('{path}')
+            WHERE record_type = 'edge'
+            "#,
+            tenant_id = tenant_id,
+            path = temp_path
+        );
+        conn.execute_batch(&import_edges_sql)?;
+
+        let max_seq = self.current_max_seq(&conn, tenant_id)?;
+        conn.execute(
+            r#"
+            INSERT INTO graph_tenant_sequences (tenant_id, last_seq)
+            VALUES (?, ?)
+            ON CONFLICT (tenant_id) DO UPDATE SET last_seq = CASE
+                WHEN excluded.last_seq > graph_tenant_sequences.last_seq THEN excluded.last_seq
+                ELSE graph_tenant_sequences.last_seq
+            END
+            "#,
+            params![tenant_id, max_seq],
+        )?;
+
+        std::fs::remove_file(&temp_path).ok();
+
+        debug!("Imported delta parquet for tenant {}", tenant_id);
+        Ok(())
+    }
+
+    /// Discover the latest full snapshot in S3, load it, then apply all
+    /// subsequent delta snapshots in seq order with checksum verification.
+    #[instrument(skip(self), fields(tenant_id = %tenant_id))]
+    pub async fn restore_from_s3(&self, tenant_id: &str) -> Result<(), GraphError> {
+        use sha2::{Digest, Sha256};
+
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let bucket = self
+            .config
+            .s3_bucket
+            .as_ref()
+            .ok_or_else(|| GraphError::S3("S3 bucket not configured".to_string()))?;
+        let prefix = self.config.s3_prefix.as_deref().unwrap_or("graph");
+        let list_prefix = format!("{}/{}/", prefix, tenant_id);
+
+        let s3_client = self.create_s3_client().await?;
+
+        let list_resp = s3_client
+            .list_objects_v2()
+            .bucket(bucket)
+            .prefix(&list_prefix)
+            .send()
+            .await
+            .map_err(|e| GraphError::S3(format!("Failed to list objects: {}", e)))?;
+
+        let objects = list_resp.contents();
+
+        let mut full_keys: Vec<&str> = objects
+            .iter()
+            .filter_map(|o| {
+                let key = o.key()?;
+                if key.contains("/full_") && key.ends_with(".parquet") {
+                    Some(key)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        full_keys.sort();
+
+        let latest_full = full_keys
+            .last()
+            .ok_or_else(|| GraphError::S3("No full snapshot found in S3".to_string()))?;
+
+        info!("Restoring from full snapshot: {}", latest_full);
+        self.load_from_s3(tenant_id, latest_full).await?;
+
+        let full_ts = Self::extract_snapshot_timestamp(latest_full);
+
+        let mut delta_keys: Vec<&str> = objects
+            .iter()
+            .filter_map(|o| {
+                let key = o.key()?;
+                if key.contains("/delta_") && key.ends_with(".parquet") {
+                    let ts = Self::extract_snapshot_timestamp(key);
+                    if ts > full_ts { Some(key) } else { None }
+                } else {
+                    None
+                }
+            })
+            .collect();
+        delta_keys.sort();
+
+        for delta_key in &delta_keys {
+            info!("Applying delta snapshot: {}", delta_key);
+
+            let response = s3_client
+                .get_object()
+                .bucket(bucket)
+                .key(*delta_key)
+                .send()
+                .await
+                .map_err(|e| GraphError::S3(format!("Failed to fetch delta: {}", e)))?;
+
+            let expected_checksum = response.metadata().and_then(|m| m.get("checksum")).cloned();
+
+            let data = response
+                .body
+                .collect()
+                .await
+                .map_err(|e| GraphError::S3(format!("Failed to read delta body: {}", e)))?
+                .into_bytes()
+                .to_vec();
+
+            if let Some(expected) = expected_checksum {
+                let mut hasher = Sha256::new();
+                hasher.update(&data);
+                let actual = hex::encode(hasher.finalize());
+                if actual != expected {
+                    return Err(GraphError::ChecksumMismatch { expected, actual });
+                }
+            }
+
+            self.import_delta_from_parquet(tenant_id, &data)?;
+        }
+
+        info!(
+            "Restore complete for tenant {}: 1 full + {} deltas",
+            tenant_id,
+            delta_keys.len()
+        );
+
+        if let Some(ref event_log) = self.event_log {
+            let full_response = s3_client
+                .head_object()
+                .bucket(bucket)
+                .key(*latest_full)
+                .send()
+                .await
+                .map_err(|e| GraphError::S3(format!("Failed to head full snapshot: {}", e)))?;
+
+            let snapshot_seq: i64 = full_response
+                .metadata()
+                .and_then(|m| m.get("snapshot_seq"))
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
+
+            info!(
+                "Replaying event log from seq {} for tenant {}",
+                snapshot_seq, tenant_id
+            );
+
+            let mut from_seq = snapshot_seq;
+            loop {
+                let events = event_log
+                    .tail(tenant_id, from_seq, 1000)
+                    .await
+                    .map_err(|e| GraphError::S3(format!("Event log tail failed: {}", e)))?;
+
+                if events.is_empty() {
+                    break;
+                }
+
+                let conn = self.writer_conn();
+                for event in &events {
+                    crate::graph_projector::GraphProjector::apply_event(&conn, event)
+                        .map_err(|e| GraphError::DuckDb(e))?;
+                    from_seq = event.seq;
+                }
+            }
+
+            info!(
+                "Event log replay complete for tenant {}, caught up to seq {}",
+                tenant_id, from_seq
+            );
+        }
+
+        Ok(())
+    }
+
+    fn extract_snapshot_timestamp(key: &str) -> &str {
+        // Keys are like: graph/tenant/full_20250101_120000.parquet
+        //            or: graph/tenant/delta_5_20250101_120500.parquet
+        // Extract the timestamp portion (last segment before .parquet)
+        let without_ext = key.strip_suffix(".parquet").unwrap_or(key);
+        let parts: Vec<&str> = without_ext.rsplitn(3, '_').collect();
+        if parts.len() >= 2 {
+            // Return the last two underscore-separated segments = YYYYMMDD_HHMMSS
+            let end = without_ext.len();
+            let ts_len = parts[0].len() + 1 + parts[1].len();
+            &without_ext[end - ts_len..]
+        } else {
+            without_ext
+        }
+    }
+
+    pub fn export_delta_to_parquet(
+        &self,
+        tenant_id: &str,
+        since_seq: i64,
+    ) -> Result<(Vec<u8>, u64, i64), GraphError> {
+        Self::validate_tenant_id_format(tenant_id)?;
+
+        let conn = self.writer_conn();
+        Self::enable_parquet_support(&conn)?;
+
+        let rows_exported: i64 = conn.query_row(
+            r#"
+            SELECT (
+                SELECT COUNT(*) FROM memory_nodes WHERE tenant_id = ? AND seq > ?
+            ) + (
+                SELECT COUNT(*) FROM memory_edges WHERE tenant_id = ? AND seq > ?
+            )
+            "#,
+            params![tenant_id, since_seq, tenant_id, since_seq],
+            |row| row.get(0),
+        )?;
+
+        let to_seq = self.current_max_seq(&conn, tenant_id)?;
+        let temp_path = format!("/tmp/graph_delta_export_{}.parquet", Uuid::new_v4());
+
+        let export_sql = format!(
+            r#"
+            COPY (
+                SELECT 'node' as record_type, id, label, properties, memory_id,
+                       CAST(created_at AS VARCHAR) as created_at,
+                       CAST(updated_at AS VARCHAR) as updated_at,
+                       NULL as source_id, NULL as target_id, NULL as relation, NULL as weight,
+                       CAST(seq AS VARCHAR) as seq
+                FROM memory_nodes
+                WHERE tenant_id = ? AND seq > ?
+                UNION ALL
+                SELECT 'edge' as record_type, id, NULL as label, properties, NULL as memory_id,
+                       CAST(created_at AS VARCHAR) as created_at, NULL as updated_at,
+                       source_id, target_id, relation, CAST(weight AS VARCHAR), CAST(seq AS VARCHAR)
+                FROM memory_edges
+                WHERE tenant_id = ? AND seq > ?
+            ) TO '{temp_path}' (FORMAT PARQUET)
+            "#,
+        );
+
+        conn.prepare(&export_sql)?
+            .execute(params![tenant_id, since_seq, tenant_id, since_seq])?;
+
+        let data = std::fs::read(&temp_path)?;
+        std::fs::remove_file(&temp_path).ok();
+
+        Ok((data, rows_exported as u64, to_seq))
     }
 
     #[instrument(skip(self, backup_config), fields(tenant_id = %tenant_id))]
@@ -2036,46 +2725,48 @@ impl DuckDbGraphStore {
     }
 
     fn get_stats_internal(&self, tenant_id: &str) -> Result<GraphStats, GraphError> {
-        let conn = self.conn.lock();
+        let conn = self.read_with_conn(|conn| {
+            let node_count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM memory_nodes WHERE tenant_id = ? AND deleted_at IS NULL",
+                    params![tenant_id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
 
-        let node_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM memory_nodes WHERE tenant_id = ? AND deleted_at IS NULL",
-                params![tenant_id],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
+            let edge_count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM memory_edges WHERE tenant_id = ? AND deleted_at IS NULL",
+                    params![tenant_id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
 
-        let edge_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM memory_edges WHERE tenant_id = ? AND deleted_at IS NULL",
-                params![tenant_id],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
+            let entity_count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM entities WHERE tenant_id = ? AND deleted_at IS NULL",
+                    params![tenant_id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
 
-        let entity_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM entities WHERE tenant_id = ? AND deleted_at IS NULL",
-                params![tenant_id],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
+            let entity_edge_count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM entity_edges WHERE tenant_id = ? AND deleted_at IS NULL",
+                    params![tenant_id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
 
-        let entity_edge_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM entity_edges WHERE tenant_id = ? AND deleted_at IS NULL",
-                params![tenant_id],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
+            Ok(GraphStats {
+                node_count: node_count as usize,
+                edge_count: edge_count as usize,
+                entity_count: entity_count as usize,
+                entity_edge_count: entity_edge_count as usize,
+            })
+        })?;
 
-        Ok(GraphStats {
-            node_count: node_count as usize,
-            edge_count: edge_count as usize,
-            entity_count: entity_count as usize,
-            entity_edge_count: entity_edge_count as usize,
-        })
+        Ok(conn)
     }
 
     #[instrument(skip(self, nodes, edges), fields(tenant_id = %tenant_id, nodes = nodes.len(), edges = edges.len()))]
@@ -2089,7 +2780,7 @@ impl DuckDbGraphStore {
         let _ = ctx;
         Self::validate_tenant_id_format(tenant_id)?;
 
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
 
         conn.execute_batch("BEGIN TRANSACTION")?;
 
@@ -2104,16 +2795,18 @@ impl DuckDbGraphStore {
                 let properties_json = serde_json::to_string(&node.properties)
                     .map_err(|e| GraphError::Serialization(e.to_string()))?;
 
+                let seq = self.next_mutation_seq(&conn, tenant_id)?;
                 conn.execute(
                     r#"
-                    INSERT INTO memory_nodes (id, label, properties, tenant_id)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO memory_nodes (id, label, properties, tenant_id, seq)
+                    VALUES (?, ?, ?, ?, ?)
                     ON CONFLICT (id) DO UPDATE SET
                         label = EXCLUDED.label,
                         properties = EXCLUDED.properties,
+                        seq = EXCLUDED.seq,
                         updated_at = now()
                     "#,
-                    params![node.id, node.label, properties_json, tenant_id],
+                    params![node.id, node.label, properties_json, tenant_id, seq],
                 )?;
             }
 
@@ -2141,13 +2834,15 @@ impl DuckDbGraphStore {
                 let properties_json = serde_json::to_string(&edge.properties)
                     .map_err(|e| GraphError::Serialization(e.to_string()))?;
 
+                let seq = self.next_mutation_seq(&conn, tenant_id)?;
                 conn.execute(
                     r#"
-                    INSERT INTO memory_edges (id, source_id, target_id, relation, properties, tenant_id)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO memory_edges (id, source_id, target_id, relation, properties, tenant_id, seq)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (id) DO UPDATE SET
                         relation = EXCLUDED.relation,
-                        properties = EXCLUDED.properties
+                        properties = EXCLUDED.properties,
+                        seq = EXCLUDED.seq
                     "#,
                     params![
                         edge.id,
@@ -2155,7 +2850,8 @@ impl DuckDbGraphStore {
                         edge.target_id,
                         edge.relation,
                         properties_json,
-                        tenant_id
+                        tenant_id,
+                        seq
                     ],
                 )?;
             }
@@ -2192,7 +2888,7 @@ impl DuckDbGraphStore {
         let _ = ctx;
         Self::validate_tenant_id_format(tenant_id)?;
 
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
 
         conn.execute_batch("BEGIN TRANSACTION")?;
 
@@ -2284,7 +2980,7 @@ impl DuckDbGraphStore {
     where
         F: FnOnce(&duckdb::Connection) -> Result<T, GraphError>,
     {
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
 
         conn.execute_batch("BEGIN TRANSACTION")?;
 
@@ -2342,7 +3038,7 @@ impl DuckDbGraphStore {
     }
 
     fn check_duckdb_health(&self) -> ComponentHealth {
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
 
         match conn.query_row("SELECT 1", [], |row| row.get::<_, i32>(0)) {
             Ok(1) => ComponentHealth {
@@ -2378,13 +3074,13 @@ impl DuckDbGraphStore {
     }
 
     fn check_duckdb_ready(&self) -> bool {
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
         conn.query_row("SELECT 1", [], |row| row.get::<_, i32>(0))
             .is_ok()
     }
 
     fn check_schema_ready(&self) -> bool {
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
 
         let tables_exist = conn
             .query_row(
@@ -2399,7 +3095,7 @@ impl DuckDbGraphStore {
     }
 
     fn get_schema_version(&self) -> Result<i32, GraphError> {
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
 
         let version: i32 = conn.query_row(
             "SELECT COALESCE(MAX(version), 0) FROM schema_version",
@@ -2454,7 +3150,7 @@ impl DuckDbGraphStore {
         }
 
         Self::validate_tenant_id_format(tenant_id)?;
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
 
         conn.execute(
             r#"
@@ -2476,49 +3172,49 @@ impl DuckDbGraphStore {
         tenant_id: &str,
     ) -> Result<Vec<PartitionAccessRecord>, GraphError> {
         Self::validate_tenant_id_format(tenant_id)?;
-        let conn = self.conn.lock();
-
-        let mut stmt = conn.prepare(
-            r#"
-            SELECT 
-                partition_key,
-                tenant_id,
-                access_count,
-                CAST(last_access AS VARCHAR) as last_access,
-                CASE WHEN access_count > 0 THEN total_load_time_ms / access_count ELSE 0 END as avg_load_time_ms
-            FROM partition_access
-            WHERE tenant_id = ?
-            ORDER BY last_access DESC
-            LIMIT ?
-            "#,
-        )?;
-
-        let records = stmt
-            .query_map(
-                params![
+        self.read_with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT 
+                    partition_key,
                     tenant_id,
-                    self.config.cold_start.prewarm_partition_count as i64
-                ],
-                |row| {
-                    let last_access_str: String = row.get(3)?;
-                    let last_access =
-                        DateTime::parse_from_str(&last_access_str, "%Y-%m-%d %H:%M:%S")
-                            .map(|dt| dt.with_timezone(&Utc))
-                            .unwrap_or_else(|_| Utc::now());
+                    access_count,
+                    CAST(last_access AS VARCHAR) as last_access,
+                    CASE WHEN access_count > 0 THEN total_load_time_ms / access_count ELSE 0 END as avg_load_time_ms
+                FROM partition_access
+                WHERE tenant_id = ?
+                ORDER BY last_access DESC
+                LIMIT ?
+                "#,
+            )?;
 
-                    Ok(PartitionAccessRecord {
-                        partition_key: row.get(0)?,
-                        tenant_id: row.get(1)?,
-                        access_count: row.get(2)?,
-                        last_access,
-                        avg_load_time_ms: row.get(4)?,
-                    })
-                },
-            )?
-            .filter_map(|r| r.ok())
-            .collect();
+            let records = stmt
+                .query_map(
+                    params![
+                        tenant_id,
+                        self.config.cold_start.prewarm_partition_count as i64
+                    ],
+                    |row| {
+                        let last_access_str: String = row.get(3)?;
+                        let last_access =
+                            DateTime::parse_from_str(&last_access_str, "%Y-%m-%d %H:%M:%S")
+                                .map(|dt| dt.with_timezone(&Utc))
+                                .unwrap_or_else(|_| Utc::now());
 
-        Ok(records)
+                        Ok(PartitionAccessRecord {
+                            partition_key: row.get(0)?,
+                            tenant_id: row.get(1)?,
+                            access_count: row.get(2)?,
+                            last_access,
+                            avg_load_time_ms: row.get(4)?,
+                        })
+                    },
+                )?
+                .filter_map(|r| r.ok())
+                .collect();
+
+            Ok(records)
+        })
     }
 
     pub fn get_prewarm_partitions(&self, tenant_id: &str) -> Result<Vec<String>, GraphError> {
@@ -2547,7 +3243,20 @@ impl DuckDbGraphStore {
         let mut loaded = 0;
         let mut deferred = vec![];
 
-        for partition_key in partition_keys {
+        let strategy = self.partition_key_strategy();
+        let mut seen_partition_keys = std::collections::HashSet::new();
+        let normalized_partition_keys: Vec<String> = partition_keys
+            .iter()
+            .map(|partition_key| strategy.normalize_partition_key(partition_key))
+            .filter(|partition_key| seen_partition_keys.insert(partition_key.clone()))
+            .collect();
+
+        for (index, partition_key) in normalized_partition_keys.into_iter().enumerate() {
+            if index >= self.config.cold_start.prewarm_partition_count {
+                deferred.push(partition_key);
+                continue;
+            }
+
             let elapsed_ms = start.elapsed().as_millis() as u64;
 
             if elapsed_ms >= budget_ms {
@@ -2557,7 +3266,7 @@ impl DuckDbGraphStore {
 
             let partition_start = std::time::Instant::now();
 
-            if let Err(e) = self.load_partition_data(tenant_id, partition_key).await {
+            if let Err(e) = self.load_partition_data(tenant_id, &partition_key).await {
                 warn!(
                     partition = partition_key,
                     error = %e,
@@ -2568,7 +3277,7 @@ impl DuckDbGraphStore {
             }
 
             let load_time_ms = partition_start.elapsed().as_millis() as f64;
-            self.record_partition_access(tenant_id, partition_key, load_time_ms)?;
+            self.record_partition_access(tenant_id, &partition_key, load_time_ms)?;
             loaded += 1;
 
             metrics::histogram!("graph_partition_load_time_ms").record(load_time_ms);
@@ -2746,7 +3455,7 @@ impl DuckDbGraphStore {
 
         let iceberg_cfg = &self.config.iceberg;
         let catalog = &iceberg_cfg.catalog_name;
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
 
         let nodes_table = format!("{catalog}.memory_nodes_{tenant_id}");
         let edges_table = format!("{catalog}.memory_edges_{tenant_id}");
@@ -2832,7 +3541,7 @@ impl DuckDbGraphStore {
 
         let iceberg_cfg = &self.config.iceberg;
         let catalog = &iceberg_cfg.catalog_name;
-        let conn = self.conn.lock();
+        let conn = self.writer_conn();
 
         let nodes_table = format!("{catalog}.memory_nodes_{tenant_id}");
         let edges_table = format!("{catalog}.memory_edges_{tenant_id}");
@@ -2865,46 +3574,47 @@ impl DuckDbGraphStore {
         min_community_size: usize,
     ) -> Result<Vec<Community>, GraphError> {
         let tenant_id = self.validate_tenant(&ctx)?;
-        let conn = self.conn.lock();
+        self.read_with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT id FROM memory_nodes
+                WHERE tenant_id = ? AND deleted_at IS NULL
+                "#,
+            )?;
 
-        let mut stmt = conn.prepare(
-            r#"
-            SELECT id FROM memory_nodes
-            WHERE tenant_id = ? AND deleted_at IS NULL
-            "#,
-        )?;
+            let node_ids: Vec<String> = stmt
+                .query_map(params![tenant_id], |row| row.get(0))?
+                .filter_map(|r| r.ok())
+                .collect();
 
-        let node_ids: Vec<String> = stmt
-            .query_map(params![tenant_id], |row| row.get(0))?
-            .filter_map(|r| r.ok())
-            .collect();
+            if node_ids.is_empty() {
+                return Ok(vec![]);
+            }
 
-        if node_ids.is_empty() {
-            return Ok(vec![]);
-        }
+            let mut edge_stmt = conn.prepare(
+                r#"
+                SELECT source_id, target_id FROM memory_edges
+                WHERE tenant_id = ? AND deleted_at IS NULL
+                "#,
+            )?;
 
-        let mut edge_stmt = conn.prepare(
-            r#"
-            SELECT source_id, target_id FROM memory_edges
-            WHERE tenant_id = ? AND deleted_at IS NULL
-            "#,
-        )?;
+            let edges: Vec<(String, String)> = edge_stmt
+                .query_map(params![tenant_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .filter_map(|r| r.ok())
+                .collect();
 
-        let edges: Vec<(String, String)> = edge_stmt
-            .query_map(params![tenant_id], |row| Ok((row.get(0)?, row.get(1)?)))?
-            .filter_map(|r| r.ok())
-            .collect();
+            let total_edge_weight: f64 = edges.len() as f64;
 
-        let total_edge_weight: f64 = edges.len() as f64;
+            let communities =
+                leiden_detect(&node_ids, &edges, total_edge_weight, min_community_size);
 
-        let communities = leiden_detect(&node_ids, &edges, total_edge_weight, min_community_size);
-
-        debug!(
-            "Detected {} communities with min size {} (Leiden algorithm)",
-            communities.len(),
-            min_community_size
-        );
-        Ok(communities)
+            debug!(
+                "Detected {} communities with min size {} (Leiden algorithm)",
+                communities.len(),
+                min_community_size
+            );
+            Ok(communities)
+        })
     }
 }
 
@@ -3176,7 +3886,21 @@ impl GraphStore for DuckDbGraphStore {
             )) as Self::Error);
         }
 
-        let conn = self.conn.lock();
+        if let Some(ref event_log) = self.event_log {
+            let payload = serde_json::json!({
+                "id": node.id,
+                "label": node.label,
+                "properties": node.properties,
+                "tenant_id": tenant_id,
+            });
+            event_log
+                .append(&tenant_id, "add_node", payload)
+                .await
+                .map_err(|e| Box::new(GraphError::S3(e.to_string())) as Self::Error)?;
+        }
+
+        let conn = self.writer_conn();
+        let seq = self.next_mutation_seq(&conn, &tenant_id)?;
         let properties_json = if node.id == "TRIGGER_SERIALIZATION_ERROR"
             || node.label == "TRIGGER_SERIALIZATION_ERROR"
         {
@@ -3190,14 +3914,15 @@ impl GraphStore for DuckDbGraphStore {
 
         conn.execute(
             r#"
-            INSERT INTO memory_nodes (id, label, properties, tenant_id)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO memory_nodes (id, label, properties, tenant_id, seq)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET
                 label = EXCLUDED.label,
                 properties = EXCLUDED.properties,
+                seq = EXCLUDED.seq,
                 updated_at = now()
             "#,
-            params![node.id, node.label, properties_json, tenant_id],
+            params![node.id, node.label, properties_json, tenant_id, seq],
         )
         .map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?;
 
@@ -3217,38 +3942,59 @@ impl GraphStore for DuckDbGraphStore {
             )) as Self::Error);
         }
 
-        let conn = self.conn.lock();
+        let seq = {
+            let conn = self.writer_conn();
+            let seq = self.next_mutation_seq(&conn, &tenant_id)?;
 
-        if !self
-            .node_exists(&conn, &edge.source_id, &tenant_id)
-            .map_err(|e| Box::new(e) as Self::Error)?
-        {
-            return Err(Box::new(GraphError::ReferentialIntegrity(format!(
-                "Source node {} does not exist",
-                edge.source_id
-            ))) as Self::Error);
+            if !self
+                .node_exists(&conn, &edge.source_id, &tenant_id)
+                .map_err(|e| Box::new(e) as Self::Error)?
+            {
+                return Err(Box::new(GraphError::ReferentialIntegrity(format!(
+                    "Source node {} does not exist",
+                    edge.source_id
+                ))) as Self::Error);
+            }
+
+            if !self
+                .node_exists(&conn, &edge.target_id, &tenant_id)
+                .map_err(|e| Box::new(e) as Self::Error)?
+            {
+                return Err(Box::new(GraphError::ReferentialIntegrity(format!(
+                    "Target node {} does not exist",
+                    edge.target_id
+                ))) as Self::Error);
+            }
+            seq
+        };
+
+        if let Some(ref event_log) = self.event_log {
+            let payload = serde_json::json!({
+                "id": edge.id,
+                "source_id": edge.source_id,
+                "target_id": edge.target_id,
+                "relation": edge.relation,
+                "properties": edge.properties,
+                "tenant_id": tenant_id,
+            });
+            event_log
+                .append(&tenant_id, "add_edge", payload)
+                .await
+                .map_err(|e| Box::new(GraphError::S3(e.to_string())) as Self::Error)?;
         }
 
-        if !self
-            .node_exists(&conn, &edge.target_id, &tenant_id)
-            .map_err(|e| Box::new(e) as Self::Error)?
-        {
-            return Err(Box::new(GraphError::ReferentialIntegrity(format!(
-                "Target node {} does not exist",
-                edge.target_id
-            ))) as Self::Error);
-        }
-
+        let conn = self.writer_conn();
         let properties_json = serde_json::to_string(&edge.properties)
             .map_err(|e| Box::new(GraphError::Serialization(e.to_string())) as Self::Error)?;
 
         conn.execute(
             r#"
-            INSERT INTO memory_edges (id, source_id, target_id, relation, properties, tenant_id)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO memory_edges (id, source_id, target_id, relation, properties, tenant_id, seq)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET
                 relation = EXCLUDED.relation,
-                properties = EXCLUDED.properties
+                properties = EXCLUDED.properties,
+                seq = EXCLUDED.seq
             "#,
             params![
                 edge.id,
@@ -3256,7 +4002,8 @@ impl GraphStore for DuckDbGraphStore {
                 edge.target_id,
                 edge.relation,
                 properties_json,
-                tenant_id
+                tenant_id,
+                seq
             ],
         )
         .map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?;
@@ -3277,60 +4024,69 @@ impl GraphStore for DuckDbGraphStore {
         let tenant_id = self
             .validate_tenant(&ctx)
             .map_err(|e| Box::new(e) as Self::Error)?;
-        let conn = self.conn.lock();
+        let results = self
+            .read_with_conn(|conn| {
+                let mut stmt = conn.prepare(
+                    r#"
+                WITH candidate_edges AS (
+                    SELECT id, source_id, target_id, relation, properties
+                    FROM memory_edges
+                    WHERE source_id = ?
+                        AND tenant_id = ?
+                        AND deleted_at IS NULL
+                    UNION ALL
+                    SELECT id, source_id, target_id, relation, properties
+                    FROM memory_edges
+                    WHERE target_id = ?
+                        AND tenant_id = ?
+                        AND deleted_at IS NULL
+                )
+                SELECT 
+                    e.id as edge_id, e.source_id, e.target_id, e.relation, e.properties as edge_props,
+                    n.id as node_id, n.label, n.properties as node_props
+                FROM candidate_edges e
+                JOIN memory_nodes n ON (
+                    CASE WHEN e.source_id = ? THEN e.target_id ELSE e.source_id END = n.id
+                )
+                WHERE n.tenant_id = ?
+                    AND n.deleted_at IS NULL
+                "#,
+                )?;
 
-        let mut stmt = conn
-            .prepare(
-                r#"
-            SELECT 
-                e.id as edge_id, e.source_id, e.target_id, e.relation, e.properties as edge_props,
-                n.id as node_id, n.label, n.properties as node_props
-            FROM memory_edges e
-            JOIN memory_nodes n ON (
-                CASE WHEN e.source_id = ? THEN e.target_id ELSE e.source_id END = n.id
-            )
-            WHERE (e.source_id = ? OR e.target_id = ?)
-                AND e.tenant_id = ?
-                AND e.deleted_at IS NULL
-                AND n.tenant_id = ?
-                AND n.deleted_at IS NULL
-            "#,
-            )
-            .map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?;
+                let rows = stmt.query_map(
+                    params![node_id, tenant_id, node_id, tenant_id, node_id, tenant_id],
+                    |row| {
+                        let edge = GraphEdge {
+                            id: row.get(0)?,
+                            source_id: row.get(1)?,
+                            target_id: row.get(2)?,
+                            relation: row.get(3)?,
+                            properties: row
+                                .get::<_, Option<String>>(4)?
+                                .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
+                                .unwrap_or(serde_json::Value::Null),
+                            tenant_id: tenant_id.clone(),
+                        };
+                        let node = GraphNode {
+                            id: row.get(5)?,
+                            label: row.get(6)?,
+                            properties: row
+                                .get::<_, Option<String>>(7)?
+                                .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
+                                .unwrap_or(serde_json::Value::Null),
+                            tenant_id: tenant_id.clone(),
+                        };
+                        Ok((edge, node))
+                    },
+                )?;
 
-        let rows = stmt
-            .query_map(
-                params![node_id, node_id, node_id, tenant_id, tenant_id],
-                |row| {
-                    let edge = GraphEdge {
-                        id: row.get(0)?,
-                        source_id: row.get(1)?,
-                        target_id: row.get(2)?,
-                        relation: row.get(3)?,
-                        properties: row
-                            .get::<_, Option<String>>(4)?
-                            .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
-                            .unwrap_or(serde_json::Value::Null),
-                        tenant_id: tenant_id.clone(),
-                    };
-                    let node = GraphNode {
-                        id: row.get(5)?,
-                        label: row.get(6)?,
-                        properties: row
-                            .get::<_, Option<String>>(7)?
-                            .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
-                            .unwrap_or(serde_json::Value::Null),
-                        tenant_id: tenant_id.clone(),
-                    };
-                    Ok((edge, node))
-                },
-            )
-            .map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?;
-
-        let mut results = Vec::new();
-        for row in rows {
-            results.push(row.map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?);
-        }
+                let mut results = Vec::new();
+                for row in rows {
+                    results.push(row?);
+                }
+                Ok(results)
+            })
+            .map_err(|e| Box::new(e) as Self::Error)?;
 
         debug!("Found {} neighbors for node {}", results.len(), node_id);
         Ok(results)
@@ -3347,6 +4103,8 @@ impl GraphStore for DuckDbGraphStore {
         let extended_edges = self
             .shortest_path(ctx, start_id, end_id, Some(max_depth))
             .map_err(|e| Box::new(e) as Self::Error)?;
+
+        graph_metrics::record_traversal_depth(max_depth);
 
         Ok(extended_edges
             .into_iter()
@@ -3371,45 +4129,44 @@ impl GraphStore for DuckDbGraphStore {
         let tenant_id = self
             .validate_tenant(&ctx)
             .map_err(|e| Box::new(e) as Self::Error)?;
-        let conn = self.conn.lock();
-
         let search_pattern = format!("%{}%", query);
+        let results = self
+            .read_with_conn(|conn| {
+                let mut stmt = conn.prepare(
+                    r#"
+                    SELECT id, label, properties
+                    FROM memory_nodes
+                    WHERE tenant_id = ?
+                        AND deleted_at IS NULL
+                        AND (label ILIKE ? OR properties::TEXT ILIKE ?)
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                    "#,
+                )?;
 
-        let mut stmt = conn
-            .prepare(
-                r#"
-            SELECT id, label, properties
-            FROM memory_nodes
-            WHERE tenant_id = ?
-                AND deleted_at IS NULL
-                AND (label ILIKE ? OR properties::TEXT ILIKE ?)
-            ORDER BY created_at DESC
-            LIMIT ?
-            "#,
-            )
-            .map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?;
-
-        let rows = stmt
-            .query_map(
-                params![tenant_id, search_pattern, search_pattern, limit as i64],
-                |row| {
-                    Ok(GraphNode {
-                        id: row.get(0)?,
-                        label: row.get(1)?,
-                        properties: row
-                            .get::<_, Option<String>>(2)?
-                            .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
-                            .unwrap_or(serde_json::Value::Null),
-                        tenant_id: tenant_id.clone(),
-                    })
-                },
-            )
-            .map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?;
-
-        let mut results = Vec::new();
-        for row in rows {
-            results.push(row.map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?);
-        }
+                let mut results = Vec::new();
+                let rows = stmt.query_map(
+                    params![tenant_id, search_pattern, search_pattern, limit as i64],
+                    |row| {
+                        Ok(GraphNode {
+                            id: row.get(0)?,
+                            label: row.get(1)?,
+                            properties: row
+                                .get::<_, Option<String>>(2)?
+                                .map(|s| {
+                                    serde_json::from_str(&s).unwrap_or(serde_json::Value::Null)
+                                })
+                                .unwrap_or(serde_json::Value::Null),
+                            tenant_id: tenant_id.clone(),
+                        })
+                    },
+                )?;
+                for row in rows {
+                    results.push(row?);
+                }
+                Ok(results)
+            })
+            .map_err(|e| Box::new(e) as Self::Error)?;
 
         debug!("Found {} nodes matching query '{}'", results.len(), query);
         Ok(results)
@@ -3421,8 +4178,68 @@ impl GraphStore for DuckDbGraphStore {
         ctx: TenantContext,
         source_memory_id: &str,
     ) -> Result<usize, Self::Error> {
+        if let Some(ref event_log) = self.event_log {
+            let tenant_id = self
+                .validate_tenant(&ctx)
+                .map_err(|e| Box::new(e) as Self::Error)?;
+
+            let node_ids: Vec<String> = {
+                let conn = self.writer_conn();
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id FROM memory_nodes WHERE tenant_id = ? AND deleted_at IS NULL AND json_extract_string(properties, '$.source_memory_id') = ?",
+                    )
+                    .map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?;
+                stmt.query_map(params![tenant_id, source_memory_id], |row| row.get(0))
+                    .map_err(|e| Box::new(GraphError::DuckDb(e)) as Self::Error)?
+                    .filter_map(|r| r.ok())
+                    .collect()
+            };
+
+            for node_id in &node_ids {
+                let payload = serde_json::json!({
+                    "node_id": node_id,
+                    "tenant_id": tenant_id,
+                });
+                event_log
+                    .append(&tenant_id, "soft_delete_node", payload)
+                    .await
+                    .map_err(|e| Box::new(GraphError::S3(e.to_string())) as Self::Error)?;
+            }
+        }
+
         DuckDbGraphStore::soft_delete_nodes_by_source_memory_id(self, ctx, source_memory_id)
             .map_err(|e| Box::new(e) as Self::Error)
+    }
+
+    async fn append_event(
+        &self,
+        ctx: TenantContext,
+        kind: &str,
+        payload: serde_json::Value,
+    ) -> Result<i64, Self::Error> {
+        let tenant_id = self
+            .validate_tenant(&ctx)
+            .map_err(|e| Box::new(e) as Self::Error)?;
+        let event_log = self.event_log.as_ref().ok_or_else(|| {
+            Box::new(GraphError::S3("Event sourcing not enabled".to_string())) as Self::Error
+        })?;
+        event_log
+            .append(&tenant_id, kind, payload)
+            .await
+            .map_err(|e| Box::new(GraphError::S3(e.to_string())) as Self::Error)
+    }
+
+    async fn last_applied_seq(&self, ctx: TenantContext) -> Result<i64, Self::Error> {
+        let tenant_id = self
+            .validate_tenant(&ctx)
+            .map_err(|e| Box::new(e) as Self::Error)?;
+        let projector = self.projector.as_ref().ok_or_else(|| {
+            Box::new(GraphError::S3("Event sourcing not enabled".to_string())) as Self::Error
+        })?;
+        projector
+            .last_applied_seq(&tenant_id)
+            .map_err(|e| Box::new(GraphError::S3(e.to_string())) as Self::Error)
     }
 }
 
@@ -3439,6 +4256,78 @@ mod tests {
 
     fn create_test_store() -> DuckDbGraphStore {
         DuckDbGraphStore::new(DuckDbGraphConfig::default()).expect("Failed to create test store")
+    }
+
+    fn temp_duckdb_path(test_name: &str) -> std::path::PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!("aeterna-{test_name}-{}.duckdb", Uuid::new_v4()));
+        path
+    }
+
+    fn cleanup_duckdb_files(path: &std::path::Path) {
+        let _ = std::fs::remove_file(path);
+
+        if let Some(file_name) = path.file_name().and_then(|name| name.to_str()) {
+            let wal_path = path.with_file_name(format!("{file_name}.wal"));
+            let _ = std::fs::remove_file(wal_path);
+        }
+    }
+
+    #[test]
+    fn test_file_backed_store_initializes_reader_pool() {
+        let path = temp_duckdb_path("reader-pool");
+        let config = DuckDbGraphConfig {
+            path: path.to_string_lossy().into_owned(),
+            reader_pool_size: Some(2),
+            ..Default::default()
+        };
+
+        let store = DuckDbGraphStore::new(config).expect("Failed to create file-backed store");
+        assert!(store.reader_pool.is_some());
+        assert_eq!(store.config.reader_pool_size, Some(2));
+        store
+            .read_with_conn(|conn| {
+                conn.query_row("SELECT 1", [], |row| row.get::<_, i32>(0))
+                    .map_err(GraphError::DuckDb)
+            })
+            .expect("reader connection should be usable");
+
+        drop(store);
+        cleanup_duckdb_files(&path);
+    }
+
+    #[test]
+    fn test_schema_creates_phase1_indexes() {
+        let store = create_test_store();
+        let conn = store.writer_conn();
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT index_name FROM duckdb_indexes() WHERE table_name IN ('memory_nodes', 'memory_edges')",
+            )
+            .expect("prepare duckdb_indexes query");
+
+        let index_names: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .expect("query duckdb indexes")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("collect duckdb indexes");
+
+        assert!(
+            index_names
+                .iter()
+                .any(|name| name == "idx_nodes_tenant_label")
+        );
+        assert!(
+            index_names
+                .iter()
+                .any(|name| name == "idx_edges_tenant_source")
+        );
+        assert!(
+            index_names
+                .iter()
+                .any(|name| name == "idx_edges_tenant_target")
+        );
     }
 
     #[tokio::test]
@@ -3863,6 +4752,21 @@ mod tests {
 
         let result = store.persist_to_s3("test-tenant").await;
         // Without S3 bucket configured, the parquet path fails with S3 error
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("S3") || err_msg.contains("bucket"),
+            "Expected S3 bucket error when iceberg disabled, got: {}",
+            err_msg
+        );
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_full_with_iceberg_disabled_falls_back_to_parquet() {
+        let store = create_test_store();
+        assert!(!store.config.iceberg.enabled);
+
+        let result = store.snapshot_full("test-tenant").await;
         assert!(result.is_err());
         let err_msg = format!("{}", result.unwrap_err());
         assert!(

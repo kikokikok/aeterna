@@ -52,6 +52,7 @@ rustls = { version = "0.23", features = ["aws_lc_rs"] }
 default = []
 llm-integration = ["dep:async-openai", "dep:aisdk"]
 embedding-integration = ["dep:async-openai"]
+postgres-graph = ["storage/postgres-graph"]
 google-provider = ["dep:reqwest", "dep:gcp_auth"]
 bedrock-provider = ["dep:aws-config", "dep:aws-sdk-bedrockruntime"]
 pinecone = ["dep:reqwest"]

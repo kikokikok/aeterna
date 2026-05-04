@@ -371,3 +371,52 @@ Row-Level Security is authoritative tenant isolation at runtime, not a paper art
 3. **Scheduled jobs pick explicitly.** Scheduled cross-tenant work uses `with_admin_context(&TenantContext::system_ctx(), …)`. Scheduled per-tenant work enumerates tenants via admin, then dispatches each tenant through `with_tenant_context(&TenantContext::from_scheduled_job(id, job), …)`.
 
 See `openspec/changes/decide-rls-enforcement-model/design.md` for the full rationale.
+
+---
+
+## Graph Storage: Event-Sourced WAL Coordination
+
+Phase 2 of `optimize-duckdb-graph-store` adds event-sourced write coordination across pods.
+
+### Feature Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `providers.graph.event_sourcing_enabled` | `true` | Dual-write mutations to Postgres event log + local DuckDB |
+
+### Metrics (Prometheus)
+
+| Metric | Type | Description |
+|---|---|---|
+| `graph_nodes_total` | Gauge | Total live nodes per tenant |
+| `graph_edges_total` | Gauge | Total live edges per tenant |
+| `graph_traversal_depth` | Histogram | Traversal depth per query |
+| `graph_duckdb_lock_wait_ms` | Histogram | Writer lock acquisition latency |
+| `graph_partition_load_ms` | Histogram | Cold-start partition load latency |
+| `graph_snapshot_bytes` | Counter | Bytes written in snapshot uploads |
+
+### Key Modules
+
+| Module | Purpose |
+|---|---|
+| `storage::graph_event_log` | Postgres event log: `append()`, `tail()`, `head_seq()` |
+| `storage::graph_projector` | Per-tenant tokio task that tails events and applies to DuckDB |
+| `storage::graph_verify` | SHA-256 digest computation for divergence detection |
+
+### Server Endpoints
+
+| Endpoint | Method | Auth | Description |
+|---|---|---|---|
+| `/api/v1/internal/graph/digest` | GET | PlatformAdmin | Returns SHA-256 digest of a tenant's graph state (`?tenant_id=X`) |
+
+### Cron Jobs
+
+| Job | Schedule | Description |
+|---|---|---|
+| `verify_graph_consistency` | Hourly | Iterates all active tenants, computes SHA-256 digests via `graph_verify`, emits `graph_consistency_divergences_total` counter on mismatch |
+
+### Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `GR_EVENT_SOURCING_ENABLED` | `true` | Enable event-sourced dual-write |

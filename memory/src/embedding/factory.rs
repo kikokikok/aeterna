@@ -67,7 +67,9 @@ impl OpenAiEmbeddingConfig {
             api_key: std::env::var("OPENAI_API_KEY").map_err(|_| {
                 EmbeddingFactoryError::Configuration("OPENAI_API_KEY not set".into())
             })?,
-            base_url: std::env::var("AETERNA_OPENAI_BASE_URL").ok().filter(|s| !s.is_empty()),
+            base_url: std::env::var("AETERNA_OPENAI_BASE_URL")
+                .ok()
+                .filter(|s| !s.is_empty()),
         })
     }
 }

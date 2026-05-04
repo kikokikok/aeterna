@@ -2461,6 +2461,7 @@ impl PostgresBackend {
 }
 
 #[async_trait]
+#[cfg(feature = "postgres-graph")]
 impl crate::graph::GraphStore for PostgresBackend {
     type Error = Box<dyn std::error::Error + Send + Sync>;
 

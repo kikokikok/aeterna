@@ -103,7 +103,9 @@ impl OpenAiLlmConfig {
             model: std::env::var("AETERNA_OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".to_string()),
             api_key: std::env::var("OPENAI_API_KEY")
                 .map_err(|_| LlmFactoryError::Configuration("OPENAI_API_KEY not set".into()))?,
-            base_url: std::env::var("AETERNA_OPENAI_BASE_URL").ok().filter(|s| !s.is_empty()),
+            base_url: std::env::var("AETERNA_OPENAI_BASE_URL")
+                .ok()
+                .filter(|s| !s.is_empty()),
         })
     }
 }

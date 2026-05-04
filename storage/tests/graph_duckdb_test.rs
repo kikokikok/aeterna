@@ -6,6 +6,16 @@ use storage::graph::{GraphEdge, GraphNode, GraphStore};
 use storage::graph_duckdb::{DuckDbGraphConfig, DuckDbGraphStore, Entity, EntityEdge};
 use uuid::Uuid;
 
+fn explain_plan(conn: &duckdb::Connection, sql: &str) -> String {
+    let mut stmt = conn.prepare(sql).expect("prepare explain");
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .expect("query explain")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect explain rows");
+    rows.join("\n")
+}
+
 #[tokio::test]
 async fn test_duckdb_schema_initialization() {
     let config = DuckDbGraphConfig {
@@ -130,6 +140,210 @@ async fn test_duckdb_graph_operations() {
         .unwrap();
     assert_eq!(path.len(), 1);
     assert_eq!(path[0].id, "edge1");
+}
+
+#[tokio::test]
+async fn test_duckdb_records_monotonic_mutation_seq() {
+    let store = DuckDbGraphStore::new(DuckDbGraphConfig::default()).expect("create store");
+    let tenant = "test_tenant_seq";
+    let ctx = TenantContext::new(
+        TenantId::from_str(tenant).unwrap(),
+        UserId::from_str("user-1").unwrap(),
+    );
+
+    store
+        .add_node(
+            ctx.clone(),
+            GraphNode {
+                id: "node-a".to_string(),
+                label: "Person".to_string(),
+                properties: json!({}),
+                tenant_id: tenant.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+    store
+        .add_node(
+            ctx.clone(),
+            GraphNode {
+                id: "node-b".to_string(),
+                label: "Person".to_string(),
+                properties: json!({}),
+                tenant_id: tenant.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+    store
+        .add_edge(
+            ctx,
+            GraphEdge {
+                id: "edge-ab".to_string(),
+                source_id: "node-a".to_string(),
+                target_id: "node-b".to_string(),
+                relation: "KNOWS".to_string(),
+                properties: json!({}),
+                tenant_id: tenant.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    let conn = store.db_handle();
+    let conn = conn.lock();
+    let node_a_seq: i64 = conn
+        .query_row(
+            "SELECT seq FROM memory_nodes WHERE id = 'node-a'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let node_b_seq: i64 = conn
+        .query_row(
+            "SELECT seq FROM memory_nodes WHERE id = 'node-b'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let edge_seq: i64 = conn
+        .query_row(
+            "SELECT seq FROM memory_edges WHERE id = 'edge-ab'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    assert!(node_a_seq > 0);
+    assert!(node_b_seq > node_a_seq);
+    assert!(edge_seq > node_b_seq);
+}
+
+#[tokio::test]
+async fn test_duckdb_snapshot_delta_exports_since_seq() {
+    let store = DuckDbGraphStore::new(DuckDbGraphConfig::default()).expect("create store");
+    let tenant = "test_tenant_delta";
+    let ctx = TenantContext::new(
+        TenantId::from_str(tenant).unwrap(),
+        UserId::from_str("user-1").unwrap(),
+    );
+
+    store
+        .add_node(
+            ctx.clone(),
+            GraphNode {
+                id: "node-a".to_string(),
+                label: "Alpha".to_string(),
+                properties: json!({}),
+                tenant_id: tenant.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+    store
+        .add_node(
+            ctx.clone(),
+            GraphNode {
+                id: "node-b".to_string(),
+                label: "Beta".to_string(),
+                properties: json!({}),
+                tenant_id: tenant.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    let conn = store.db_handle();
+    let conn = conn.lock();
+    let cutoff_seq: i64 = conn
+        .query_row(
+            "SELECT seq FROM memory_nodes WHERE id = 'node-a'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    drop(conn);
+
+    store
+        .add_edge(
+            ctx,
+            GraphEdge {
+                id: "edge-ab".to_string(),
+                source_id: "node-a".to_string(),
+                target_id: "node-b".to_string(),
+                relation: "KNOWS".to_string(),
+                properties: json!({}),
+                tenant_id: tenant.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    let (_, rows_exported, to_seq) = store.export_delta_to_parquet(tenant, cutoff_seq).unwrap();
+    assert_eq!(rows_exported, 2);
+    assert!(to_seq > cutoff_seq);
+}
+
+#[test]
+fn test_duckdb_explain_uses_index_scan_for_label_equality() {
+    let store = DuckDbGraphStore::new(DuckDbGraphConfig::default()).expect("create store");
+    let conn = store.db_handle();
+    let conn = conn.lock();
+
+    // Insert 100k rows so the optimizer strongly prefers index scan for a single-match query.
+    conn.execute_batch(
+        r#"
+        INSERT INTO memory_nodes (id, label, properties, tenant_id, seq)
+        SELECT 'node-' || i, CASE WHEN i = 42424 THEN 'Needle' ELSE 'Other' END, '{}', 'tenant_explain', i
+        FROM range(100000) t(i);
+        "#,
+    )
+    .unwrap();
+
+    // Force DuckDB to prefer index scans at low selectivity.
+    conn.execute_batch("SET index_scan_max_count = 2048; SET index_scan_percentage = 0.002;")
+        .unwrap();
+
+    // Query on only the indexed column to maximize index scan eligibility.
+    let plan = explain_plan(
+        &conn,
+        "EXPLAIN ANALYZE SELECT id FROM memory_nodes WHERE label = 'Needle'",
+    );
+    // DuckDB may show "INDEX_SCAN" or "Index Scan" depending on version; check case-insensitively.
+    let plan_lower = plan.to_lowercase();
+    assert!(
+        plan_lower.contains("index_scan") || plan_lower.contains("index scan"),
+        "Expected index scan in plan, got:\n{plan}"
+    );
+}
+
+#[test]
+fn test_duckdb_explain_uses_index_scan_for_source_lookup() {
+    let store = DuckDbGraphStore::new(DuckDbGraphConfig::default()).expect("create store");
+    let conn = store.db_handle();
+    let conn = conn.lock();
+
+    conn.execute_batch(
+        r#"
+        INSERT INTO memory_edges (id, source_id, target_id, relation, properties, tenant_id, seq)
+        SELECT 'edge-' || i, CASE WHEN i = 42424 THEN 'needle-source' ELSE 'other-source-' || i END, 'target-' || i, 'KNOWS', '{}', 'tenant_explain', i
+        FROM range(100000) t(i);
+        "#,
+    )
+    .unwrap();
+
+    conn.execute_batch("SET index_scan_max_count = 2048; SET index_scan_percentage = 0.002;")
+        .unwrap();
+
+    let plan = explain_plan(
+        &conn,
+        "EXPLAIN ANALYZE SELECT id FROM memory_edges WHERE source_id = 'needle-source'",
+    );
+    let plan_lower = plan.to_lowercase();
+    assert!(
+        plan_lower.contains("index_scan") || plan_lower.contains("index scan"),
+        "Expected index scan in plan, got:\n{plan}"
+    );
 }
 
 #[tokio::test]
@@ -1244,4 +1458,262 @@ async fn test_duckdb_detect_communities_empty_graph() {
         communities_single[0].density, 0.0,
         "Single node community should have zero density"
     );
+}
+
+#[tokio::test]
+async fn test_duckdb_concurrent_readers_plus_writer_qps_scaling() {
+    use std::sync::Arc;
+    use std::time::Instant;
+
+    let dir = tempfile::tempdir().unwrap();
+    let db_path = dir.path().join("concurrent_test.duckdb");
+
+    let config = DuckDbGraphConfig {
+        path: db_path.to_str().unwrap().to_string(),
+        reader_pool_size: Some(4),
+        ..Default::default()
+    };
+    let store = Arc::new(DuckDbGraphStore::new(config).expect("create file-backed store"));
+
+    let tenant = "tenant-concurrent-rw";
+    let ctx = TenantContext::new(
+        TenantId::from_str(tenant).unwrap(),
+        UserId::from_str("user-1").unwrap(),
+    );
+
+    for i in 0..50 {
+        store
+            .add_node(
+                ctx.clone(),
+                GraphNode {
+                    id: format!("seed-{i}"),
+                    label: "Seed".to_string(),
+                    properties: json!({"i": i}),
+                    tenant_id: tenant.to_string(),
+                },
+            )
+            .await
+            .unwrap();
+    }
+
+    let reader_count = 4u32;
+    let reads_per_reader = 50u32;
+    let writes = 20u32;
+
+    let store_w = Arc::clone(&store);
+    let writer_handle = tokio::spawn(async move {
+        let wctx = TenantContext::new(
+            TenantId::from_str("tenant-concurrent-rw").unwrap(),
+            UserId::from_str("user-1").unwrap(),
+        );
+        for i in 0..writes {
+            store_w
+                .add_node(
+                    wctx.clone(),
+                    GraphNode {
+                        id: format!("write-{i}"),
+                        label: "Written".to_string(),
+                        properties: json!({}),
+                        tenant_id: "tenant-concurrent-rw".to_string(),
+                    },
+                )
+                .await
+                .unwrap();
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    });
+
+    let start = Instant::now();
+    let mut reader_handles = Vec::new();
+    for _ in 0..reader_count {
+        let s = Arc::clone(&store);
+        let rctx = ctx.clone();
+        reader_handles.push(tokio::spawn(async move {
+            for _ in 0..reads_per_reader {
+                let _ = s.get_stats(rctx.clone()).unwrap();
+            }
+        }));
+    }
+
+    for h in reader_handles {
+        h.await.unwrap();
+    }
+    let read_elapsed = start.elapsed();
+    writer_handle.await.unwrap();
+
+    let total_reads = reader_count * reads_per_reader;
+    let reads_per_sec = total_reads as f64 / read_elapsed.as_secs_f64();
+
+    // After writer completes, a fresh writer-path read sees all nodes.
+    let final_count = {
+        let conn = store.db_handle();
+        let conn = conn.lock();
+        conn.query_row(
+            "SELECT COUNT(*) FROM memory_nodes WHERE tenant_id = 'tenant-concurrent-rw' AND deleted_at IS NULL",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(final_count, 70);
+
+    assert!(
+        reads_per_sec > 10.0,
+        "Reader QPS too low: {reads_per_sec:.0} ops/sec with {reader_count} readers"
+    );
+}
+
+#[tokio::test]
+async fn test_duckdb_round_trip_full_plus_deltas_restore() {
+    let store = DuckDbGraphStore::new(DuckDbGraphConfig::default()).expect("create store");
+    let tenant = "tenant-roundtrip";
+    let ctx = TenantContext::new(
+        TenantId::from_str(tenant).unwrap(),
+        UserId::from_str("user-1").unwrap(),
+    );
+
+    store
+        .add_node(
+            ctx.clone(),
+            GraphNode {
+                id: "node-a".to_string(),
+                label: "Alpha".to_string(),
+                properties: json!({"v": 1}),
+                tenant_id: tenant.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+    store
+        .add_node(
+            ctx.clone(),
+            GraphNode {
+                id: "node-b".to_string(),
+                label: "Beta".to_string(),
+                properties: json!({"v": 2}),
+                tenant_id: tenant.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    let full_data = store.export_to_parquet(tenant).unwrap();
+    assert!(!full_data.is_empty());
+
+    let conn = store.db_handle();
+    let cutoff_seq: i64 = conn
+        .lock()
+        .query_row(
+            "SELECT MAX(seq) FROM memory_nodes WHERE tenant_id = ?",
+            [tenant],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    store
+        .add_node(
+            ctx.clone(),
+            GraphNode {
+                id: "node-c".to_string(),
+                label: "Gamma".to_string(),
+                properties: json!({"v": 3}),
+                tenant_id: tenant.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+    store
+        .add_edge(
+            ctx.clone(),
+            GraphEdge {
+                id: "edge-ac".to_string(),
+                source_id: "node-a".to_string(),
+                target_id: "node-c".to_string(),
+                relation: "LINKS".to_string(),
+                properties: json!({}),
+                tenant_id: tenant.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    let (delta_data, delta_rows, delta_to_seq) =
+        store.export_delta_to_parquet(tenant, cutoff_seq).unwrap();
+    assert_eq!(delta_rows, 2);
+    assert!(delta_to_seq > cutoff_seq);
+
+    let store2 = DuckDbGraphStore::new(DuckDbGraphConfig::default()).unwrap();
+    store2.import_from_parquet(tenant, &full_data).unwrap();
+
+    let ctx2 = TenantContext::new(
+        TenantId::from_str(tenant).unwrap(),
+        UserId::from_str("user-1").unwrap(),
+    );
+    let stats_after_full = store2.get_stats(ctx2.clone()).unwrap();
+    assert_eq!(stats_after_full.node_count, 2);
+    assert_eq!(stats_after_full.edge_count, 0);
+
+    store2
+        .import_delta_from_parquet(tenant, &delta_data)
+        .unwrap();
+
+    let stats_after_delta = store2.get_stats(ctx2.clone()).unwrap();
+    assert_eq!(stats_after_delta.node_count, 3);
+    assert_eq!(stats_after_delta.edge_count, 1);
+
+    let neighbors = store2.get_neighbors(ctx2, "node-a").await.unwrap();
+    assert_eq!(neighbors.len(), 1);
+    assert_eq!(neighbors[0].1.id, "node-c");
+}
+
+#[tokio::test]
+async fn test_duckdb_delta_with_no_events_is_noop() {
+    let store = DuckDbGraphStore::new(DuckDbGraphConfig::default()).expect("create store");
+    let tenant = "tenant-noop";
+    let ctx = TenantContext::new(
+        TenantId::from_str(tenant).unwrap(),
+        UserId::from_str("user-1").unwrap(),
+    );
+
+    store
+        .add_node(
+            ctx.clone(),
+            GraphNode {
+                id: "node-x".to_string(),
+                label: "Only".to_string(),
+                properties: json!({}),
+                tenant_id: tenant.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    let conn = store.db_handle();
+    let max_seq: i64 = conn
+        .lock()
+        .query_row(
+            "SELECT MAX(seq) FROM memory_nodes WHERE tenant_id = ?",
+            [tenant],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    let (delta_data, delta_rows, to_seq) = store.export_delta_to_parquet(tenant, max_seq).unwrap();
+    assert_eq!(delta_rows, 0);
+    assert_eq!(to_seq, max_seq);
+
+    let store2 = DuckDbGraphStore::new(DuckDbGraphConfig::default()).unwrap();
+    store2
+        .import_from_parquet(tenant, &store.export_to_parquet(tenant).unwrap())
+        .unwrap();
+    store2
+        .import_delta_from_parquet(tenant, &delta_data)
+        .unwrap();
+
+    let ctx2 = TenantContext::new(
+        TenantId::from_str(tenant).unwrap(),
+        UserId::from_str("user-1").unwrap(),
+    );
+    let stats = store2.get_stats(ctx2).unwrap();
+    assert_eq!(stats.node_count, 1);
 }
