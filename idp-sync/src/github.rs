@@ -900,7 +900,7 @@ impl GitHubHierarchyMapper {
         external_id: &str,
         slug: &str,
     ) -> IdpSyncResult<Uuid> {
-        let now_epoch = Utc::now().timestamp();
+        let now_ts = Utc::now();
         let new_id = Uuid::new_v4().to_string();
         let tenant_str = self.tenant_id.to_string();
         let parent_str = parent_id.map(|p| p.to_string());
@@ -925,7 +925,7 @@ impl GitHubHierarchyMapper {
         .bind(unit_type)
         .bind(&parent_str)
         .bind(external_id)
-        .bind(now_epoch)
+        .bind(now_ts)
         .bind(slug)
         .fetch_one(&self.db_pool)
         .await
@@ -1031,7 +1031,7 @@ pub async fn bridge_sync_to_governance(
                 team_ou.tenant_id,
                 team_ou.id,
                 m.role,
-                EXTRACT(EPOCH FROM NOW())::BIGINT
+                NOW()
             FROM users u
             JOIN memberships m ON m.user_id = u.id
             JOIN organizational_units team_ou ON team_ou.id = m.team_id::TEXT

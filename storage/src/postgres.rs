@@ -1639,7 +1639,7 @@ impl PostgresBackend {
         .bind(tenant_id.as_str())
         .bind(unit_id)
         .bind(role.to_string().to_lowercase())
-        .bind(chrono::Utc::now().timestamp())
+        .bind(chrono::Utc::now())
         .execute(&mut **tx)
         .await?;
         Ok(())
