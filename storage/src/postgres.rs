@@ -341,8 +341,8 @@ impl PostgresBackend {
                 parent_id TEXT REFERENCES organizational_units(id),
                 tenant_id TEXT NOT NULL,
                 metadata JSONB DEFAULT '{}',
-                created_at BIGINT NOT NULL,
-                updated_at BIGINT NOT NULL
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )",
         )
         .execute(&self.pool)
@@ -354,7 +354,7 @@ impl PostgresBackend {
                 tenant_id TEXT NOT NULL,
                 unit_id TEXT NOT NULL REFERENCES organizational_units(id),
                 role TEXT NOT NULL,
-                created_at BIGINT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 PRIMARY KEY (user_id, tenant_id, unit_id, role)
             )",
         )

@@ -202,7 +202,7 @@ impl RetentionEnforcer {
         let interval = format!("{days} days");
 
         let result =
-            sqlx::query("DELETE FROM governance_events WHERE timestamp < NOW() - $1::interval")
+            sqlx::query("DELETE FROM governance_events WHERE created_at < NOW() - $1::interval")
                 .bind(&interval)
                 .execute(&self.pool)
                 .await?;
@@ -243,7 +243,7 @@ impl RetentionEnforcer {
         let interval = format!("{days} days");
 
         let result =
-            sqlx::query("DELETE FROM drift_results WHERE created_at < NOW() - $1::interval")
+            sqlx::query("DELETE FROM drift_results WHERE timestamp < EXTRACT(EPOCH FROM NOW() - $1::interval)::bigint")
                 .bind(&interval)
                 .execute(&self.pool)
                 .await?;
@@ -265,7 +265,7 @@ impl RetentionEnforcer {
         let result = sqlx::query(
             "DELETE FROM governance_events \
              WHERE event_type = 'knowledge_promotion_requested' \
-               AND timestamp < NOW() - $1::interval \
+               AND created_at < NOW() - $1::interval \
                AND (status = 'rejected' OR status = 'abandoned' OR status IS NULL)",
         )
         .bind(&interval)
