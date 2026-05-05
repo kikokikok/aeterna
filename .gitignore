@@ -76,3 +76,6 @@ __pycache__/
 *.pyc
 # Playwright screenshot/artifact scratch dir (per-agent, never committed)
 .playwright-dust/
+
+# Local Pi workflow bundle
+.pi/gsd/

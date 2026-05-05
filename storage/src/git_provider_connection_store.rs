@@ -78,11 +78,23 @@ impl GitProviderConnectionRegistry for InMemoryGitProviderConnectionStore {
                 "connection id must not be empty".to_string(),
             ));
         }
+        if !connection.has_valid_id() {
+            return Err(GitProviderConnectionError::Validation(format!(
+                "connection id '{}' must be kebab-case compatible (lowercase letters, digits, hyphens; no leading/trailing hyphens)",
+                connection.id
+            )));
+        }
         if !connection.has_valid_pem_ref() {
             return Err(GitProviderConnectionError::Validation(format!(
                 "pem_secret_ref '{}' must use a supported secret-provider prefix \
                  (local/, secret/, arn:aws:)",
                 connection.pem_secret_ref
+            )));
+        }
+        if self.connections.contains_key(&connection.id) {
+            return Err(GitProviderConnectionError::Validation(format!(
+                "connection id '{}' already exists",
+                connection.id
             )));
         }
         self.connections
@@ -193,11 +205,29 @@ impl GitProviderConnectionRegistry for RedisGitProviderConnectionStore {
                 "connection id must not be empty".to_string(),
             ));
         }
+        if !connection.has_valid_id() {
+            return Err(GitProviderConnectionError::Validation(format!(
+                "connection id '{}' must be kebab-case compatible (lowercase letters, digits, hyphens; no leading/trailing hyphens)",
+                connection.id
+            )));
+        }
         if !connection.has_valid_pem_ref() {
             return Err(GitProviderConnectionError::Validation(format!(
                 "pem_secret_ref '{}' must use a supported secret-provider prefix \
                  (local/, secret/, arn:aws:)",
                 connection.pem_secret_ref
+            )));
+        }
+        if self
+            .store
+            .get::<GitProviderConnection>(&connection.id)
+            .await
+            .map_err(|e| GitProviderConnectionError::Validation(e.to_string()))?
+            .is_some()
+        {
+            return Err(GitProviderConnectionError::Validation(format!(
+                "connection id '{}' already exists",
+                connection.id
             )));
         }
         self.store
@@ -428,6 +458,30 @@ mod tests {
         let conn = make_connection("", vec![]);
         let err = store.create_connection(conn).await.unwrap_err();
         assert!(matches!(err, GitProviderConnectionError::Validation(_)));
+    }
+
+    #[tokio::test]
+    async fn create_rejects_invalid_id_shape() {
+        let store = store();
+        let conn = make_connection("Bad_Id", vec![]);
+        let err = store.create_connection(conn).await.unwrap_err();
+        assert!(matches!(err, GitProviderConnectionError::Validation(_)));
+        assert!(err.to_string().contains("kebab-case compatible"));
+    }
+
+    #[tokio::test]
+    async fn create_rejects_duplicate_id() {
+        let store = store();
+        store
+            .create_connection(make_connection("dup-conn", vec![]))
+            .await
+            .unwrap();
+        let err = store
+            .create_connection(make_connection("dup-conn", vec![]))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, GitProviderConnectionError::Validation(_)));
+        assert!(err.to_string().contains("already exists"));
     }
 
     #[tokio::test]
