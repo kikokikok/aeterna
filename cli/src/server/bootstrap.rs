@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use adapters::auth::cedar::CedarAuthorizer;
@@ -23,11 +23,13 @@ use memory::manager::MemoryManager;
 use memory::provider_registry::TenantProviderRegistry;
 use memory::reasoning::{DefaultReflectiveReasoner, ReflectiveReasoner};
 use mk_core::secret::SecretReference;
-use mk_core::traits::AuthorizationService;
+use mk_core::traits::{AuthorizationService, GitProviderConnectionRegistry};
 use mk_core::types::{
-    DEFAULT_TENANT_SLUG, INSTANCE_SCOPE_TENANT_ID, PROVIDER_GITHUB, ReasoningStrategy,
-    ReasoningTrace, Role, RoleIdentifier, TenantContext, TenantId, UserId,
+    DEFAULT_TENANT_SLUG, GitProviderConnection, GitProviderKind, INSTANCE_SCOPE_TENANT_ID,
+    PROVIDER_GITHUB, ReasoningStrategy, ReasoningTrace, Role, RoleIdentifier, TenantContext,
+    TenantId, UserId,
 };
+use serde::Deserialize;
 use storage::git_provider_connection_store::{
     InMemoryGitProviderConnectionStore, RedisGitProviderConnectionStore,
 };
@@ -50,6 +52,7 @@ const DEFAULT_K8S_NAMESPACE: &str = "default";
 const SYSTEM_MARKER_TENANT_ID: &str = "00000000-0000-0000-0000-000000000000";
 
 const ENV_AUTH_BACKEND: &str = "AETERNA_AUTH_BACKEND";
+const ENV_GIT_PROVIDER_CONNECTIONS_PATH: &str = "AETERNA_GIT_PROVIDER_CONNECTIONS_PATH";
 const AUTH_BACKEND_ALLOW_ALL: &str = "allow-all";
 
 /// The version sentinel written into Redis by the
@@ -85,6 +88,134 @@ fn aeterna_runtime_version() -> String {
         }
     }
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitProviderConnectionSeed {
+    id: String,
+    name: String,
+    provider_kind: GitProviderKind,
+    app_id: u64,
+    installation_id: u64,
+    pem_secret_ref: String,
+    webhook_secret_ref: Option<String>,
+    #[serde(default)]
+    allowed_tenant_ids: Vec<TenantId>,
+}
+
+fn git_provider_connections_seed_path() -> Option<PathBuf> {
+    std::env::var(ENV_GIT_PROVIDER_CONNECTIONS_PATH)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+}
+
+fn same_seed_metadata(existing: &GitProviderConnection, seed: &GitProviderConnectionSeed) -> bool {
+    existing.id == seed.id
+        && existing.name == seed.name
+        && existing.provider_kind == seed.provider_kind
+        && existing.app_id == seed.app_id
+        && existing.installation_id == seed.installation_id
+        && existing.pem_secret_ref == seed.pem_secret_ref
+        && existing.webhook_secret_ref == seed.webhook_secret_ref
+}
+
+async fn seed_git_provider_connections_from_path(
+    registry: &(
+         dyn GitProviderConnectionRegistry<
+        Error = storage::git_provider_connection_store::GitProviderConnectionError,
+    > + Send
+             + Sync
+     ),
+    path: &Path,
+) -> anyhow::Result<()> {
+    let raw = std::fs::read_to_string(path)
+        .with_context(|| format!("read git provider connection seed file {}", path.display()))?;
+    let seeds: Vec<GitProviderConnectionSeed> = serde_json::from_str(&raw).with_context(|| {
+        format!(
+            "parse git provider connection seed file {} as JSON",
+            path.display()
+        )
+    })?;
+
+    for seed in seeds {
+        match registry
+            .get_connection(&seed.id)
+            .await
+            .map_err(|e| anyhow::anyhow!("lookup git provider connection '{}': {e}", seed.id))?
+        {
+            Some(existing) => {
+                if !same_seed_metadata(&existing, &seed) {
+                    anyhow::bail!(
+                        "git provider connection seed '{}' conflicts with existing registry metadata; delete/recreate the connection or align the chart seed",
+                        seed.id
+                    );
+                }
+
+                tracing::info!(
+                    connection_id = %seed.id,
+                    seeded_allowed_tenants = seed.allowed_tenant_ids.len(),
+                    runtime_allowed_tenants = existing.allowed_tenant_ids.len(),
+                    "Seeded git provider connection already exists; preserving runtime tenant visibility"
+                );
+            }
+            None => {
+                let now = Utc::now();
+                registry
+                    .create_connection(GitProviderConnection {
+                        id: seed.id.clone(),
+                        name: seed.name.clone(),
+                        provider_kind: seed.provider_kind.clone(),
+                        app_id: seed.app_id,
+                        installation_id: seed.installation_id,
+                        pem_secret_ref: seed.pem_secret_ref.clone(),
+                        webhook_secret_ref: seed.webhook_secret_ref.clone(),
+                        allowed_tenant_ids: Vec::new(),
+                        created_at: now,
+                        updated_at: now,
+                    })
+                    .await
+                    .map_err(|e| {
+                        anyhow::anyhow!("create seeded git provider connection '{}': {e}", seed.id)
+                    })?;
+                for tenant_id in &seed.allowed_tenant_ids {
+                    registry
+                        .grant_tenant_visibility(&seed.id, tenant_id)
+                        .await
+                        .map_err(|e| {
+                            anyhow::anyhow!(
+                                "grant tenant '{}' visibility of seeded connection '{}': {e}",
+                                tenant_id,
+                                seed.id
+                            )
+                        })?;
+                }
+                tracing::info!(
+                    connection_id = %seed.id,
+                    allowed_tenants = seed.allowed_tenant_ids.len(),
+                    "Seeded git provider connection from bootstrap file"
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn seed_git_provider_connections_from_env(
+    registry: &(
+         dyn GitProviderConnectionRegistry<
+        Error = storage::git_provider_connection_store::GitProviderConnectionError,
+    > + Send
+             + Sync
+     ),
+) -> anyhow::Result<()> {
+    let Some(path) = git_provider_connections_seed_path() else {
+        return Ok(());
+    };
+    seed_git_provider_connections_from_path(registry, &path).await
 }
 
 pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
@@ -506,6 +637,9 @@ pub async fn bootstrap() -> anyhow::Result<Arc<AppState>> {
         Some(conn) => Arc::new(RedisGitProviderConnectionStore::new(conn.clone())),
         None => Arc::new(InMemoryGitProviderConnectionStore::new()),
     };
+    bootstrap_tracker.begin("git_provider_connections");
+    seed_git_provider_connections_from_env(git_provider_connection_registry.as_ref()).await?;
+    bootstrap_tracker.complete("git_provider_connections");
     let tenant_repo_resolver = Arc::new(
         TenantRepositoryResolver::new(
             tenant_repository_binding_store.clone(),
@@ -1332,6 +1466,7 @@ async fn seed_k8s_service_account(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mk_core::traits::GitProviderConnectionRegistry;
     use serial_test::serial;
 
     fn set_env<K: AsRef<str>, V: AsRef<str>>(key: K, value: V) {
@@ -1447,11 +1582,11 @@ mod tests {
         config.providers.postgres.port = 5433;
         config.providers.postgres.database = "aeterna".to_string();
         config.providers.postgres.username = "svc".to_string();
-        config.providers.postgres.password = "secret".to_string();
+        config.providers.postgres.password = "example-password".to_string();
 
         assert_eq!(
             postgres_connection_url(&config),
-            "postgres://svc:secret@db.internal:5433/aeterna"
+            "postgres://svc:example-password@db.internal:5433/aeterna"
         );
     }
 
@@ -1571,6 +1706,141 @@ mod tests {
         assert_ne!(
             config.knowledge_repo.github_app_pem,
             config.plugin_auth.github_app_pem
+        );
+    }
+
+    fn write_seed_file(body: serde_json::Value) -> tempfile::TempPath {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), serde_json::to_vec(&body).unwrap()).unwrap();
+        file.into_temp_path()
+    }
+
+    #[tokio::test]
+    async fn seed_git_provider_connections_creates_missing_connection_and_allowlist() {
+        let store = InMemoryGitProviderConnectionStore::new();
+        let seed_path = write_seed_file(serde_json::json!([
+            {
+                "id": "shared-github-app",
+                "name": "Shared GitHub App",
+                "providerKind": "GitHubApp",
+                "appId": 1234567,
+                "installationId": 7654321,
+                "pemSecretRef": "secret/aeterna-github-app-pem/pem-key",
+                "webhookSecretRef": "secret/aeterna-github-app-webhook/webhook-secret",
+                "allowedTenantIds": ["tenant-alpha", "tenant-beta"]
+            }
+        ]));
+
+        seed_git_provider_connections_from_path(&store, &seed_path)
+            .await
+            .unwrap();
+
+        let conn = store
+            .get_connection("shared-github-app")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(conn.name, "Shared GitHub App");
+        assert_eq!(conn.allowed_tenant_ids.len(), 2);
+        assert!(
+            conn.allowed_tenant_ids
+                .contains(&TenantId::new("tenant-alpha".to_string()).unwrap())
+        );
+        assert!(
+            conn.allowed_tenant_ids
+                .contains(&TenantId::new("tenant-beta".to_string()).unwrap())
+        );
+    }
+
+    #[tokio::test]
+    async fn seed_git_provider_connections_preserves_existing_runtime_allowlist() {
+        let store = InMemoryGitProviderConnectionStore::new();
+        let now = Utc::now();
+        store
+            .create_connection(GitProviderConnection {
+                id: "shared-github-app".to_string(),
+                name: "Shared GitHub App".to_string(),
+                provider_kind: GitProviderKind::GitHubApp,
+                app_id: 1234567,
+                installation_id: 7654321,
+                pem_secret_ref: "secret/aeterna-github-app-pem/pem-key".to_string(),
+                webhook_secret_ref: Some(
+                    "secret/aeterna-github-app-webhook/webhook-secret".to_string(),
+                ),
+                allowed_tenant_ids: vec![TenantId::new("legacy-tenant".to_string()).unwrap()],
+                created_at: now,
+                updated_at: now,
+            })
+            .await
+            .unwrap();
+
+        let seed_path = write_seed_file(serde_json::json!([
+            {
+                "id": "shared-github-app",
+                "name": "Shared GitHub App",
+                "providerKind": "GitHubApp",
+                "appId": 1234567,
+                "installationId": 7654321,
+                "pemSecretRef": "secret/aeterna-github-app-pem/pem-key",
+                "webhookSecretRef": "secret/aeterna-github-app-webhook/webhook-secret",
+                "allowedTenantIds": ["tenant-alpha"]
+            }
+        ]));
+
+        seed_git_provider_connections_from_path(&store, &seed_path)
+            .await
+            .unwrap();
+
+        let conn = store
+            .get_connection("shared-github-app")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            conn.allowed_tenant_ids,
+            vec![TenantId::new("legacy-tenant".to_string()).unwrap()]
+        );
+    }
+
+    #[tokio::test]
+    async fn seed_git_provider_connections_fails_on_metadata_drift() {
+        let store = InMemoryGitProviderConnectionStore::new();
+        let now = Utc::now();
+        store
+            .create_connection(GitProviderConnection {
+                id: "shared-github-app".to_string(),
+                name: "Shared GitHub App".to_string(),
+                provider_kind: GitProviderKind::GitHubApp,
+                app_id: 1,
+                installation_id: 7654321,
+                pem_secret_ref: "secret/aeterna-github-app-pem/pem-key".to_string(),
+                webhook_secret_ref: None,
+                allowed_tenant_ids: vec![],
+                created_at: now,
+                updated_at: now,
+            })
+            .await
+            .unwrap();
+
+        let seed_path = write_seed_file(serde_json::json!([
+            {
+                "id": "shared-github-app",
+                "name": "Shared GitHub App",
+                "providerKind": "GitHubApp",
+                "appId": 1234567,
+                "installationId": 7654321,
+                "pemSecretRef": "secret/aeterna-github-app-pem/pem-key",
+                "webhookSecretRef": null,
+                "allowedTenantIds": []
+            }
+        ]));
+
+        let err = seed_git_provider_connections_from_path(&store, &seed_path)
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("conflicts with existing registry metadata")
         );
     }
 }

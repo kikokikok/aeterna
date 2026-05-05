@@ -47,8 +47,7 @@ gitProviderConnections:
     pemSecretRef: "secret/aeterna-github-app-pem/pem-key"
     # Optional: reference to webhook secret created in prerequisites step 2
     webhookSecretRef: "secret/aeterna-github-app-webhook/webhook-secret"
-    # Tenants allowed to use this connection.  Empty = no tenants allowed yet.
-    # Use the platform API to grant visibility:
-    #   aeterna git-provider-connection grant acme-github-app --tenant acme-corp
+    # Tenants allowed to use this connection on first bootstrap.
+    # After creation, grants/revokes are owned by the runtime API/UI and are preserved across restarts.
     allowedTenantIds:
       - "acme-corp"

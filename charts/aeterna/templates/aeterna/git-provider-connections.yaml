@@ -2,10 +2,11 @@
 git-provider-connections.yaml
 
 Renders one Kubernetes ConfigMap entry per platform-owned Git provider connection
-declared in .Values.gitProviderConnections.  Each entry stores non-secret connection
-metadata (id, name, providerKind, appId, installationId, secret refs) so the
-aeterna control-plane init job can seed the InMemoryGitProviderConnectionStore on
-startup without embedding raw PEM material.
+declared in .Values.gitProviderConnections. Each entry stores non-secret connection
+metadata (id, name, providerKind, appId, installationId, secret refs). The
+Aeterna server bootstrap path reads this ConfigMap on startup and seeds the
+runtime Git provider connection registry without embedding raw PEM material.
+The declared allow-list is applied only when a connection is first created.
 
 PEM key material is intentionally NOT stored here — operators must supply a
 Kubernetes Secret externally (or via an ESO ExternalSecret) and reference it

@@ -100,6 +100,8 @@ pub struct SetTenantSecretRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateGitProviderConnectionRequest {
+    /// Optional stable connection identifier. When omitted, the server generates a UUID.
+    pub id: Option<String>,
     pub name: String,
     pub provider_kind: GitProviderKind,
     pub app_id: u64,
@@ -3661,9 +3663,9 @@ async fn create_git_provider_connection(
         Err(response) => return response,
     };
 
-    let now = chrono::Utc::now().timestamp();
+    let now_ts = chrono::Utc::now();
     let connection = GitProviderConnection {
-        id: Uuid::new_v4().to_string(),
+        id: req.id.unwrap_or_else(|| Uuid::new_v4().to_string()),
         name: req.name,
         provider_kind: req.provider_kind,
         app_id: req.app_id,
@@ -3671,8 +3673,8 @@ async fn create_git_provider_connection(
         pem_secret_ref: req.pem_secret_ref,
         webhook_secret_ref: req.webhook_secret_ref,
         allowed_tenant_ids: Vec::new(),
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
+        created_at: now_ts,
+        updated_at: now_ts,
     };
 
     match state
@@ -3684,7 +3686,7 @@ async fn create_git_provider_connection(
             let event = GovernanceEvent::GitProviderConnectionCreated {
                 connection_id: created.id.clone(),
                 tenant_id: ctx.tenant_id.clone(),
-                timestamp: now,
+                timestamp: now_ts.timestamp(),
             };
             persist_governance_event(state.as_ref(), &ctx, &event).await;
             audit_tenant_action(
@@ -6757,6 +6759,10 @@ mod tests {
 
     // Helper: create a Git provider connection and return its id.
     async fn create_connection(app: axum::Router, name: &str) -> String {
+        create_connection_with_id(app, name, None).await
+    }
+
+    async fn create_connection_with_id(app: axum::Router, name: &str, id: Option<&str>) -> String {
         use axum::body::Body;
         use axum::http::Request;
         use tower::ServiceExt;
@@ -6769,6 +6775,7 @@ mod tests {
             .header("x-tenant-id", "default")
             .body(Body::from(
                 serde_json::to_vec(&serde_json::json!({
+                    "id": id,
                     "name": name,
                     "providerKind": "GitHubApp",
                     "appId": 123456u64,
@@ -6838,6 +6845,87 @@ mod tests {
                 "pemSecretRef must be redacted in list response"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn git_provider_connection_create_honors_explicit_id() {
+        let Some((app, _tenant)) = app_with_tenant().await else {
+            eprintln!("Skipping: Docker not available");
+            return;
+        };
+
+        let id = create_connection_with_id(
+            app.clone(),
+            "Explicit ID Connection",
+            Some("shared-github-app"),
+        )
+        .await;
+        assert_eq!(id, "shared-github-app");
+    }
+
+    #[tokio::test]
+    async fn git_provider_connection_create_rejects_invalid_explicit_id() {
+        let Some((app, _tenant)) = app_with_tenant().await else {
+            eprintln!("Skipping: Docker not available");
+            return;
+        };
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/admin/git-provider-connections")
+            .header("content-type", "application/json")
+            .header("x-user-id", "platform-admin-user")
+            .header("x-user-role", "platformAdmin")
+            .header("x-tenant-id", "default")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "id": "Bad_Id",
+                    "name": "Invalid Connection",
+                    "providerKind": "GitHubApp",
+                    "appId": 123456u64,
+                    "installationId": 9876543u64,
+                    "pemSecretRef": "secret/aeterna-github-app-pem/pem-key",
+                    "webhookSecretRef": null
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn git_provider_connection_create_rejects_duplicate_explicit_id() {
+        let Some((app, _tenant)) = app_with_tenant().await else {
+            eprintln!("Skipping: Docker not available");
+            return;
+        };
+
+        let id = create_connection_with_id(app.clone(), "Original", Some("shared-gh-app")).await;
+        assert_eq!(id, "shared-gh-app");
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/admin/git-provider-connections")
+            .header("content-type", "application/json")
+            .header("x-user-id", "platform-admin-user")
+            .header("x-user-role", "platformAdmin")
+            .header("x-tenant-id", "default")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "id": "shared-gh-app",
+                    "name": "Duplicate",
+                    "providerKind": "GitHubApp",
+                    "appId": 123456u64,
+                    "installationId": 9876543u64,
+                    "pemSecretRef": "secret/aeterna-github-app-pem/pem-key",
+                    "webhookSecretRef": null
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

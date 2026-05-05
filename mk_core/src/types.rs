@@ -4752,7 +4752,7 @@ pub enum GitProviderKind {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GitProviderConnection {
-    /// Stable UUID for this connection.
+    /// Stable identifier for this connection.
     pub id: String,
     /// Human-readable label.
     pub name: String,
@@ -4775,6 +4775,19 @@ pub struct GitProviderConnection {
 }
 
 impl GitProviderConnection {
+    /// Returns `true` if the connection ID is safe to use in manifests, CLI flags,
+    /// and chart values.
+    #[must_use]
+    pub fn has_valid_id(&self) -> bool {
+        !self.id.is_empty()
+            && !self.id.starts_with('-')
+            && !self.id.ends_with('-')
+            && self
+                .id
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    }
+
     /// Returns `true` if the PEM reference uses a supported secret-provider prefix.
     #[must_use]
     pub fn has_valid_pem_ref(&self) -> bool {
