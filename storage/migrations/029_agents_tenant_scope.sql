@@ -37,7 +37,9 @@
 -- Follow-up #130 subtask remaining after this migration: relocate
 -- idp-sync writes from `organizational_units` to
 -- `companies/organizations/teams`, then remove the legacy OU writes
--- from `PostgresBackend::initialize_schema`.
+-- from `PostgresBackend::initialize_schema` in the first migration that
+-- lands the modern-table IdP sync writer (target milestone: the next
+-- post-029 hierarchy migration, not another ad-hoc runtime override).
 
 -- ---------------------------------------------------------------------
 -- 1. Add column (nullable initially for backfill)

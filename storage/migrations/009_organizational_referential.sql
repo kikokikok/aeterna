@@ -255,49 +255,12 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_created ON referential_audit_log(create
 -- Views optimized for OPAL data fetcher queries
 -- ============================================================================
 
--- Hierarchical view for Cedar entity relationships
-CREATE OR REPLACE VIEW v_hierarchy AS
-SELECT
-    c.id as company_id,
-    c.slug as company_slug,
-    c.name as company_name,
-    o.id as org_id,
-    o.slug as org_slug,
-    o.name as org_name,
-    t.id as team_id,
-    t.slug as team_slug,
-    t.name as team_name,
-    p.id as project_id,
-    p.slug as project_slug,
-    p.name as project_name,
-    p.git_remote
-FROM companies c
-LEFT JOIN organizations o ON o.company_id = c.id AND o.deleted_at IS NULL
-LEFT JOIN teams t ON t.org_id = o.id AND t.deleted_at IS NULL
-LEFT JOIN projects p ON p.team_id = t.id AND p.deleted_at IS NULL
-WHERE c.deleted_at IS NULL;
-
--- User permissions view for Cedar authorization
-CREATE OR REPLACE VIEW v_user_permissions AS
-SELECT
-    u.id as user_id,
-    u.email,
-    u.name as user_name,
-    u.status as user_status,
-    m.team_id,
-    m.role,
-    m.permissions,
-    t.org_id,
-    o.company_id,
-    c.slug as company_slug,
-    o.slug as org_slug,
-    t.slug as team_slug
-FROM users u
-JOIN memberships m ON m.user_id = u.id AND m.status = 'active'
-JOIN teams t ON t.id = m.team_id AND t.deleted_at IS NULL
-JOIN organizations o ON o.id = t.org_id AND o.deleted_at IS NULL
-JOIN companies c ON c.id = o.company_id AND c.deleted_at IS NULL
-WHERE u.deleted_at IS NULL AND u.status = 'active';
+-- `v_hierarchy` and `v_user_permissions` were originally introduced here.
+-- They are now owned by migration 028 (`028_tenant_scoped_hierarchy.sql`),
+-- which adds the canonical `tenant_id` column and is the only remaining
+-- definition in the repo. Keeping the historical SQL here would reintroduce
+-- duplicate view ownership and drift the repository contract from the runtime
+-- schema, so fresh installs rely on migration 028 for both views.
 
 -- Agent permissions view for Cedar authorization
 CREATE OR REPLACE VIEW v_agent_permissions AS
