@@ -97,10 +97,12 @@ pub const RENDERED_SECTIONS: &[&str] = &[
 ///
 /// - **`roles`** closed in §2.2-C (PR #145). Forward-apply has always
 ///   written `user_roles`; reverse-render uses [`render_roles`] + a
-///   LEFT-JOIN query against `user_roles × organizational_units` in
-///   [`render_current_manifest`]. `unit_id == tenant_id` is the
-///   sentinel for "tenant-wide" (matching the forward-apply convention
-///   in `provision_tenant` Step 7) and maps to `unit: None` on render.
+///   name-resolution query in [`render_current_manifest`] that prefers
+///   the modern hierarchy (`v_hierarchy`) and falls back to legacy
+///   `organizational_units` rows while `user_roles.unit_id` still
+///   references OU ids. `unit_id == tenant_id` is the sentinel for
+///   "tenant-wide" (matching the forward-apply convention in
+///   `provision_tenant` Step 7) and maps to `unit: None` on render.
 ///
 /// With §2.2-D (this change) every manifest section now round-trips;
 /// `NOT_RENDERED_SECTIONS` is empty and the structural-diff work in
@@ -186,12 +188,13 @@ pub struct RenderedTeam {
 ///
 /// `unit` is `None` when the role is tenant-wide (forward-apply in
 /// `provision_tenant` Step 7 stores this as `unit_id = tenant_id`).
-/// Otherwise it's the OU's *name* (operator-facing identifier),
-/// falling back to the raw `unit_id` when the OU row has been deleted
-/// out from under `user_roles` — that fallback is deliberate: emitting
-/// an OU id keeps the rendered manifest losslessly round-trippable
-/// even over orphaned rows, and surfaces the integrity drift to the
-/// operator rather than silently dropping the grant.
+/// Otherwise it's the resolved hierarchy unit's *name*
+/// (operator-facing identifier), falling back to the raw `unit_id`
+/// when neither the modern hierarchy nor the legacy OU row can be
+/// found. That fallback is deliberate: emitting the stored id keeps
+/// the rendered manifest losslessly round-trippable even over orphaned
+/// rows, and surfaces the integrity drift to the operator rather than
+/// silently dropping the grant.
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderedRoleAssignment {
@@ -209,10 +212,12 @@ pub struct RoleRow {
     pub user_id: String,
     pub unit_id: String,
     pub role: String,
-    /// `Some(name)` when the matching `organizational_units` row
-    /// exists; `None` when the LEFT JOIN missed (either because
-    /// `unit_id == tenant_id` and there is no OU with that id, or
-    /// because the OU was deleted and only the grant remains).
+    /// `Some(name)` when the matching hierarchy row exists (modern
+    /// `v_hierarchy` first, legacy `organizational_units` fallback);
+    /// `None` when the lookup missed entirely (either because
+    /// `unit_id == tenant_id` and there is no unit row for that
+    /// sentinel, or because the backing hierarchy row was deleted and
+    /// only the grant remains).
     pub unit_name: Option<String>,
 }
 
@@ -245,7 +250,7 @@ pub fn render_hierarchy(companies: Vec<storage::hierarchy_store::Company>) -> Ve
         .collect()
 }
 
-/// Transform `user_roles` rows (LEFT-JOINed with `organizational_units`)
+/// Transform `user_roles` rows (with hierarchy names already resolved)
 /// into the manifest reverse-render shape.
 ///
 /// Pure; no DB access, no redact toggles (roles carry no secrets).
@@ -483,9 +488,10 @@ pub async fn render_current_manifest(
         Err(_) => None,
     };
 
-    // §2.2-C reverse-render: query `user_roles` (LEFT-JOINed with
-    // `organizational_units` to recover friendly OU names) and
-    // transform via `render_roles`. Tenant-wide grants (`unit_id ==
+    // §2.2-C reverse-render: query `user_roles`, resolve friendly
+    // unit names from the modern hierarchy (`v_hierarchy`) first, and
+    // fall back to legacy `organizational_units` while `user_roles`
+    // still stores OU-backed ids. Tenant-wide grants (`unit_id ==
     // tenant_id`) surface as `unit: None` in the rendered manifest,
     // matching the forward-apply convention in `provision_tenant`
     // Step 7. Empty result → `roles: None` (elided from JSON) so
@@ -500,10 +506,34 @@ pub async fn render_current_manifest(
     // this query is the place to add `with_tenant_context`.
     let tenant_id_str = record.id.as_str();
     let role_rows_raw: Vec<(String, String, String, Option<String>)> = sqlx::query_as(
-        "SELECT ur.user_id, ur.unit_id, ur.role, ou.name AS unit_name
+        "WITH hierarchy_units AS (
+             SELECT DISTINCT tenant_id::text AS tenant_id, company_id::text AS unit_id, company_name AS unit_name
+               FROM v_hierarchy
+              WHERE company_id IS NOT NULL
+             UNION
+             SELECT DISTINCT tenant_id::text AS tenant_id, org_id::text AS unit_id, org_name AS unit_name
+               FROM v_hierarchy
+              WHERE org_id IS NOT NULL
+             UNION
+             SELECT DISTINCT tenant_id::text AS tenant_id, team_id::text AS unit_id, team_name AS unit_name
+               FROM v_hierarchy
+              WHERE team_id IS NOT NULL
+             UNION
+             SELECT DISTINCT tenant_id::text AS tenant_id, project_id::text AS unit_id, project_name AS unit_name
+               FROM v_hierarchy
+              WHERE project_id IS NOT NULL
+         )
+         SELECT ur.user_id,
+                ur.unit_id,
+                ur.role,
+                COALESCE(hu.unit_name, ou.name) AS unit_name
            FROM user_roles ur
+      LEFT JOIN hierarchy_units hu
+             ON hu.tenant_id = ur.tenant_id
+            AND hu.unit_id = ur.unit_id
       LEFT JOIN organizational_units ou
-             ON ou.id = ur.unit_id
+             ON hu.unit_id IS NULL
+            AND ou.id = ur.unit_id
             AND ou.tenant_id = ur.tenant_id
           WHERE ur.tenant_id = $1
        ORDER BY ur.user_id, ur.unit_id, ur.role",

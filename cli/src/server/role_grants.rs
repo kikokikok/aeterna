@@ -409,16 +409,74 @@ async fn resolve_resource_type(
         return Ok(ResourceType::Tenant);
     }
 
-    let maybe_unit_type =
-        sqlx::query("SELECT unit_type FROM organizational_units WHERE tenant_id = $1 AND id = $2")
-            .bind(tenant_id.as_str())
-            .bind(resource_id)
+    if let (Ok(resource_uuid), Ok(Some(record))) = (
+        uuid::Uuid::parse_str(resource_id),
+        state.tenant_store.get_tenant(tenant_id.as_str()).await,
+    ) {
+        if let Ok(tenant_uuid) = uuid::Uuid::parse_str(record.id.as_str()) {
+            let maybe_hierarchy_type: Option<String> = sqlx::query_scalar(
+                "SELECT resource_type
+                   FROM (
+                         SELECT 'tenant'::text AS resource_type, c.id AS resource_id
+                           FROM companies c
+                          WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
+                         UNION ALL
+                         SELECT 'organization'::text AS resource_type, o.id AS resource_id
+                           FROM organizations o
+                           JOIN companies c ON c.id = o.company_id
+                          WHERE c.tenant_id = $1
+                            AND c.deleted_at IS NULL
+                            AND o.deleted_at IS NULL
+                         UNION ALL
+                         SELECT 'team'::text AS resource_type, t.id AS resource_id
+                           FROM teams t
+                           JOIN organizations o ON o.id = t.org_id
+                           JOIN companies c ON c.id = o.company_id
+                          WHERE c.tenant_id = $1
+                            AND c.deleted_at IS NULL
+                            AND o.deleted_at IS NULL
+                            AND t.deleted_at IS NULL
+                         UNION ALL
+                         SELECT 'project'::text AS resource_type, p.id AS resource_id
+                           FROM projects p
+                           JOIN teams t ON t.id = p.team_id
+                           JOIN organizations o ON o.id = t.org_id
+                           JOIN companies c ON c.id = o.company_id
+                          WHERE c.tenant_id = $1
+                            AND c.deleted_at IS NULL
+                            AND o.deleted_at IS NULL
+                            AND t.deleted_at IS NULL
+                            AND p.deleted_at IS NULL
+                        ) hierarchy_resources
+                  WHERE resource_id = $2
+                  LIMIT 1",
+            )
+            .bind(tenant_uuid)
+            .bind(resource_uuid)
             .fetch_optional(state.postgres.pool())
-            .await?
-            .and_then(|row| {
-                let value: String = row.get("unit_type");
-                value.parse::<UnitType>().ok()
-            });
+            .await?;
+
+            if let Some(resource_type) = maybe_hierarchy_type {
+                return Ok(match resource_type.as_str() {
+                    "tenant" => ResourceType::Tenant,
+                    "organization" => ResourceType::Organization,
+                    "team" => ResourceType::Team,
+                    "project" => ResourceType::Project,
+                    _ => ResourceType::Instance,
+                });
+            }
+        }
+    }
+
+    let maybe_unit_type = sqlx::query("SELECT type FROM organizational_units WHERE tenant_id = $1 AND id = $2")
+        .bind(tenant_id.as_str())
+        .bind(resource_id)
+        .fetch_optional(state.postgres.pool())
+        .await?
+        .and_then(|row| {
+            let value: String = row.get("type");
+            value.parse::<UnitType>().ok()
+        });
 
     Ok(match maybe_unit_type {
         Some(UnitType::Organization) => ResourceType::Organization,
