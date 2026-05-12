@@ -990,13 +990,7 @@ mod policy_tests {
     async fn test_list_policies_by_layer() {
         let storage = MockPolicyStorage::new();
 
-        let d1 = create_test_draft(
-            "d1",
-            "Tenant Policy",
-            Some("D"),
-            None,
-            PolicyLayer::Tenant,
-        );
+        let d1 = create_test_draft("d1", "Tenant Policy", Some("D"), None, PolicyLayer::Tenant);
         storage.create_draft(d1).await.unwrap();
         storage.submit_draft("d1").await.unwrap();
         storage.approve_draft("d1", "r").await.unwrap();

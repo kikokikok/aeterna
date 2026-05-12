@@ -7965,8 +7965,16 @@ mod tests {
         };
         let errors = validate_manifest(&m);
         assert!(
-            errors.len() >= 3,
-            "expected at least 3 errors for empty hierarchy names, got: {errors:?}"
+            errors
+                .iter()
+                .any(|e| e == "hierarchy org name must not be empty"),
+            "expected org-name validation error, got: {errors:?}"
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|e| e == "hierarchy team name must not be empty"),
+            "expected team-name validation error, got: {errors:?}"
         );
     }
 
