@@ -3195,8 +3195,7 @@ async fn user_roles_grant_revoke_and_unsupported_schema() {
     )
     .unwrap();
     assert!(body.as_array().unwrap().iter().any(|r| {
-        r["role"].as_str() == Some("developer")
-            && r["unit_id"].as_str() == Some(tenant_id.as_str())
+        r["role"].as_str() == Some("developer") && r["unit_id"].as_str() == Some(tenant_id.as_str())
     }));
 
     // revoke_user_role – success

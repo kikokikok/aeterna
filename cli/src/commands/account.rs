@@ -134,7 +134,11 @@ async fn run_show(args: AccountShowArgs) -> Result<()> {
 async fn run_create(args: AccountCreateArgs) -> Result<()> {
     let client = client().await?;
     let body = json!({ "slug": args.slug, "name": args.name });
-    let value: serde_json::Value = client.post("/api/v1/admin/accounts", &body).await?.json().await?;
+    let value: serde_json::Value = client
+        .post("/api/v1/admin/accounts", &body)
+        .await?
+        .json()
+        .await?;
     if args.json {
         return print_json(&value);
     }
@@ -185,7 +189,10 @@ async fn run_attach(args: AccountAttachArgs) -> Result<()> {
     let client = client().await?;
     let body = json!({ "accountId": args.account_id });
     let value: serde_json::Value = client
-        .post(&format!("/api/v1/admin/tenants/{}/account", args.tenant), &body)
+        .post(
+            &format!("/api/v1/admin/tenants/{}/account", args.tenant),
+            &body,
+        )
         .await?
         .json()
         .await?;

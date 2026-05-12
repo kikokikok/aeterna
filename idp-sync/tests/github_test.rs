@@ -262,13 +262,12 @@ async fn test_hierarchy_mapper_flat_teams() {
     assert!(mappings.contains_key("platform"));
     assert!(mappings.contains_key("security"));
 
-    let org_count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM organizations WHERE tenant_id = $1",
-    )
-    .bind(tenant_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let org_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM organizations WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(org_count.0, 2);
 
     let team_count: (i64,) = sqlx::query_as(
@@ -306,7 +305,7 @@ async fn test_hierarchy_mapper_two_level_nesting() {
         "SELECT o.slug
            FROM teams t
            JOIN organizations o ON o.id = t.org_id
-          WHERE o.tenant_id = $1 AND t.slug = 'api-team'"
+          WHERE o.tenant_id = $1 AND t.slug = 'api-team'",
     )
     .bind(tenant_id)
     .fetch_one(&pool)
@@ -357,13 +356,16 @@ async fn test_hierarchy_mapper_three_level_nesting() {
            FROM teams t
            JOIN organizations o ON o.id = t.org_id
            WHERE o.tenant_id = $1 AND t.slug IN ('platform', 'api-team')
-          ORDER BY t.slug"
+          ORDER BY t.slug",
     )
     .bind(tenant_id)
     .fetch_all(&pool)
     .await
     .expect("descendant orgs");
-    assert_eq!(descendant_orgs, vec![("engineering".to_string(),), ("engineering".to_string(),)]);
+    assert_eq!(
+        descendant_orgs,
+        vec![("engineering".to_string(),), ("engineering".to_string(),)]
+    );
 }
 
 #[tokio::test]

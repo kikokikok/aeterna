@@ -2179,9 +2179,7 @@ pub fn validate_org_id(id: &&String) -> Result<(), validator::ValidationError> {
 
 pub fn validate_tenant_id(id: &&String) -> Result<(), validator::ValidationError> {
     if id.is_empty() {
-        return Err(validator::ValidationError::new(
-            "Tenant ID cannot be empty",
-        ));
+        return Err(validator::ValidationError::new("Tenant ID cannot be empty"));
     }
     Ok(())
 }

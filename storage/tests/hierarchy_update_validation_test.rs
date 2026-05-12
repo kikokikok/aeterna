@@ -76,7 +76,13 @@ async fn update_unit_rejects_matrix_violation() {
     let proj_id = unique_id("proj");
 
     storage
-        .create_unit(&unit(&org_id, "O", UnitType::Organization, None, &tenant_id))
+        .create_unit(&unit(
+            &org_id,
+            "O",
+            UnitType::Organization,
+            None,
+            &tenant_id,
+        ))
         .await
         .unwrap();
     storage
@@ -137,7 +143,13 @@ async fn update_unit_rejects_self_parent() {
     let org_id = unique_id("org");
 
     storage
-        .create_unit(&unit(&org_id, "O", UnitType::Organization, None, &tenant_id))
+        .create_unit(&unit(
+            &org_id,
+            "O",
+            UnitType::Organization,
+            None,
+            &tenant_id,
+        ))
         .await
         .unwrap();
 
@@ -179,7 +191,13 @@ async fn update_unit_rejects_team_as_root() {
     let team_id = unique_id("team");
 
     storage
-        .create_unit(&unit(&org_id, "O", UnitType::Organization, None, &tenant_id))
+        .create_unit(&unit(
+            &org_id,
+            "O",
+            UnitType::Organization,
+            None,
+            &tenant_id,
+        ))
         .await
         .unwrap();
     storage
@@ -275,11 +293,23 @@ async fn update_unit_allows_organization_root() {
     let org_id = unique_id("org");
 
     storage
-        .create_unit(&unit(&org_id, "O", UnitType::Organization, None, &tenant_id))
+        .create_unit(&unit(
+            &org_id,
+            "O",
+            UnitType::Organization,
+            None,
+            &tenant_id,
+        ))
         .await
         .unwrap();
 
-    let mut renamed = unit(&org_id, "O-renamed", UnitType::Organization, None, &tenant_id);
+    let mut renamed = unit(
+        &org_id,
+        "O-renamed",
+        UnitType::Organization,
+        None,
+        &tenant_id,
+    );
     renamed.updated_at = chrono::DateTime::from_timestamp(2000, 0).unwrap();
 
     storage

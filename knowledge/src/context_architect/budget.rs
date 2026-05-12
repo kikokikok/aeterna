@@ -777,10 +777,7 @@ mod tests {
 
         assert_eq!(config.model_for_layer(MemoryLayer::User), "gpt-4");
         assert_eq!(config.model_for_layer(MemoryLayer::Session), "gpt-4");
-        assert_eq!(
-            config.model_for_layer(MemoryLayer::Tenant),
-            "gpt-3.5-turbo"
-        );
+        assert_eq!(config.model_for_layer(MemoryLayer::Tenant), "gpt-3.5-turbo");
         assert_eq!(
             config.model_for_layer(MemoryLayer::Project),
             "gpt-3.5-turbo"

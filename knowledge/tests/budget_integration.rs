@@ -236,10 +236,7 @@ fn test_tiered_model_selection() {
     );
     assert_eq!(config.model_for_layer(MemoryLayer::Team), "gpt-3.5-turbo");
     assert_eq!(config.model_for_layer(MemoryLayer::Org), "gpt-3.5-turbo");
-    assert_eq!(
-        config.model_for_layer(MemoryLayer::Tenant),
-        "gpt-3.5-turbo"
-    );
+    assert_eq!(config.model_for_layer(MemoryLayer::Tenant), "gpt-3.5-turbo");
 }
 
 #[test]
