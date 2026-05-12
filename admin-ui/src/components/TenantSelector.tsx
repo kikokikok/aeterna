@@ -52,7 +52,10 @@ export function TenantSelector() {
 	const filteredTenants = tenants.filter(
 		(t) =>
 			t.name.toLowerCase().includes(search.toLowerCase()) ||
-			t.slug.toLowerCase().includes(search.toLowerCase()),
+			t.slug.toLowerCase().includes(search.toLowerCase()) ||
+			(t.account?.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+			(t.account?.slug ?? "").toLowerCase().includes(search.toLowerCase()) ||
+			(t.environment ?? "").toLowerCase().includes(search.toLowerCase()),
 	);
 
 	const changeTenant = async (tenantId: string) => {
@@ -111,8 +114,10 @@ export function TenantSelector() {
 				className="flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-50"
 			>
 				<Building2 className="h-4 w-4 text-gray-400" />
-				<span className="max-w-[160px] truncate">
-					{activeTenant?.name ?? "Select tenant"}
+				<span className="max-w-[200px] truncate">
+					{activeTenant
+						? `${activeTenant.name}${activeTenant.environment ? ` (${activeTenant.environment})` : ""}`
+						: "Select tenant"}
 				</span>
 				<ChevronDown className="h-3.5 w-3.5 text-gray-400" />
 			</button>
@@ -157,6 +162,8 @@ export function TenantSelector() {
 										<div className="truncate font-medium">{tenant.name}</div>
 										<div className="truncate text-xs text-gray-400">
 											{tenant.slug}
+											{tenant.environment ? ` • ${tenant.environment}` : ""}
+											{tenant.account ? ` • ${tenant.account.slug}` : ""}
 										</div>
 									</div>
 								</button>

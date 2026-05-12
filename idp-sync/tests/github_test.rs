@@ -262,17 +262,8 @@ async fn test_hierarchy_mapper_flat_teams() {
     assert!(mappings.contains_key("platform"));
     assert!(mappings.contains_key("security"));
 
-    let company: (String,) = sqlx::query_as(
-        "SELECT name FROM companies WHERE tenant_id = $1 AND slug = 'test-org'",
-    )
-    .bind(tenant_id)
-    .fetch_one(&pool)
-    .await
-    .expect("company row");
-    assert_eq!(company.0, "test-org");
-
     let org_count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM organizations o JOIN companies c ON c.id = o.company_id WHERE c.tenant_id = $1",
+        "SELECT COUNT(*) FROM organizations WHERE tenant_id = $1",
     )
     .bind(tenant_id)
     .fetch_one(&pool)
@@ -281,7 +272,7 @@ async fn test_hierarchy_mapper_flat_teams() {
     assert_eq!(org_count.0, 2);
 
     let team_count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM teams t JOIN organizations o ON o.id = t.org_id JOIN companies c ON c.id = o.company_id WHERE c.tenant_id = $1",
+        "SELECT COUNT(*) FROM teams t JOIN organizations o ON o.id = t.org_id WHERE o.tenant_id = $1",
     )
     .bind(tenant_id)
     .fetch_one(&pool)
@@ -315,8 +306,7 @@ async fn test_hierarchy_mapper_two_level_nesting() {
         "SELECT o.slug
            FROM teams t
            JOIN organizations o ON o.id = t.org_id
-           JOIN companies c ON c.id = o.company_id
-          WHERE c.tenant_id = $1 AND t.slug = 'api-team'"
+          WHERE o.tenant_id = $1 AND t.slug = 'api-team'"
     )
     .bind(tenant_id)
     .fetch_one(&pool)
@@ -352,8 +342,8 @@ async fn test_hierarchy_mapper_three_level_nesting() {
 
     let org_and_team_counts: (i64, i64) = sqlx::query_as(
         "SELECT
-             (SELECT COUNT(*) FROM organizations o JOIN companies c ON c.id = o.company_id WHERE c.tenant_id = $1),
-             (SELECT COUNT(*) FROM teams t JOIN organizations o ON o.id = t.org_id JOIN companies c ON c.id = o.company_id WHERE c.tenant_id = $1)"
+             (SELECT COUNT(*) FROM organizations WHERE tenant_id = $1),
+             (SELECT COUNT(*) FROM teams t JOIN organizations o ON o.id = t.org_id WHERE o.tenant_id = $1)"
     )
     .bind(tenant_id)
     .fetch_one(&pool)
@@ -366,8 +356,7 @@ async fn test_hierarchy_mapper_three_level_nesting() {
         "SELECT o.slug
            FROM teams t
            JOIN organizations o ON o.id = t.org_id
-           JOIN companies c ON c.id = o.company_id
-          WHERE c.tenant_id = $1 AND t.slug IN ('platform', 'api-team')
+           WHERE o.tenant_id = $1 AND t.slug IN ('platform', 'api-team')
           ORDER BY t.slug"
     )
     .bind(tenant_id)
@@ -405,17 +394,16 @@ async fn test_hierarchy_mapper_idempotent_upsert() {
     );
     assert_eq!(first.get("security"), second.get("security"));
 
-    let counts: (i64, i64, i64) = sqlx::query_as(
+    let counts: (i64, i64) = sqlx::query_as(
         "SELECT
-            (SELECT COUNT(*) FROM companies WHERE tenant_id = $1),
-            (SELECT COUNT(*) FROM organizations o JOIN companies c ON c.id = o.company_id WHERE c.tenant_id = $1),
-            (SELECT COUNT(*) FROM teams t JOIN organizations o ON o.id = t.org_id JOIN companies c ON c.id = o.company_id WHERE c.tenant_id = $1)"
+            (SELECT COUNT(*) FROM organizations WHERE tenant_id = $1),
+            (SELECT COUNT(*) FROM teams t JOIN organizations o ON o.id = t.org_id WHERE o.tenant_id = $1)"
     )
     .bind(tenant_id)
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(counts, (1, 2, 2), "company + 2 orgs + 2 teams, no duplicates");
+    assert_eq!(counts, (2, 2), "2 orgs + 2 teams, no duplicates");
 }
 
 #[tokio::test]
@@ -569,19 +557,17 @@ async fn test_full_sync_flow_creates_users_and_teams() {
             .unwrap();
     assert_eq!(user_count.0, 3);
 
-    let hierarchy_counts: (i64, i64, i64) = sqlx::query_as(
+    let hierarchy_counts: (i64, i64) = sqlx::query_as(
         "SELECT
-            (SELECT COUNT(*) FROM companies WHERE tenant_id = $1),
-            (SELECT COUNT(*) FROM organizations o JOIN companies c ON c.id = o.company_id WHERE c.tenant_id = $1),
-            (SELECT COUNT(*) FROM teams t JOIN organizations o ON o.id = t.org_id JOIN companies c ON c.id = o.company_id WHERE c.tenant_id = $1)"
+            (SELECT COUNT(*) FROM organizations WHERE tenant_id = $1),
+            (SELECT COUNT(*) FROM teams t JOIN organizations o ON o.id = t.org_id WHERE o.tenant_id = $1)"
     )
     .bind(tenant_id)
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(hierarchy_counts.0, 1);
-    assert!(hierarchy_counts.1 >= 2, "expected at least 2 organizations");
-    assert!(hierarchy_counts.2 >= 4, "expected at least 4 teams");
+    assert!(hierarchy_counts.0 >= 2, "expected at least 2 organizations");
+    assert!(hierarchy_counts.1 >= 4, "expected at least 4 teams");
 }
 
 #[tokio::test]

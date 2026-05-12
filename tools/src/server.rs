@@ -456,7 +456,7 @@ impl McpServer {
                 }
 
                 let cedar_resource = format!(
-                    "Aeterna::Company::\"{}\"",
+                    "Aeterna::Tenant::\"{}\"",
                     tenant_context.tenant_id.as_str()
                 );
                 let auth_result = self
@@ -1436,7 +1436,7 @@ mod tests {
                 },
                 "arguments": {
                     "content": "injected",
-                    "layer": "company"
+                    "layer": "tenant"
                 }
             })),
         };

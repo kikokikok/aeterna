@@ -485,8 +485,8 @@ pub struct GitHubHierarchyMapper {
 ///
 /// This creates the idp-sync tables (`users`, `memberships`, `idp_group_mappings`)
 /// and ensures the auxiliary OPAL/code-search stubs and NOTIFY triggers exist.
-/// GitHub hierarchy materialization writes to the modern
-/// `companies` / `organizations` / `teams` tables.
+/// GitHub hierarchy materialization writes to the modern tenant-root
+/// hierarchy tables.
 pub async fn initialize_github_sync_schema(pool: &PgPool) -> IdpSyncResult<()> {
     sqlx::query("CREATE EXTENSION IF NOT EXISTS pgcrypto")
         .execute(pool)
@@ -577,7 +577,7 @@ pub async fn initialize_github_sync_schema(pool: &PgPool) -> IdpSyncResult<()> {
             delegated_by_agent_id UUID,
             delegation_depth INT NOT NULL DEFAULT 0,
             capabilities JSONB DEFAULT '[]',
-            allowed_company_ids UUID[],
+            allowed_tenant_ids UUID[],
             allowed_org_ids UUID[],
             allowed_team_ids UUID[],
             allowed_project_ids UUID[],
@@ -615,7 +615,7 @@ pub async fn initialize_github_sync_schema(pool: &PgPool) -> IdpSyncResult<()> {
 ///   migration `028_tenant_scoped_hierarchy.sql`, and additionally
 ///   fixed a latent bug where the idp-sync definitions pointed at the
 ///   legacy `organizational_units` table with `uuid_generate_v5`-
-///   synthesized IDs that didn't match real `companies.id` values.
+///   synthesized IDs that didn't match real hierarchy row IDs.
 /// - PR #132 (this PR) moves `v_agent_permissions` ownership to
 ///   migration `029_agents_tenant_scope.sql`, which also adds
 ///   `agents.tenant_id` (backfilled + enforced) so that the view can
@@ -726,19 +726,6 @@ async fn initialize_notify_triggers(pool: &PgPool) -> IdpSyncResult<()> {
     .await
     .map_err(IdpSyncError::DatabaseError)?;
 
-    sqlx::query("DROP TRIGGER IF EXISTS trg_companies_entity_change ON companies")
-        .execute(pool)
-        .await
-        .map_err(IdpSyncError::DatabaseError)?;
-    sqlx::query(
-        "CREATE TRIGGER trg_companies_entity_change \
-         AFTER INSERT OR UPDATE OR DELETE ON companies \
-         FOR EACH ROW EXECUTE FUNCTION fn_notify_entity_change()",
-    )
-    .execute(pool)
-    .await
-    .map_err(IdpSyncError::DatabaseError)?;
-
     sqlx::query("DROP TRIGGER IF EXISTS trg_organizations_entity_change ON organizations")
         .execute(pool)
         .await
@@ -828,32 +815,19 @@ impl GitHubHierarchyMapper {
         org_name: &str,
         groups: &[IdpGroup],
     ) -> IdpSyncResult<HashMap<String, Uuid>> {
-        let company_slug = storage::hierarchy_store::slugify(org_name);
-        let company_id: Uuid = sqlx::query_scalar(
-            "INSERT INTO companies (tenant_id, slug, name, settings, created_at, updated_at)
-             VALUES ($1, $2, $3, '{}'::jsonb, NOW(), NOW())
-             ON CONFLICT (tenant_id, slug)
-             DO UPDATE SET name = EXCLUDED.name, updated_at = NOW()
-             RETURNING id",
-        )
-        .bind(self.tenant_id)
-        .bind(&company_slug)
-        .bind(org_name)
-        .fetch_one(&self.db_pool)
-        .await
-        .map_err(IdpSyncError::DatabaseError)?;
-        info!(company_id = %company_id, org = %org_name, "Company ensured in modern hierarchy");
+        info!(tenant_id = %self.tenant_id, org = %org_name, "Ensuring tenant-root GitHub hierarchy");
 
-        let by_slug: HashMap<String, &IdpGroup> =
-            groups.iter().map(|group| (group.id.clone(), group)).collect();
+        let by_slug: HashMap<String, &IdpGroup> = groups
+            .iter()
+            .map(|group| (group.id.clone(), group))
+            .collect();
 
         let mut org_inputs: BTreeMap<String, (String, Vec<(String, String)>)> = BTreeMap::new();
         for group in groups {
             let root_slug = Self::root_slug(group, &by_slug).to_string();
-            let root_group = by_slug
-                .get(&root_slug)
-                .copied()
-                .ok_or_else(|| IdpSyncError::ConfigError(format!("Missing root group '{root_slug}'")))?;
+            let root_group = by_slug.get(&root_slug).copied().ok_or_else(|| {
+                IdpSyncError::ConfigError(format!("Missing root group '{root_slug}'"))
+            })?;
             let entry = org_inputs
                 .entry(root_slug.clone())
                 .or_insert_with(|| (root_group.name.clone(), Vec::new()));
@@ -865,13 +839,13 @@ impl GitHubHierarchyMapper {
 
         for (org_slug, (org_name, team_entries)) in org_inputs {
             let org_id: Uuid = sqlx::query_scalar(
-                "INSERT INTO organizations (company_id, slug, name, settings, created_at, updated_at)
+                "INSERT INTO organizations (tenant_id, slug, name, settings, created_at, updated_at)
                  VALUES ($1, $2, $3, '{}'::jsonb, NOW(), NOW())
-                 ON CONFLICT (company_id, slug)
+                 ON CONFLICT (tenant_id, slug)
                  DO UPDATE SET name = EXCLUDED.name, updated_at = NOW()
                  RETURNING id",
             )
-            .bind(company_id)
+            .bind(self.tenant_id)
             .bind(&org_slug)
             .bind(&org_name)
             .fetch_one(&self.db_pool)
@@ -981,14 +955,14 @@ pub async fn bridge_sync_to_governance(
         WITH synced AS (
             INSERT INTO governance_roles (
                 principal_type, principal_id, role,
-                company_id, org_id, team_id,
+                tenant_id, org_id, team_id,
                 granted_by, granted_at
             )
             SELECT
                 'user',
                 u.id,
                 m.role,
-                c.id,
+                NULL::UUID,
                 o.id,
                 t.id,
                 u.id,
@@ -997,11 +971,10 @@ pub async fn bridge_sync_to_governance(
             JOIN memberships m ON m.user_id = u.id
             JOIN teams t ON t.id = m.team_id AND t.deleted_at IS NULL
             JOIN organizations o ON o.id = t.org_id AND o.deleted_at IS NULL
-            JOIN companies c ON c.id = o.company_id AND c.deleted_at IS NULL
-            WHERE c.tenant_id = $1
+            WHERE o.tenant_id = $1
             ON CONFLICT (
                 principal_type, principal_id, role,
-                COALESCE(company_id, '00000000-0000-0000-0000-000000000000'::UUID),
+                COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::UUID),
                 COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::UUID),
                 COALESCE(team_id, '00000000-0000-0000-0000-000000000000'::UUID),
                 COALESCE(project_id, '00000000-0000-0000-0000-000000000000'::UUID)
@@ -1023,7 +996,7 @@ pub async fn bridge_sync_to_governance(
             INSERT INTO user_roles (user_id, tenant_id, unit_id, role, created_at)
             SELECT
                 u.id::TEXT,
-                c.tenant_id::TEXT,
+                o.tenant_id::TEXT,
                 t.id::TEXT,
                 m.role,
                 NOW()
@@ -1031,8 +1004,7 @@ pub async fn bridge_sync_to_governance(
             JOIN memberships m ON m.user_id = u.id
             JOIN teams t ON t.id = m.team_id AND t.deleted_at IS NULL
             JOIN organizations o ON o.id = t.org_id AND o.deleted_at IS NULL
-            JOIN companies c ON c.id = o.company_id AND c.deleted_at IS NULL
-            WHERE c.tenant_id = $1
+            WHERE o.tenant_id = $1
             ON CONFLICT (user_id, tenant_id, unit_id, role)
             DO NOTHING
             RETURNING 1

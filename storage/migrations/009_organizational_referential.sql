@@ -3,14 +3,15 @@
 -- that will be consumed by OPAL data fetchers and Cedar authorization policies.
 
 -- ============================================================================
--- COMPANIES TABLE
--- Root of the organizational hierarchy. Each company is a separate tenant.
+-- LEGACY ROOT TABLE
+-- Root of the original organizational hierarchy. This pre-tenant design
+-- treated each root row as its own tenant.
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS companies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     slug TEXT NOT NULL UNIQUE,  -- URL-friendly identifier (e.g., 'acme-corp')
     name TEXT NOT NULL,         -- Display name (e.g., 'Acme Corporation')
-    settings JSONB NOT NULL DEFAULT '{}',  -- Company-wide settings
+    settings JSONB NOT NULL DEFAULT '{}',  -- Root-scope settings
     -- Governance settings
     governance_mode TEXT NOT NULL DEFAULT 'standard',  -- 'permissive', 'standard', 'strict'
     default_approval_required BOOLEAN NOT NULL DEFAULT true,
@@ -24,15 +25,15 @@ CREATE INDEX IF NOT EXISTS idx_companies_slug ON companies(slug) WHERE deleted_a
 
 -- ============================================================================
 -- ORGANIZATIONS TABLE
--- Divisions/departments within a company (e.g., 'Platform Engineering')
+-- Divisions/departments within a legacy root row (e.g., 'Platform Engineering')
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS organizations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-    slug TEXT NOT NULL,         -- Unique within company
+    slug TEXT NOT NULL,         -- Unique within legacy root row
     name TEXT NOT NULL,
     settings JSONB NOT NULL DEFAULT '{}',
-    -- Governance overrides (inherit from company if null)
+    -- Governance overrides (inherit from legacy root scope if null)
     governance_mode TEXT,
     approval_required BOOLEAN,
     -- Timestamps
@@ -423,8 +424,8 @@ ON CONFLICT (slug) DO NOTHING;
 -- Note: Full migration of orgs/teams/projects would require additional logic
 -- to rebuild the hierarchy. This is left as a manual step for existing deployments.
 
-COMMENT ON TABLE companies IS 'Root organizational entities. Each company is a separate tenant.';
-COMMENT ON TABLE organizations IS 'Divisions within a company (e.g., Platform Engineering).';
+COMMENT ON TABLE companies IS 'Legacy root organizational entities from the pre-tenant hierarchy design.';
+COMMENT ON TABLE organizations IS 'Divisions within a legacy root row (e.g., Platform Engineering).';
 COMMENT ON TABLE teams IS 'Working groups within an organization.';
 COMMENT ON TABLE projects IS 'Repositories owned by a team.';
 COMMENT ON TABLE users IS 'Human identities with optional IdP integration.';

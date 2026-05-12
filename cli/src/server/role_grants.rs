@@ -131,7 +131,7 @@ async fn handle_grant_role(
         }
     };
 
-    let authz_resource = format!("Aeterna::Company::\"{}\"", ctx.tenant_id.as_str());
+    let authz_resource = format!("Aeterna::Tenant::\"{}\"", ctx.tenant_id.as_str());
     match state
         .auth_service
         .check_permission(&ctx, "AssignRoles", &authz_resource)
@@ -225,7 +225,7 @@ async fn handle_revoke_role(
         }
     };
 
-    let authz_resource = format!("Aeterna::Company::\"{}\"", ctx.tenant_id.as_str());
+    let authz_resource = format!("Aeterna::Tenant::\"{}\"", ctx.tenant_id.as_str());
     match state
         .auth_service
         .check_permission(&ctx, "AssignRoles", &authz_resource)
@@ -417,23 +417,15 @@ async fn resolve_resource_type(
             let maybe_hierarchy_type: Option<String> = sqlx::query_scalar(
                 "SELECT resource_type
                    FROM (
-                         SELECT 'tenant'::text AS resource_type, c.id AS resource_id
-                           FROM companies c
-                          WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
-                         UNION ALL
                          SELECT 'organization'::text AS resource_type, o.id AS resource_id
                            FROM organizations o
-                           JOIN companies c ON c.id = o.company_id
-                          WHERE c.tenant_id = $1
-                            AND c.deleted_at IS NULL
+                          WHERE o.tenant_id = $1
                             AND o.deleted_at IS NULL
                          UNION ALL
                          SELECT 'team'::text AS resource_type, t.id AS resource_id
                            FROM teams t
                            JOIN organizations o ON o.id = t.org_id
-                           JOIN companies c ON c.id = o.company_id
-                          WHERE c.tenant_id = $1
-                            AND c.deleted_at IS NULL
+                          WHERE o.tenant_id = $1
                             AND o.deleted_at IS NULL
                             AND t.deleted_at IS NULL
                          UNION ALL
@@ -441,9 +433,7 @@ async fn resolve_resource_type(
                            FROM projects p
                            JOIN teams t ON t.id = p.team_id
                            JOIN organizations o ON o.id = t.org_id
-                           JOIN companies c ON c.id = o.company_id
-                          WHERE c.tenant_id = $1
-                            AND c.deleted_at IS NULL
+                          WHERE o.tenant_id = $1
                             AND o.deleted_at IS NULL
                             AND t.deleted_at IS NULL
                             AND p.deleted_at IS NULL
@@ -458,7 +448,6 @@ async fn resolve_resource_type(
 
             if let Some(resource_type) = maybe_hierarchy_type {
                 return Ok(match resource_type.as_str() {
-                    "tenant" => ResourceType::Tenant,
                     "organization" => ResourceType::Organization,
                     "team" => ResourceType::Team,
                     "project" => ResourceType::Project,
@@ -468,21 +457,21 @@ async fn resolve_resource_type(
         }
     }
 
-    let maybe_unit_type = sqlx::query("SELECT type FROM organizational_units WHERE tenant_id = $1 AND id = $2")
-        .bind(tenant_id.as_str())
-        .bind(resource_id)
-        .fetch_optional(state.postgres.pool())
-        .await?
-        .and_then(|row| {
-            let value: String = row.get("type");
-            value.parse::<UnitType>().ok()
-        });
+    let maybe_unit_type =
+        sqlx::query("SELECT type FROM organizational_units WHERE tenant_id = $1 AND id = $2")
+            .bind(tenant_id.as_str())
+            .bind(resource_id)
+            .fetch_optional(state.postgres.pool())
+            .await?
+            .and_then(|row| {
+                let value: String = row.get("type");
+                value.parse::<UnitType>().ok()
+            });
 
     Ok(match maybe_unit_type {
         Some(UnitType::Organization) => ResourceType::Organization,
         Some(UnitType::Team) => ResourceType::Team,
         Some(UnitType::Project) => ResourceType::Project,
-        Some(UnitType::Company) => ResourceType::Tenant,
         None => ResourceType::Instance,
     })
 }

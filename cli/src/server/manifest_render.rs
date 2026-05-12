@@ -88,12 +88,12 @@ pub const RENDERED_SECTIONS: &[&str] = &[
 ///   config namespace, reverse-recovered by `render_memory_layers`.
 ///
 /// - **`hierarchy`** moved to [`RENDERED_SECTIONS`] in §2.2-B (B3+B4).
-///   Forward-apply writes the modern `companies`/`organizations`/`teams`
-///   tables via `HierarchyStore::upsert_hierarchy`; reverse-render
-///   reads them back via `HierarchyStore::get_hierarchy` and transforms
-///   to [`RenderedCompany`]/[`RenderedOrg`]/[`RenderedTeam`] through
-///   [`render_hierarchy`]. OU writes remain in place for backup/gdpr/
-///   cascade back-compat but are *not* the reverse-render source.
+///   Forward-apply writes the modern `organizations`/`teams` tables via
+///   `HierarchyStore::upsert_hierarchy`; reverse-render reads them back
+///   via `HierarchyStore::get_hierarchy` and transforms to
+///   [`RenderedOrg`]/[`RenderedTeam`] through [`render_hierarchy`]. OU
+///   writes remain in place for backup/gdpr/cascade back-compat but are
+///   *not* the reverse-render source.
 ///
 /// - **`roles`** closed in §2.2-C (PR #145). Forward-apply has always
 ///   written `user_roles`; reverse-render uses [`render_roles`] + a
@@ -136,13 +136,13 @@ pub struct RenderedManifest {
     /// the providers block.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub providers: Option<RenderedProviders>,
-    /// Reconstructed from `companies` / `organizations` / `teams`
+    /// Reconstructed from tenant-root `organizations` / `teams`
     /// (via `HierarchyStore::get_hierarchy` + `render_hierarchy`).
-    /// Elided entirely when the tenant has no companies declared, so
-    /// the rendered manifest stays byte-identical to an input
+    /// Elided entirely when the tenant has no organizations declared,
+    /// so the rendered manifest stays byte-identical to an input
     /// manifest whose `hierarchy:` field was absent or empty.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub hierarchy: Option<Vec<RenderedCompany>>,
+    pub hierarchy: Option<Vec<RenderedOrg>>,
     /// §2.2-C reverse-render of `user_roles`. `None` (and therefore
     /// elided from the rendered JSON) for tenants with no role
     /// assignments, so the rendered manifest stays byte-identical to
@@ -152,22 +152,8 @@ pub struct RenderedManifest {
     pub not_rendered: Vec<&'static str>,
 }
 
-/// §2.2-B reverse-render shape mirroring `ManifestCompany`.
-///
-/// Distinct type from `storage::hierarchy_store::Company` because the
-/// storage type carries UUIDs that the manifest surface intentionally
-/// hides (names + slugs are the operator-facing identity; UUIDs are
-/// internal). Kept field-compatible with `ManifestCompany` so round-
-/// trip tests can assert equality on the subset operators care about.
-#[derive(Debug, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct RenderedCompany {
-    pub slug: String,
-    pub name: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub orgs: Vec<RenderedOrg>,
-}
-
+/// §2.2-B reverse-render shape mirroring the tenant-root manifest
+/// hierarchy (`ManifestOrg`).
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderedOrg {
@@ -224,26 +210,17 @@ pub struct RoleRow {
 /// Convert the `HierarchyStore` read shape into the manifest-render
 /// surface. Pure transform — no DB access, no redact-mode toggles
 /// (hierarchy carries no secrets).
-pub fn render_hierarchy(companies: Vec<storage::hierarchy_store::Company>) -> Vec<RenderedCompany> {
-    companies
-        .into_iter()
-        .map(|c| RenderedCompany {
-            slug: c.slug,
-            name: c.name,
-            orgs: c
-                .orgs
+pub fn render_hierarchy(orgs: Vec<storage::hierarchy_store::Org>) -> Vec<RenderedOrg> {
+    orgs.into_iter()
+        .map(|o| RenderedOrg {
+            slug: o.slug,
+            name: o.name,
+            teams: o
+                .teams
                 .into_iter()
-                .map(|o| RenderedOrg {
-                    slug: o.slug,
-                    name: o.name,
-                    teams: o
-                        .teams
-                        .into_iter()
-                        .map(|t| RenderedTeam {
-                            slug: t.slug,
-                            name: t.name,
-                        })
-                        .collect(),
+                .map(|t| RenderedTeam {
+                    slug: t.slug,
+                    name: t.name,
                 })
                 .collect(),
         })
@@ -341,6 +318,10 @@ pub struct RenderedTenant {
     pub name: String,
     pub status: String,
     pub source_owner: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub environment: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
     /// Domains mapped to this tenant, sorted lexicographically.
@@ -475,14 +456,14 @@ pub async fn render_current_manifest(
         Ok(tenant_uuid) => {
             let store =
                 storage::hierarchy_store::HierarchyStore::new(state.postgres.pool().clone());
-            let companies = store
+            let org_roots = store
                 .get_hierarchy(tenant_uuid)
                 .await
                 .map_err(|e| RenderError::Storage(e.to_string()))?;
-            if companies.is_empty() {
+            if org_roots.is_empty() {
                 None
             } else {
-                Some(render_hierarchy(companies))
+                Some(render_hierarchy(org_roots))
             }
         }
         Err(_) => None,
@@ -507,10 +488,6 @@ pub async fn render_current_manifest(
     let tenant_id_str = record.id.as_str();
     let role_rows_raw: Vec<(String, String, String, Option<String>)> = sqlx::query_as(
         "WITH hierarchy_units AS (
-             SELECT DISTINCT tenant_id::text AS tenant_id, company_id::text AS unit_id, company_name AS unit_name
-               FROM v_hierarchy
-              WHERE company_id IS NOT NULL
-             UNION
              SELECT DISTINCT tenant_id::text AS tenant_id, org_id::text AS unit_id, org_name AS unit_name
                FROM v_hierarchy
               WHERE org_id IS NOT NULL
@@ -571,6 +548,8 @@ pub async fn render_current_manifest(
             name: record.name,
             status: record.status.to_string(),
             source_owner: record.source_owner.to_string(),
+            account_ref: record.account.as_ref().map(|a| a.slug.clone()),
+            environment: record.environment.clone(),
             // RenderedTenant uses i64 epoch seconds for manifest hash stability.
             // TenantRecord upgraded to DateTime<Utc> for wire-format correctness;
             // here we project back to i64 to keep manifest bytes deterministic.
@@ -949,6 +928,8 @@ mod tests {
                 name: "Acme".into(),
                 status: "active".into(),
                 source_owner: "admin".into(),
+                account_ref: None,
+                environment: None,
                 created_at: 1,
                 updated_at: 2,
                 domain_mappings: None,
@@ -996,6 +977,8 @@ mod tests {
                 name: "Acme".into(),
                 status: "active".into(),
                 source_owner: "admin".into(),
+                account_ref: None,
+                environment: None,
                 created_at: 1,
                 updated_at: 2,
                 domain_mappings: None,
@@ -1043,6 +1026,8 @@ mod tests {
                 name: "Acme".into(),
                 status: "active".into(),
                 source_owner: "admin".into(),
+                account_ref: None,
+                environment: None,
                 created_at: 1,
                 updated_at: 2,
                 domain_mappings: Some(vec![
@@ -1136,48 +1121,40 @@ mod tests {
 
     #[test]
     fn render_hierarchy_preserves_slug_name_and_nesting() {
-        use storage::hierarchy_store::{Company, Org, Team};
-        let input = vec![Company {
-            id: Uuid::from_u128(1),
+        use storage::hierarchy_store::{Org, Team};
+        let input = vec![Org {
+            id: Uuid::from_u128(2),
             tenant_id: Uuid::from_u128(100),
-            slug: "acme".into(),
-            name: "Acme Corp".into(),
-            orgs: vec![Org {
-                id: Uuid::from_u128(2),
-                company_id: Uuid::from_u128(1),
-                slug: "platform".into(),
-                name: "Platform".into(),
-                teams: vec![Team {
-                    id: Uuid::from_u128(3),
-                    org_id: Uuid::from_u128(2),
-                    slug: "sre".into(),
-                    name: "SRE".into(),
-                }],
+            slug: "platform".into(),
+            name: "Platform".into(),
+            teams: vec![Team {
+                id: Uuid::from_u128(3),
+                org_id: Uuid::from_u128(2),
+                slug: "sre".into(),
+                name: "SRE".into(),
             }],
         }];
         let out = render_hierarchy(input);
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0].slug, "acme");
-        assert_eq!(out[0].name, "Acme Corp");
-        assert_eq!(out[0].orgs.len(), 1);
-        assert_eq!(out[0].orgs[0].slug, "platform");
-        assert_eq!(out[0].orgs[0].teams.len(), 1);
-        assert_eq!(out[0].orgs[0].teams[0].slug, "sre");
-        assert_eq!(out[0].orgs[0].teams[0].name, "SRE");
+        assert_eq!(out[0].slug, "platform");
+        assert_eq!(out[0].name, "Platform");
+        assert_eq!(out[0].teams.len(), 1);
+        assert_eq!(out[0].teams[0].slug, "sre");
+        assert_eq!(out[0].teams[0].name, "SRE");
     }
 
     #[test]
     fn render_hierarchy_serializes_without_uuids() {
         // Critical invariant: reverse-render MUST NOT leak internal
-        // UUIDs to the manifest surface. Operators identify companies
+        // UUIDs to the manifest surface. Operators identify orgs
         // by slug + name only.
-        use storage::hierarchy_store::Company;
-        let input = vec![Company {
+        use storage::hierarchy_store::Org;
+        let input = vec![Org {
             id: Uuid::from_u128(42),
             tenant_id: Uuid::from_u128(7),
             slug: "x".into(),
             name: "X".into(),
-            orgs: vec![],
+            teams: vec![],
         }];
         let out = render_hierarchy(input);
         let v = serde_json::to_value(&out).unwrap();
@@ -1192,19 +1169,19 @@ mod tests {
 
     #[test]
     fn render_hierarchy_empty_orgs_elides_field_in_json() {
-        // `orgs` skipped when empty so the wire shape matches a
-        // manifest input that omitted `orgs:`.
-        use storage::hierarchy_store::Company;
-        let input = vec![Company {
+        // `teams` skipped when empty so the wire shape matches a
+        // manifest input that omitted `teams:`.
+        use storage::hierarchy_store::Org;
+        let input = vec![Org {
             id: Uuid::from_u128(1),
             tenant_id: Uuid::from_u128(100),
             slug: "solo".into(),
             name: "Solo".into(),
-            orgs: vec![],
+            teams: vec![],
         }];
         let out = render_hierarchy(input);
         let v = serde_json::to_value(&out).unwrap();
-        assert!(v[0].get("orgs").is_none(), "empty orgs must be elided");
+        assert!(v[0].get("teams").is_none(), "empty teams must be elided");
     }
 
     // ── §2.2-C render_roles unit tests ───────────────────────────────────

@@ -1,8 +1,16 @@
+export interface AccountRef {
+	id: string;
+	slug: string;
+	name: string;
+}
+
 export interface TenantRecord {
 	id: string;
 	slug: string;
 	name: string;
 	status: string;
+	account?: AccountRef | null;
+	environment?: string | null;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -49,7 +57,7 @@ export type MemoryLayer =
 	| "Project"
 	| "Team"
 	| "Org"
-	| "Company";
+	| "Tenant";
 
 export interface MemoryEntry {
 	id: string;
@@ -61,7 +69,7 @@ export interface MemoryEntry {
 	updatedAt: string;
 }
 
-export type KnowledgeLayer = "Company" | "Organization" | "Team" | "Project";
+export type KnowledgeLayer = "Tenant" | "Organization" | "Team" | "Project";
 
 export type KnowledgeType = "Adr" | "Policy" | "Pattern" | "Spec" | "Hindsight";
 
